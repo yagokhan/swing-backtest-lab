@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Swing Backtest Lab</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+:root{
+  --bg:#0b0f14; --card:#141b24; --elev:#1c2531; --border:#26303d; --border2:#33414f;
+  --fg:#e6ebf2; --muted:#8a95ad; --green:#27c281; --red:#ff5d6c; --amber:#f5b14c; --blue:#5aa2ff;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:Arial,Helvetica,sans-serif;margin:0;padding:22px;font-size:14px}
+.wrap{max-width:1140px;margin:0 auto}
+.mono{font-family:ui-monospace,Menlo,Consolas,monospace}
+h1{margin:0 0 2px;font-size:22px}
+.kicker{font-size:11px;letter-spacing:.6px;color:var(--muted);text-transform:uppercase}
+.muted{color:var(--muted)}
+a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px;margin:14px 0}
+.tabs{display:flex;gap:8px;margin:14px 0}
+.tab{padding:8px 16px;border-radius:8px;border:1px solid var(--border2);background:var(--elev);color:var(--fg);cursor:pointer;font-weight:700;font-size:13px}
+.tab.active{background:linear-gradient(90deg,#059669,#0d9488);border-color:transparent}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:12px;align-items:end}
+label.fld{display:block}
+label.fld .kicker{margin-bottom:3px;display:block}
+select,input[type=text],input[type=number],input[type=date]{width:100%;background:var(--bg);border:1px solid var(--border2);color:var(--fg);border-radius:6px;padding:7px 10px;font-size:13px}
+.chk{display:flex;align-items:center;gap:6px;font-size:13px}
+.btn{background:linear-gradient(90deg,#059669,#0d9488);color:#fff;border:none;border-radius:7px;padding:9px 20px;font-size:14px;font-weight:700;cursor:pointer}
+.btn.alt{background:linear-gradient(90deg,#f97316,#ef4444)}
+.btn:disabled{opacity:.5;cursor:default}
+.hint{font-size:12px;color:var(--muted);margin-top:8px;min-height:16px}
+.mcards{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
+.mc{background:var(--elev);border:1px solid var(--border);border-radius:10px;padding:11px 13px}
+.mc .v{font-size:20px;font-weight:800}
+.mc .l{font-size:11px;color:var(--muted)}
+.pos{color:var(--green)}.neg{color:var(--red)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:7px 9px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:0}
+.scroll{max-height:340px;overflow:auto;border:1px solid var(--border);border-radius:8px}
+.pill{display:inline-block;padding:1px 7px;border-radius:999px;font-size:11px;font-weight:700}
+.pill.g{background:rgba(39,194,129,.16);color:var(--green)}.pill.r{background:rgba(255,93,108,.16);color:var(--red)}
+.pill.a{background:rgba(245,177,76,.16);color:var(--amber)}.pill.b{background:rgba(90,162,255,.16);color:var(--blue)}
+.hide{display:none}
+.foot{font-size:11px;color:var(--muted);text-align:center;margin-top:22px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card" style="display:flex;justify-content:space-between;align-items:center;">
+    <div>
+      <div class="kicker">Bağımsız · serve.py /api · FMP verisi</div>
+      <h1>Swing Backtest Lab</h1>
+      <div class="muted" style="font-size:12px;">swing2 (8-katman) + qswing (Qullamaggie kırılım) · veri ve trade mantığı motordan birebir</div>
+    </div>
+    <div class="muted" style="font-size:12px;text-align:right;">Portföy takipten ayrı.<br><a href="/portfolio-tracker.html">← Portföy</a></div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" id="tab-bt" onclick="showTab('bt')">📊 Backtest</div>
+    <div class="tab" id="tab-qs" onclick="showTab('qs')">🔎 qswing Tarama / Rapor</div>
+  </div>
+
+  <!-- ===================== BACKTEST ===================== -->
+  <div id="panel-bt">
+    <div class="card">
+      <div class="grid">
+        <label class="fld"><span class="kicker">Evren (preset)</span>
+          <select id="preset">
+            <option value="default">Geniş (~95)</option>
+            <option value="mega">Mega Cap (20)</option>
+            <option value="tech">Teknoloji (18)</option>
+          </select></label>
+        <label class="fld"><span class="kicker">Özel semboller (ops.)</span>
+          <input type="text" id="symbols" placeholder="AAPL,MSFT,... (preset'i ezer)"></label>
+        <label class="fld"><span class="kicker">Dönem</span>
+          <select id="period"><option value="2y">2 yıl</option><option value="1y">1 yıl</option><option value="5y">5 yıl</option><option value="10y">10 yıl</option></select></label>
+        <label class="fld"><span class="kicker">Başlangıç (ops.)</span><input type="date" id="start"></label>
+        <label class="fld"><span class="kicker">Bitiş (ops.)</span><input type="date" id="end"></label>
+      </div>
+      <div class="grid" style="margin-top:12px;">
+        <label class="fld"><span class="kicker">Giriş Stratejisi</span>
+          <select id="entry" onchange="syncHints()">
+            <option value="swing2">swing2 · 8-katman skor</option>
+            <option value="qswing">qswing · Qullamaggie kırılım</option>
+          </select></label>
+        <label class="fld"><span class="kicker">Çıkış Stratejisi</span>
+          <select id="exit" onchange="exitChange()">
+            <option value="champion">⭐ Şampiyon (ATR-trail)</option>
+            <option value="ma_trail">Qullamaggie · 10g MA trail</option>
+            <option value="rr_based">8-EMA stop · RR hedef</option>
+            <option value="momentum">8-EMA stop · RSI/Stoch</option>
+            <option value="atr_climax">8-EMA stop · ATR climax</option>
+            <option value="hybrid">8-EMA stop · 21-EMA hibrit</option>
+          </select></label>
+        <label class="fld"><span class="kicker">Min skor (swing2)</span><input type="number" id="min_score" value="16" min="0" max="24"></label>
+        <label class="fld"><span class="kicker">R/R hedef</span><input type="number" id="rr_target" value="2.0" step="0.5" min="1" max="6"></label>
+        <label class="fld"><span class="kicker">ATR stop ×</span><input type="number" id="atr_stop" value="1.5" step="0.5" min="0.5" max="5"></label>
+        <label class="fld"><span class="kicker">Maks pozisyon</span><input type="number" id="max_pos" value="5" min="1" max="20"></label>
+      </div>
+      <!-- çıkış alt-parametreleri -->
+      <div class="row exsub ex-ma_trail hide" style="margin-top:12px;">
+        <label class="fld"><span class="kicker">MA periyodu</span><input type="number" id="ma_trail_len" value="10" min="3" max="50"></label>
+      </div>
+      <div class="row exsub ex-rr_based hide" style="margin-top:12px;">
+        <label class="fld"><span class="kicker">Kısmi %</span><input type="number" id="partial_pct" value="0.3" step="0.1" min="0.1" max="1"></label>
+        <label class="fld"><span class="kicker">Kısmi tetik R</span><input type="number" id="partial_rr" value="1.5" step="0.5"></label>
+        <label class="fld"><span class="kicker">RR hedef</span><input type="number" id="rr_tp" value="3.0" step="0.5"></label>
+      </div>
+      <div class="row exsub ex-momentum hide" style="margin-top:12px;">
+        <label class="fld"><span class="kicker">RSI aşırı-alım</span><input type="number" id="rsi_ob" value="70" min="50" max="95"></label>
+      </div>
+      <div class="row exsub ex-atr_climax hide" style="margin-top:12px;">
+        <label class="fld"><span class="kicker">Climax ATR ×</span><input type="number" id="climax" value="2.0" step="0.5"></label>
+      </div>
+      <div class="row" style="margin-top:14px;align-items:center;">
+        <label class="chk"><input type="checkbox" id="compound" checked> Bileşik</label>
+        <label class="chk"><input type="checkbox" id="confirm" checked> MA kapanış teyidi (8-EMA modları)</label>
+        <label class="chk"><input type="checkbox" id="earnings"> Earnings filtresi (yavaş)</label>
+        <label class="chk"><input type="checkbox" id="grid"> Grid-search</label>
+        <button class="btn" id="run" onclick="runBacktest()">Backtest Çalıştır</button>
+      </div>
+      <div class="hint" id="hint"></div>
+    </div>
+
+    <div id="bt-results" class="hide">
+      <div class="card">
+        <div class="muted" id="bt-cfgline" style="font-size:12px;margin-bottom:10px;"></div>
+        <div class="mcards" id="bt-metrics"></div>
+      </div>
+      <div class="card"><canvas id="eqchart" height="110"></canvas></div>
+      <div class="card"><div class="kicker" style="margin-bottom:8px;">Çıkış dağılımı</div><div id="bt-outcomes" class="mono"></div></div>
+      <div class="card" id="bt-grid-wrap" style="display:none;"><div class="kicker" style="margin-bottom:8px;">Grid-Search (ROI'ye göre)</div><div class="scroll"><table id="bt-grid"></table></div></div>
+      <div class="card"><div class="kicker" style="margin-bottom:8px;">Aylık getiri (%)</div><div class="scroll"><table id="bt-monthly"></table></div></div>
+      <div class="card"><div class="kicker" style="margin-bottom:8px;">İşlemler (<span id="bt-trade-n">0</span>)</div><div class="scroll"><table id="bt-trades"></table></div></div>
+    </div>
+  </div>
+
+  <!-- ===================== QSWING ===================== -->
+  <div id="panel-qs" class="hide">
+    <div class="card">
+      <div class="kicker" style="margin-bottom:8px;">Tek hisse — anlık qswing raporu (yeni sekme)</div>
+      <div class="row">
+        <input type="text" id="qs-ticker" placeholder="NNE" style="max-width:200px;" onkeydown="if(event.key==='Enter')qsReport()">
+        <button class="btn alt" onclick="qsReport()">Rapor Aç ↗</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="kicker" style="margin-bottom:8px;">Küme tarama — net duruşa sıralı liste (yeni sekme)</div>
+      <div class="row">
+        <select id="qs-universe" style="max-width:260px;">
+          <option value="swing2">Swing 2.0 Evreni (~95)</option>
+          <option value="swing2_mega">Mega Cap (20)</option>
+          <option value="swing2_tech">Teknoloji (18)</option>
+          <option value="custom">Özel liste…</option>
+        </select>
+        <input type="text" id="qs-custom" placeholder="AAPL,MSFT,NVDA" class="hide" style="max-width:300px;">
+        <button class="btn alt" onclick="qsScan()">Tara ↗</button>
+      </div>
+      <div class="hint">qswing taraması FMP'den canlı veri çeker; her satır tek-hisse raporuna linkli.</div>
+    </div>
+  </div>
+
+  <div class="foot">Swing Backtest Lab · serve.py /api/backtest · /api/qswing · Geçmiş performans gelecek getiriyi garanti etmez · Eğitim amaçlıdır.</div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+function showTab(t){
+  $('tab-bt').classList.toggle('active', t==='bt');
+  $('tab-qs').classList.toggle('active', t==='qs');
+  $('panel-bt').classList.toggle('hide', t!=='bt');
+  $('panel-qs').classList.toggle('hide', t!=='qs');
+}
+$('qs-universe').onchange = e => $('qs-custom').classList.toggle('hide', e.target.value!=='custom');
+
+const HINTS = {
+  champion:'ATR-trail şampiyonu (FMP-B): %50 kısmi @2R · 2.5×ATR süren stop · strict BE.',
+  ma_trail:'Qullamaggie: %50 kısmi @2R, kalanı N-gün SMA altına kapanınca sat.',
+  rr_based:'Stop = 8-EMA (sabit). Kısmi tetikte sat, kalanı hedef R\'ye bırak.',
+  momentum:'Stop = 8-EMA. RSI eşiği VEYA Stoch>80 aşağı kesişimde kârla kapat.',
+  atr_climax:'Stop = 8-EMA. Fiyat 8-EMA\'dan aşırı saparsa (climax) kâr al.',
+  hybrid:'Stop = 8-EMA. İlk %50 8-EMA\'da, kalan %50 21-EMA gövde takibi.'
+};
+function exitChange(){
+  const es = $('exit').value;
+  document.querySelectorAll('.exsub').forEach(el=>el.classList.toggle('hide', !el.classList.contains('ex-'+es)));
+  syncHints();
+}
+function syncHints(){
+  const em = $('entry').value==='qswing' ? 'qswing kırılım girişi (40g tepe · 52H yakın · SPY\'ı geçen momentum). ' : '';
+  $('hint').textContent = em + (HINTS[$('exit').value]||'');
+}
+
+function buildPayload(){
+  const p = {
+    preset: $('preset').value, period: $('period').value,
+    min_score: parseInt($('min_score').value)||16,
+    rr_target: parseFloat($('rr_target').value)||2.0,
+    atr_stop_mult: parseFloat($('atr_stop').value)||1.5,
+    max_positions: parseInt($('max_pos').value)||5,
+    compounding: $('compound').checked,
+    use_earnings: $('earnings').checked,
+    run_grid: $('grid').checked,
+    entry_mode: $('entry').value,
+    exit_strategy: $('exit').value,
+  };
+  const sy = $('symbols').value.trim();
+  if(sy) p.symbols = sy.split(/[ ,]+/).filter(Boolean);
+  const sd=$('start').value, ed=$('end').value;
+  if(sd && ed){ p.start_date=sd; p.end_date=ed; }
+  const es = p.exit_strategy;
+  if(es!=='champion') p.ma_confirm_close = $('confirm').checked;
+  if(es==='ma_trail') p.ma_trail_len = parseInt($('ma_trail_len').value)||10;
+  if(es==='rr_based'){ p.partial_pct=parseFloat($('partial_pct').value)||0.3; p.partial_rr=parseFloat($('partial_rr').value)||1.5; p.rr_target=parseFloat($('rr_tp').value)||3.0; }
+  if(es==='momentum') p.rsi_overbought_limit=parseFloat($('rsi_ob').value)||70;
+  if(es==='atr_climax') p.climax_atr_mult=parseFloat($('climax').value)||2.0;
+  return p;
+}
+
+let eqChart=null;
+const F=(x,d=2)=> (x==null||isNaN(x))?'—':Number(x).toLocaleString('tr-TR',{minimumFractionDigits:d,maximumFractionDigits:d});
+const Fp=(x,d=1)=> (x==null||isNaN(x))?'—':((x>=0?'+':'')+Number(x).toLocaleString('tr-TR',{minimumFractionDigits:d,maximumFractionDigits:d})+'%');
+
+async function runBacktest(){
+  const btn=$('run'); btn.disabled=true; const old=btn.textContent; btn.textContent='Çalışıyor…';
+  $('hint').textContent='Veri (FMP) indiriliyor, simülasyon koşuyor…';
+  try{
+    const r = await fetch('/api/backtest',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(buildPayload())});
+    const d = await r.json();
+    if(d.error){ $('hint').textContent='HATA: '+d.error; return; }
+    renderBacktest(d);
+    $('hint').textContent='';
+  }catch(e){ $('hint').textContent='HATA: '+e.message; }
+  finally{ btn.disabled=false; btn.textContent=old; }
+}
+
+function renderBacktest(d){
+  $('bt-results').classList.remove('hide');
+  const c=d.config, m=d.metrics;
+  $('bt-cfgline').textContent = `${c.universe_n} hisse · ${c.start}→${c.end}`+(c.date_range?' (el ile aralık)':' · '+c.period)
+     + ` · giriş ${ ($('entry').value) } · çıkış ${c.exit_strategy}`+(c.tp_mode?'/'+c.tp_mode:'');
+  const cls=x=>x>=0?'pos':'neg';
+  $('bt-metrics').innerHTML = [
+    ['ROI', Fp(m.roi), cls(m.roi)], ['SPY ROI', Fp(m.spy_roi), cls(m.spy_roi)],
+    ['Alpha', Fp(m.alpha), cls(m.alpha)], ['Max DD', Fp(m.max_dd), 'neg'],
+    ['Win', (m.win_rate==null?'—':m.win_rate+'%'), ''], ['Profit Factor', F(m.profit_factor), cls((m.profit_factor||0)-1)],
+    ['İşlem', m.trades, ''], ['Son $', '$'+F(m.final,0), cls(m.final-m.initial)],
+  ].map(([l,v,k])=>`<div class="mc"><div class="v ${k}">${v}</div><div class="l">${l}</div></div>`).join('');
+
+  // equity chart
+  const labels=d.equity.map(e=>e.date), eq=d.equity.map(e=>e.equity), sp=d.equity.map(e=>e.spy);
+  if(eqChart) eqChart.destroy();
+  eqChart=new Chart($('eqchart'),{type:'line',data:{labels,datasets:[
+    {label:'Strateji',data:eq,borderColor:'#27c281',borderWidth:1.6,pointRadius:0,tension:.1},
+    {label:'SPY',data:sp,borderColor:'#5aa2ff',borderWidth:1.2,pointRadius:0,tension:.1,borderDash:[4,3]}]},
+    options:{responsive:true,plugins:{legend:{labels:{color:'#8a95ad'}}},scales:{x:{ticks:{color:'#8a95ad',maxTicksLimit:8},grid:{color:'#1c2531'}},y:{ticks:{color:'#8a95ad'},grid:{color:'#1c2531'}}}}});
+
+  $('bt-outcomes').innerHTML = ['tp','partial','trail','stop','eod'].map(k=>{
+    const lbl={tp:'TP',partial:'Kısmi',trail:'Trail',stop:'Stop',eod:'Gün-sonu'}[k];
+    return `<span class="pill b" style="margin-right:8px;">${lbl}: ${m[k]??0}</span>`;}).join('') + ` · Tepe $${F(m.peak,0)}`;
+
+  // grid
+  const gw=$('bt-grid-wrap');
+  if(d.grid && d.grid.length){ gw.style.display='';
+    const cols=Object.keys(d.grid[0]);
+    $('bt-grid').innerHTML = '<thead><tr>'+cols.map(c=>`<th>${c}</th>`).join('')+'</tr></thead><tbody>'+
+      d.grid.map(r=>'<tr>'+cols.map(c=>`<td>${typeof r[c]==='number'?F(r[c],2):r[c]}</td>`).join('')+'</tr>').join('')+'</tbody>';
+  } else gw.style.display='none';
+
+  // monthly
+  const mn=d.monthly||[]; const MO=['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
+  $('bt-monthly').innerHTML = '<thead><tr><th>Yıl</th>'+MO.map(x=>`<th>${x}</th>`).join('')+'<th>Yıl%</th></tr></thead><tbody>'+
+    mn.map(r=>'<tr><td>'+r.year+'</td>'+r.months.map(v=>`<td class="${v>=0?'pos':'neg'}">${v==null?'':F(v,1)}</td>`).join('')+`<td class="${r.year_pct>=0?'pos':'neg'}"><b>${Fp(r.year_pct)}</b></td></tr>`).join('')+'</tbody>';
+
+  // trades
+  const tr=d.trades||[]; $('bt-trade-n').textContent=tr.length;
+  $('bt-trades').innerHTML='<thead><tr><th>Sembol</th><th>Giriş t.</th><th>Çıkış t.</th><th>Giriş</th><th>Çıkış</th><th>P&L</th><th>%</th><th>Sonuç</th></tr></thead><tbody>'+
+    tr.map(t=>`<tr><td>${t.symbol}</td><td>${t.entry_date}</td><td>${t.exit_date}</td><td>${F(t.entry)}</td><td>${F(t.exit)}</td><td class="${t.pnl>=0?'pos':'neg'}">${F(t.pnl,0)}</td><td class="${t.pnl_pct>=0?'pos':'neg'}">${Fp(t.pnl_pct)}</td><td><span class="pill ${t.pnl>=0?'g':'r'}">${t.outcome}</span></td></tr>`).join('')+'</tbody>';
+  $('bt-results').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+// qswing
+function qsReport(){ const t=($('qs-ticker').value||'').trim().toUpperCase(); if(!t){$('qs-ticker').focus();return;} window.open('/api/qswing?ticker='+encodeURIComponent(t),'_blank'); }
+function qsScan(){
+  const u=$('qs-universe').value;
+  if(u==='custom'){ const s=($('qs-custom').value||'').trim(); if(!s){$('qs-custom').focus();return;} window.open('/api/qswing/scan?tickers='+encodeURIComponent(s.split(/[ ,]+/).filter(Boolean).join(',')),'_blank'); }
+  else window.open('/api/qswing/scan?preset='+u,'_blank');
+}
+exitChange();
+if(location.hash==='#qs') showTab('qs');
+</script>
+</body>
+</html>

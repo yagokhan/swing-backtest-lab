@@ -1,0 +1,8 @@
+# Swing Backtest Lab — çalışma zamanı bağımlılıkları
+pandas>=2.0
+numpy>=1.24
+httpx>=0.27
+jinja2>=3.1
+# Opsiyonel: yfinance (price_source='yfinance' fallback), matplotlib (grafik üretimi)
+yfinance>=0.2
+matplotlib>=3.7

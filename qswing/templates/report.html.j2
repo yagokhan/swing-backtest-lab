@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>qswing · {{ ticker }} · {{ date }}</title>
+<style>
+:root{
+  --green:#27c281; --red:#ff5d6c; --amber:#f5b14c; --blue:#5aa2ff; --neutral:#8a95ad;
+  --bg:#0d1218; --bg-card:#161c25; --bg-elevated:#1f2733; --bg-deep:#080c12;
+  --txt:#e6ebf2; --line:#243042;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--txt);font-family:Arial,Helvetica,sans-serif;
+  margin:0;padding:24px;line-height:1.5;font-size:15px}
+.wrap{max-width:1080px;margin:0 auto}
+a{color:var(--blue)}
+h1,h2,h3{margin:0 0 8px}
+h2{font-size:18px;margin-top:28px;border-left:3px solid var(--blue);padding-left:10px}
+.muted{color:var(--neutral)}
+.card{background:var(--bg-card);border:1px solid var(--line);border-radius:12px;
+  padding:18px 20px;margin:14px 0}
+.row{display:flex;flex-wrap:wrap;gap:14px;align-items:center}
+.spread{justify-content:space-between}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:14px 0}
+.big{font-size:34px;font-weight:700;letter-spacing:-.5px}
+.kv{font-size:13px;color:var(--neutral)}
+
+/* pills */
+.pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;
+  font-weight:700;line-height:1.6;white-space:nowrap}
+.pill.green{background:rgba(39,194,129,.16);color:var(--green)}
+.pill.red{background:rgba(255,93,108,.16);color:var(--red)}
+.pill.amber{background:rgba(245,177,76,.16);color:var(--amber)}
+.pill.blue{background:rgba(90,162,255,.16);color:var(--blue)}
+
+/* alert blocks */
+.alert-block{border-radius:12px;padding:14px 16px;margin:14px 0;border:1px solid}
+.alert-block.green{background:rgba(39,194,129,.10);border-color:rgba(39,194,129,.4)}
+.alert-block.red{background:rgba(255,93,108,.10);border-color:rgba(255,93,108,.4)}
+.alert-block.amber{background:rgba(245,177,76,.10);border-color:rgba(245,177,76,.4)}
+.alert-block.blue{background:rgba(90,162,255,.10);border-color:rgba(90,162,255,.4)}
+
+/* verdict badge */
+.badge{display:inline-block;font-size:40px;font-weight:800;padding:10px 28px;
+  border-radius:14px;letter-spacing:1px}
+.badge.green{background:rgba(39,194,129,.18);color:var(--green);border:2px solid var(--green)}
+.badge.amber{background:rgba(245,177,76,.18);color:var(--amber);border:2px solid var(--amber)}
+.badge.red{background:rgba(255,93,108,.18);color:var(--red);border:2px solid var(--red)}
+
+/* dashed "yani ne demek" */
+.explain{border:1.5px dashed var(--neutral);border-radius:12px;padding:14px 16px;
+  margin:14px 0;background:var(--bg-deep)}
+.explain b{color:var(--amber)}
+
+/* table */
+table{width:100%;border-collapse:collapse;margin:10px 0;font-size:14px}
+th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line)}
+th{color:var(--neutral);font-weight:700;cursor:pointer;user-select:none;
+  background:var(--bg-elevated)}
+th:hover{color:var(--txt)}
+th.num,td.num{text-align:right;font-variant-numeric:tabular-nums}
+tbody tr:hover{background:var(--bg-elevated)}
+
+/* checklist */
+.chk{display:flex;gap:12px;padding:11px 0;border-bottom:1px solid var(--line)}
+.dot{flex:0 0 auto;width:13px;height:13px;border-radius:50%;margin-top:5px}
+.dot.green{background:var(--green)} .dot.amber{background:var(--amber)} .dot.red{background:var(--red)}
+.chk .name{font-weight:700}
+.chk .st{font-size:12px;font-weight:700;margin-left:6px}
+
+/* roadmap */
+.road{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:14px 0}
+.step{background:var(--bg-elevated);border:1px solid var(--line);border-radius:10px;padding:12px}
+.step .n{color:var(--blue);font-weight:800;font-size:13px}
+.step.dim{opacity:.55}
+
+/* levels */
+.levels{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.lvl{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px dashed var(--line)}
+
+/* glossary */
+.gloss{display:grid;grid-template-columns:1fr 1fr;gap:8px 22px;font-size:13px}
+.gloss div{padding:5px 0;border-bottom:1px solid var(--line)}
+.gloss b{color:var(--txt)}
+
+.foot{font-size:12px;color:var(--neutral);margin-top:24px;text-align:center}
+
+@media(max-width:680px){
+  body{padding:14px}
+  .grid3{grid-template-columns:1fr}
+  .road{grid-template-columns:1fr}
+  .levels{grid-template-columns:1fr}
+  .gloss{grid-template-columns:1fr}
+  .big{font-size:28px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+{# 1 · HEADER #}
+<div class="card">
+  <div class="row spread">
+    <div>
+      <h1>{{ ticker }} <span class="muted" style="font-size:16px">· {{ company }}</span></h1>
+      <div class="kv">{{ exchange }} · {{ sector }} · Analiz: {{ date }} · Kaynak: {{ source }}</div>
+    </div>
+    <div style="text-align:right">
+      <div class="big">${{ price|trnum(2) }}</div>
+      {% set ch = change_pct %}
+      <div class="pill {{ 'green' if ch is not none and ch>=0 else 'red' }}">
+        {{ ch|trsignedpct(2) }} bugün</div>
+    </div>
+  </div>
+</div>
+
+{# 2 · PİYASA REJİMİ #}
+{% set rg = gates['regime'] %}
+{% set rgc = 'green' if rg.status=='PASS' else ('amber' if rg.status=='PARTIAL' else 'red') %}
+<div class="alert-block {{ rgc }}">
+  <b>Piyasa Rejimi — {{ rg.status }}</b><br>
+  {{ rg.detail }}
+  {% if spy_ok %}
+  <div class="kv" style="margin-top:6px">
+    SPY ${{ spy_reg.price|trnum(2) }} (SMA50 {{ 'üstü' if spy_reg.above50 else 'altı' }},
+    SMA200 {{ 'üstü' if spy_reg.above200 else 'altı' }}) ·
+    QQQ ${{ qqq_reg.price|trnum(2) }} (SMA50 {{ 'üstü' if qqq_reg.above50 else 'altı' }},
+    SMA200 {{ 'üstü' if qqq_reg.above200 else 'altı' }})
+  </div>
+  {% endif %}
+</div>
+
+{# 3 · NET DURUŞ #}
+<div class="card" style="text-align:center">
+  <div class="kv" style="margin-bottom:8px">NET DURUŞ</div>
+  <div class="badge {{ verdict.color }}">{{ verdict.emoji }} {{ verdict.label }}</div>
+  <p style="max-width:680px;margin:14px auto 0">{{ verdict.text }}</p>
+</div>
+
+{# 4 · YANİ NE DEMEK (duruş) #}
+<div class="explain">
+  <b>Yani ne demek?</b>
+  {% if verdict.label=='AL' %}
+  Beş ön-koşulun hepsi yerinde: piyasa destekli, hisse lider, trend olgun ve hacim
+  kurumuş. Bu, Qullamaggie tarzında <b>tetik bekleyen</b> nadir bir kurulum. Yine de
+  giriş kırılımı gerçekleşmeden ve net stop tanımlanmadan pozisyon açma.
+  {% elif verdict.label=='KAÇIN' %}
+  Piyasanın geneli düşüşte ({{ '' }}rejim kapalı). Bu ortamda en iyi grafikler bile
+  yarıda kalır — momentum stratejisi yalnızca rüzgâr arkadan eserken çalışır.
+  Nakitte kal, rejim dönene kadar bekle.
+  {% else %}
+  Bazı parçalar yerinde ama tablo henüz tamamlanmadı. Bu bir <b>izleme</b> adayı:
+  sıkışmanın daralmasını, hacmin kurumasını ve net bir kırılım tetiğini bekle.
+  Acele giriş, bu tip yarı-kurulumlarda en sık yapılan hatadır.
+  {% endif %}
+</div>
+
+{# 5 · ÜÇLÜ KART #}
+<div class="grid3">
+  <div class="card">
+    <div class="kv">GÖRECE GÜÇ (RS)</div>
+    <div class="big" style="font-size:22px">{{ m.rs_3m|trsignedpct(1) }}<span class="kv"> 3a vs SPY</span></div>
+    <div style="margin-top:8px">
+      RS çizgisi 50g zirve:
+      <span class="pill {{ 'green' if m.rs_line_50d_high else 'red' }}">
+        {{ 'EVET' if m.rs_line_50d_high else 'HAYIR' }}</span>
+    </div>
+    <div class="kv" style="margin-top:6px">6a RS: {{ m.rs_6m|trsignedpct(1) }}</div>
+  </div>
+  <div class="card">
+    <div class="kv">AŞAMA 2 SKORU</div>
+    <div class="big" style="font-size:22px">{{ stage.score }}<span class="kv">/5</span></div>
+    <div style="margin-top:8px">
+      {% for it in stage.criteria %}
+      <div class="kv">
+        <span class="pill {{ 'green' if it.ok else 'red' }}" style="min-width:18px">
+          {{ '✓' if it.ok else '✗' }}</span> {{ it.label }}</div>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="card">
+    <div class="kv">KURULUM</div>
+    <div class="big" style="font-size:22px">{{ m.vdu_ratio|trpct(0) }}<span class="kv"> VDU</span></div>
+    <div class="kv" style="margin-top:8px">ADR%: {{ m.adr_pct|trpct(1) }}</div>
+    <div class="kv">1a getiri: {{ m.ret_1m|trsignedpct(1) }}</div>
+    <div class="kv">SMA50 uzaması: {{ m.extension_adr|trnum(1) }} ADR
+      {% if m.extension_adr is not none and m.extension_adr>7 %}
+      <span class="pill amber">uzamış</span>{% endif %}</div>
+  </div>
+</div>
+
+{# 6 · METRİK TABLOSU #}
+<h2>Metrikler</h2>
+<div class="card" style="padding:6px 10px">
+<table id="mt">
+  <thead><tr>
+    <th onclick="sortT(0)">Metrik ▾</th>
+    <th class="num" onclick="sortT(1)">Değer</th>
+    <th onclick="sortT(2)">Eşik</th>
+    <th onclick="sortT(3)">Durum</th>
+  </tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr>
+      <td>{{ r.name }}</td>
+      <td class="num">{{ r.value }}</td>
+      <td class="muted">{{ r.thr }}</td>
+      <td><span class="pill {{ r.pill.cls }}">{{ r.pill.txt }}</span></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+{# 7 · 5-KAPI ÇEKLİST #}
+<h2>Pre-flight Çeklist (5 Kapı)</h2>
+<div class="card">
+  {% for key, title in gate_order %}
+  {% set g = gates[key] %}
+  {% set gc = 'green' if g.status=='PASS' else ('amber' if g.status=='PARTIAL' else 'red') %}
+  <div class="chk">
+    <div class="dot {{ gc }}"></div>
+    <div>
+      <span class="name">{{ title }}</span>
+      <span class="st pill {{ gc }}">{{ g.status }}</span>
+      <div class="kv" style="margin-top:3px">{{ g.detail }}</div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{# 8 · YANİ NE DEMEK (çeklist) #}
+{% set npass = gates.values()|selectattr('status','equalto','PASS')|list|length %}
+<div class="explain">
+  <b>Yani ne demek?</b>
+  {{ npass }}/5 kapı tam geçti.
+  {% if npass==5 %}
+  Hepsi yeşil — kontrol listesi tamam, sıra tetik ve risk yönetiminde.
+  {% elif gates['regime'].status=='FAIL' %}
+  En kritik kapı (piyasa rejimi) kırmızı; diğerleri ne olursa olsun yeni alım yapılmaz.
+  {% else %}
+  Çekirdek koşullar kısmen sağlanıyor; kırmızı/sarı kapılar kapanana kadar bu bir
+  izleme adayı. Her kapının yeşile dönmesi olasılığı artırır, garanti etmez.
+  {% endif %}
+</div>
+
+{# 9 · KİLİT SEVİYELER #}
+<h2>Kilit Seviyeler</h2>
+<div class="card levels">
+  <div>
+    <div class="kv" style="color:var(--red)">DİRENÇ (üstte)</div>
+    {% for l in levels.resistance %}
+    <div class="lvl"><span>{{ l.label }}</span><b>${{ l.value|trnum(2) }}</b></div>
+    {% else %}<div class="kv">Üstte tanımlı direnç yok — açık alan.</div>{% endfor %}
+  </div>
+  <div>
+    <div class="kv" style="color:var(--green)">DESTEK (altta)</div>
+    {% for l in levels.support %}
+    <div class="lvl"><span>{{ l.label }}</span><b>${{ l.value|trnum(2) }}</b></div>
+    {% else %}<div class="kv">Altta tanımlı destek yok.</div>{% endfor %}
+  </div>
+</div>
+
+{# 10 · 4-AŞAMA YOL HARİTASI #}
+<h2>Yol Haritası</h2>
+{% set is_buy = verdict.label=='AL' %}
+<div class="road">
+  <div class="step">
+    <div class="n">1 · KURULUM</div>
+    <div style="margin-top:6px">Aşama {{ stage.score }}/5, VDU {{ m.vdu_ratio|trpct(0) }}.
+    {{ 'Kurulum olgun.' if stage.score>=4 else 'Sıkışma/dinlenme bekleniyor.' }}</div>
+  </div>
+  <div class="step {{ '' if is_buy else 'dim' }}">
+    <div class="n">2 · GİRİŞ & RİSK</div>
+    <div style="margin-top:6px">
+    {% if is_buy %}Kırılım gününün tepesi üstünde giriş; stop gün dibi / EMA10.
+    Risk = giriş − stop.{% else %}Kurulum oluşunca tanımlanır.{% endif %}</div>
+  </div>
+  <div class="step {{ '' if is_buy else 'dim' }}">
+    <div class="n">3 · KISMİ ÇIKIŞ</div>
+    <div style="margin-top:6px">
+    {% if is_buy %}3–5 gün içinde ilk hedefte (≈+%10–20) yarıyı sat, riski sıfırla.
+    {% else %}Kurulum oluşunca tanımlanır.{% endif %}</div>
+  </div>
+  <div class="step {{ '' if is_buy else 'dim' }}">
+    <div class="n">4 · TRAIL & ÇIKIŞ</div>
+    <div style="margin-top:6px">
+    {% if is_buy %}Kalanı 10 günlük (trailing) MA / EMA20 altına sarkana dek tut.
+    {% else %}Kurulum oluşunca tanımlanır.{% endif %}</div>
+  </div>
+</div>
+
+{# 11 · TEMEL YAKIT #}
+<h2>Temel Yakıt</h2>
+{% if fund.is_pre_revenue %}
+<div class="alert-block amber">
+  <b>Pre-revenue şirket</b> — gelir/EPS büyüme kriterleri uygulanmaz.
+  Hikâye/katalizör ve fiyat aksiyonu öncelikli; risk daha yüksek.
+</div>
+{% elif fund.has_income %}
+<div class="card row" style="gap:32px">
+  <div><div class="kv">Gelir (TTM)</div><div class="big" style="font-size:20px">{{ fund.revenue_ttm_m|trmoney_m(1) }}</div></div>
+  <div><div class="kv">EPS (TTM)</div><div class="big" style="font-size:20px">${{ fund.eps_ttm|trnum(2) }}</div></div>
+  <div><div class="kv">Sonraki bilanço</div><div class="big" style="font-size:20px">{{ fund.next_earnings or '—' }}</div></div>
+</div>
+{% else %}
+<div class="alert-block blue">Gelir tablosu verisi yok.
+  {% if fund.next_earnings %}Sonraki bilanço: <b>{{ fund.next_earnings }}</b>.{% endif %}</div>
+{% endif %}
+
+{# 12 · YÖNTEM HATIRLATMASI #}
+<div class="alert-block blue" style="margin-top:24px">
+  <b>Yöntem hatırlatması.</b> Bu strateji düşük isabetle (≈%25–30 kazanan) çalışır;
+  kâr, az sayıda büyük kazananın çok sayıda küçük zararı kat kat aşmasından gelir
+  (asimetrik R). Tek bir işleme aşırı yüklenme; planlı kısmi çıkış ve trailing stop
+  disiplini sonuçları belirler. Skor yüksek diye değil, <b>risk net</b> olduğu için gir.
+</div>
+
+{# 13 · SÖZLÜK #}
+<h2>Sözlük</h2>
+<div class="card gloss">
+  <div><b>Kırılım</b> — fiyatın direnci hacimle aşıp yeni alana çıkması.</div>
+  <div><b>Aşama 2</b> — Weinstein döngüsünde yükseliş trendi evresi.</div>
+  <div><b>Hacim kuruması (VDU)</b> — son 5g hacmin 50g ortalamasına oranı düşük.</div>
+  <div><b>Pre-flight çeklist</b> — girişten önce geçilmesi gereken 5 kapı.</div>
+  <div><b>Piyasa rejimi</b> — SPY/QQQ'nun ortalamalara göre genel sağlığı.</div>
+  <div><b>Kurulum</b> — girişe hazır teknik şablon (sıkışma + trend).</div>
+  <div><b>Net duruş</b> — AL / İZLE / KAÇIN özet kararı.</div>
+  <div><b>RS Çizgisi</b> — hisse/SPY oranı; yeni zirve = liderlik.</div>
+  <div><b>ADR%</b> — günlük ortalama hareket yüzdesi (oynaklık).</div>
+  <div><b>Trailing çıkış</b> — 10 günlük MA altına sarkınca sat.</div>
+  <div><b>Extension (ADR)</b> — fiyatın SMA50'den kaç ADR uzakta olduğu.</div>
+  <div><b>Asimetrik R</b> — büyük kazanan / küçük zarar risk-ödül dengesi.</div>
+</div>
+
+{# 14 · UYARI #}
+<div class="alert-block red" style="margin-top:18px">
+  <b>Uyarı.</b> Bu rapor yalnızca eğitim amaçlıdır; yatırım tavsiyesi değildir.
+  Veriler gecikmeli/eksik olabilir. Kararlarınızdan yalnızca siz sorumlusunuz.
+</div>
+
+<div class="foot">qswing v5 · {{ ticker }} · {{ generated }} · Financial Modeling Prep verisiyle üretildi.</div>
+
+</div>
+
+<script>
+function sortT(col){
+  var tb=document.querySelector('#mt tbody');
+  var rows=Array.prototype.slice.call(tb.querySelectorAll('tr'));
+  var cur=tb.getAttribute('data-col'), dir=tb.getAttribute('data-dir')==='asc'?1:-1;
+  if(cur==String(col)){dir=-dir;}else{dir=1;}
+  function val(tr){return tr.children[col].innerText.trim();}
+  function num(s){var x=parseFloat(s.replace(/[^0-9,\-−.]/g,'').replace(/\./g,'').replace(',','.').replace('−','-'));return isNaN(x)?null:x;}
+  rows.sort(function(a,b){
+    var A=val(a),B=val(b),na=num(A),nb=num(B);
+    if(na!==null&&nb!==null)return (na-nb)*dir;
+    return A.localeCompare(B,'tr')*dir;
+  });
+  rows.forEach(function(r){tb.appendChild(r);});
+  tb.setAttribute('data-col',col); tb.setAttribute('data-dir',dir===1?'asc':'desc');
+}
+</script>
+</body>
+</html>

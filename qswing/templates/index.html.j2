@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>qswing · tarama · {{ date }}</title>
+<style>
+:root{
+  --green:#27c281; --red:#ff5d6c; --amber:#f5b14c; --blue:#5aa2ff; --neutral:#8a95ad;
+  --bg:#0d1218; --bg-card:#161c25; --bg-elevated:#1f2733; --line:#243042;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:#e6ebf2;font-family:Arial,Helvetica,sans-serif;
+  margin:0;padding:24px;font-size:15px}
+.wrap{max-width:1080px;margin:0 auto}
+h1{margin:0 0 4px} .muted{color:var(--neutral)}
+a{color:var(--blue);text-decoration:none} a:hover{text-decoration:underline}
+.chips{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0}
+.chip{padding:6px 14px;border-radius:999px;font-weight:700;border:1px solid}
+.chip.green{color:var(--green);border-color:var(--green);background:rgba(39,194,129,.10)}
+.chip.amber{color:var(--amber);border-color:var(--amber);background:rgba(245,177,76,.10)}
+.chip.red{color:var(--red);border-color:var(--red);background:rgba(255,93,108,.10)}
+.chip.blue{color:var(--blue);border-color:var(--blue);background:rgba(90,162,255,.10)}
+.card{background:var(--bg-card);border:1px solid var(--line);border-radius:12px;padding:6px 10px;margin:14px 0}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{color:var(--neutral);font-weight:700;cursor:pointer;user-select:none;background:var(--bg-elevated)}
+th:hover{color:#e6ebf2}
+th.num,td.num{text-align:right;font-variant-numeric:tabular-nums}
+tbody tr:hover{background:var(--bg-elevated)}
+.pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:700}
+.pill.green{background:rgba(39,194,129,.16);color:var(--green)}
+.pill.red{background:rgba(255,93,108,.16);color:var(--red)}
+.pill.amber{background:rgba(245,177,76,.16);color:var(--amber)}
+.pill.blue{background:rgba(90,162,255,.16);color:var(--blue)}
+.sym{font-weight:800;font-size:15px}
+.foot{font-size:12px;color:var(--neutral);margin-top:24px;text-align:center}
+.fail{color:var(--red)}
+@media(max-width:680px){
+  body{padding:14px}
+  td.hide,th.hide{display:none}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>qswing · Tarama Özeti</h1>
+  <div class="muted">{{ date }} · {{ total }} sembol · Financial Modeling Prep · net duruşa göre sıralı</div>
+
+  <div class="chips">
+    <div class="chip green">🟢 AL: {{ counts.get('AL', 0) }}</div>
+    <div class="chip amber">🟡 İZLE: {{ counts.get('İZLE', 0) }}</div>
+    <div class="chip red">🔴 KAÇIN: {{ counts.get('KAÇIN', 0) }}</div>
+    {% if failed %}<div class="chip blue">⚠️ Hata: {{ failed|length }}</div>{% endif %}
+  </div>
+
+  <div class="card">
+  <table id="t">
+    <thead><tr>
+      <th onclick="sortT(0)">Sembol</th>
+      <th onclick="sortT(1)">Duruş</th>
+      <th class="num" onclick="sortT(2)">Aşama</th>
+      <th class="num" onclick="sortT(3)">Fiyat</th>
+      <th class="num" onclick="sortT(4)">Gün%</th>
+      <th class="num" onclick="sortT(5)">RS 3a</th>
+      <th class="num" onclick="sortT(6)">VDU</th>
+      <th class="num hide" onclick="sortT(7)">ADR%</th>
+      <th class="num hide" onclick="sortT(8)">52H</th>
+      <th class="hide" onclick="sortT(9)">Sıkı</th>
+      <th onclick="sortT(10)">Rapor</th>
+    </tr></thead>
+    <tbody>
+    {% for s in rows %}
+      {% set v = s.verdict %}
+      <tr>
+        <td><span class="sym">{{ s.ticker }}</span>
+          {% if s.pre_rev %}<span class="pill amber" title="pre-revenue">pre-rev</span>{% endif %}
+          <div class="muted" style="font-size:11px;font-weight:400">{{ s.company[:26] }}</div></td>
+        <td><span class="pill {{ v.color }}">{{ v.emoji }} {{ v.label }}</span></td>
+        <td class="num">{{ s.stage }}/5</td>
+        <td class="num">${{ s.price|trnum(2) }}</td>
+        <td class="num"><span class="{{ 'pill green' if (s.change_pct or 0)>=0 else 'pill red' }}">{{ s.change_pct|trsignedpct(1) }}</span></td>
+        <td class="num">{{ s.rs_3m|trsignedpct(1) }}</td>
+        <td class="num">{{ s.vdu|trpct(0) }}</td>
+        <td class="num hide">{{ s.adr|trpct(1) }}</td>
+        <td class="num hide">{{ s.pct_from_high|trsignedpct(0) }}</td>
+        <td class="hide"><span class="pill {{ 'green' if s.tight=='PASS' else ('amber' if s.tight=='PARTIAL' else 'red') }}">{{ s.tight }}</span></td>
+        <td><a href="{{ s.file }}">aç ↗</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+
+  {% if failed %}
+  <div class="card" style="padding:12px 16px">
+    <b class="fail">Alınamayan semboller:</b>
+    {% for f in failed %}<div class="muted">✗ {{ f.ticker }} — {{ f.error }}</div>{% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="muted" style="font-size:12px;margin-top:14px">
+    Sütun başlığına tıkla = sırala. Net duruş yalnız bir ön-eleme; karar öncesi tek
+    sembolün tam raporunu (kapılar + kilit seviyeler + temel) aç. Eğitim amaçlıdır.
+  </div>
+  <div class="foot">qswing v5 · {{ date }}</div>
+</div>
+
+<script>
+function sortT(col){
+  var tb=document.querySelector('#t tbody');
+  var rows=Array.prototype.slice.call(tb.querySelectorAll('tr'));
+  var cur=tb.getAttribute('data-col'), dir=tb.getAttribute('data-dir')==='asc'?1:-1;
+  if(cur==String(col)){dir=-dir;}else{dir=1;}
+  function val(tr){return tr.children[col].innerText.trim();}
+  function num(s){var x=parseFloat(s.replace(/[^0-9,\-−.]/g,'').replace(/\./g,'').replace(',','.').replace('−','-'));return isNaN(x)?null:x;}
+  rows.sort(function(a,b){
+    var A=val(a),B=val(b),na=num(A),nb=num(B);
+    if(na!==null&&nb!==null)return (na-nb)*dir;
+    return A.localeCompare(B,'tr')*dir;
+  });
+  rows.forEach(function(r){tb.appendChild(r);});
+  tb.setAttribute('data-col',col); tb.setAttribute('data-dir',dir===1?'asc':'desc');
+}
+</script>
+</body>
+</html>

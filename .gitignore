@@ -1,0 +1,18 @@
+# sırlar
+.env
+*.key
+.portfolio_keys.json
+# önbellek / çıktı
+cache/
+reports/
+swing2_cache/
+swing2_out/
+_test_cache/
+_test_reports/
+*.pkl
+*.csv
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
