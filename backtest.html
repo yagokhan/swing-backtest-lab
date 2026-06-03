@@ -84,7 +84,7 @@ th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:
       </div>
       <div class="grid" style="margin-top:12px;">
         <label class="fld"><span class="kicker">Giriş Stratejisi</span>
-          <select id="entry" onchange="syncHints()">
+          <select id="entry" onchange="entryChange()">
             <option value="swing2">swing2 · 8-katman skor</option>
             <option value="qswing">qswing · Qullamaggie kırılım</option>
           </select></label>
@@ -97,7 +97,7 @@ th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:
             <option value="atr_climax">8-EMA stop · ATR climax</option>
             <option value="hybrid">8-EMA stop · 21-EMA hibrit</option>
           </select></label>
-        <label class="fld"><span class="kicker">Min skor (swing2)</span><input type="number" id="min_score" value="16" min="0" max="24"></label>
+        <label class="fld" id="fld-min_score"><span class="kicker">Min skor (swing2)</span><input type="number" id="min_score" value="16" min="0" max="24"></label>
         <label class="fld"><span class="kicker">R/R hedef</span><input type="number" id="rr_target" value="2.0" step="0.5" min="1" max="6"></label>
         <label class="fld"><span class="kicker">ATR stop ×</span><input type="number" id="atr_stop" value="1.5" step="0.5" min="0.5" max="5"></label>
         <label class="fld"><span class="kicker">Maks pozisyon</span><input type="number" id="max_pos" value="5" min="1" max="20"></label>
@@ -120,7 +120,7 @@ th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:
       <div class="row" style="margin-top:14px;align-items:center;">
         <label class="chk"><input type="checkbox" id="compound" checked> Bileşik</label>
         <label class="chk"><input type="checkbox" id="confirm" checked> MA kapanış teyidi (8-EMA modları)</label>
-        <label class="chk"><input type="checkbox" id="earnings"> Earnings filtresi (yavaş)</label>
+        <label class="chk" id="fld-earnings"><input type="checkbox" id="earnings"> Earnings filtresi (yavaş)</label>
         <label class="chk"><input type="checkbox" id="grid"> Grid-search</label>
         <button class="btn" id="run" onclick="runBacktest()">Backtest Çalıştır</button>
       </div>
@@ -194,6 +194,14 @@ function exitChange(){
 function syncHints(){
   const em = $('entry').value==='qswing' ? 'qswing kırılım girişi (40g tepe · 52H yakın · SPY\'ı geçen momentum). ' : '';
   $('hint').textContent = em + (HINTS[$('exit').value]||'');
+}
+function entryChange(){
+  // qswing kırılımında 8-katman'a özgü parametreler kullanılmaz → gizle (kafa karışıklığını önle)
+  const q = $('entry').value==='qswing';
+  $('fld-min_score').style.display = q ? 'none' : '';
+  $('fld-earnings').style.display  = q ? 'none' : '';
+  if(q) $('earnings').checked = false;   // qswing girişi earnings'i kontrol etmez → boşa yavaş çekim olmasın
+  syncHints();
 }
 
 function buildPayload(){
@@ -295,6 +303,7 @@ function qsScan(){
   else window.open('/api/qswing/scan?preset='+u,'_blank');
 }
 exitChange();
+entryChange();
 if(location.hash==='#qs') showTab('qs');
 </script>
 </body>
