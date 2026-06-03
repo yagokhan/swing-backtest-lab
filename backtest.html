@@ -103,6 +103,10 @@ th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:
         <label class="fld" id="fld-rr_target" title="İlk/nihai hedef = giriş + (giriş−stop) × bu (R cinsinden). Yalnız Şampiyon (ATR-trail) çıkışında devreye girer."><span class="kicker">R/R hedef</span><input type="number" id="rr_target" value="2.0" step="0.5" min="1" max="6"></label>
         <label class="fld" id="fld-atr_stop" title="Stop tabanı = kapanış − bu × ATR(14). Şampiyon ve MA-trail çıkışında geçerli. 8-EMA modlarında stop daima 8-EMA'dır → kullanılmaz."><span class="kicker">ATR stop ×</span><input type="number" id="atr_stop" value="1.5" step="0.5" min="0.5" max="5"></label>
         <label class="fld" title="Aynı anda taşınacak en fazla açık pozisyon sayısı."><span class="kicker">Maks pozisyon</span><input type="number" id="max_pos" value="5" min="1" max="20"></label>
+        <label class="fld" title="Sabit: her poz = sermaye × 'Poz %'. Risk-bazlı: her işlem 'Risk/işlem %' kadar riske eder (lot = risk$ / stop-mesafesi); 'Poz %' tavan olur."><span class="kicker">Boyutlandırma</span>
+          <select id="sizing" onchange="refreshForm()"><option value="fixed">Sabit tahsis</option><option value="risk">Risk-bazlı</option></select></label>
+        <label class="fld" id="fld-risk_pct" title="İşlem başına riske edilecek sermaye %'si (stop'a takılırsa kaybedilecek). Stop referansı: 8-EMA modlarında 8-EMA, diğerlerinde LOW10/ATR plan stop. Giriş yöntemi (swing2/qswing) bunu değiştirmez."><span class="kicker">Risk/işlem %</span><input type="number" id="risk_pct" value="1.0" step="0.25" min="0.1" max="10"></label>
+        <label class="fld" title="Sabit modda poz başına sermaye payı; Risk modda poz büyüklüğü tavanı."><span class="kicker">Poz %</span><input type="number" id="pos_pct" value="20" step="5" min="2" max="100"></label>
       </div>
       <!-- çıkış alt-parametreleri -->
       <div class="row exsub ex-ma_trail hide" style="margin-top:12px;">
@@ -230,6 +234,7 @@ function refreshForm(){
   show('fld-atr_stop',  exit==='champion' || exit==='ma_trail');  // 8-EMA modlarında stop 8-EMA
   show('fld-rr_target', exit==='champion');                       // nihai R hedefi yalnız şampiyon
   show('fld-confirm',   exit!=='champion');                       // MA kapanış teyidi şampiyonda etkisiz
+  show('fld-risk_pct',  $('sizing').value==='risk');              // risk %'si yalnız risk-bazlı modda
   // ipucu
   const em = q ? 'qswing kırılım girişi (40g tepe · 52H yakın · SPY\'ı geçen momentum). ' : '';
   $('hint').textContent = em + (HINTS[exit]||'');
@@ -247,7 +252,10 @@ function buildPayload(){
     run_grid: $('grid').checked,
     entry_mode: $('entry').value,
     exit_strategy: $('exit').value,
+    sizing_mode: $('sizing').value,
+    max_position_pct: (parseFloat($('pos_pct').value)||20)/100,
   };
+  if(p.sizing_mode==='risk') p.risk_per_trade_pct = parseFloat($('risk_pct').value)||1.0;
   const sy = $('symbols').value.trim();
   if(sy) p.symbols = sy.split(/[ ,]+/).filter(Boolean);
   const sd=$('start').value, ed=$('end').value;
@@ -283,7 +291,8 @@ function renderBacktest(d){
   $('bt-results').classList.remove('hide');
   const c=d.config, m=d.metrics;
   $('bt-cfgline').textContent = `${c.universe_n} hisse · ${c.start}→${c.end}`+(c.date_range?' (el ile aralık)':' · '+c.period)
-     + ` · giriş ${ ($('entry').value) } · çıkış ${c.exit_strategy}`+(c.tp_mode?'/'+c.tp_mode:'');
+     + ` · giriş ${ ($('entry').value) } · çıkış ${c.exit_strategy}`+(c.tp_mode?'/'+c.tp_mode:'')
+     + ` · ${c.sizing_mode==='risk'?('risk %'+c.risk_per_trade_pct+'/işlem'):('sabit %'+Math.round((c.max_position_pct||0.2)*100)+'/poz')}`;
   const cls=x=>x>=0?'pos':'neg';
   $('bt-metrics').innerHTML = [
     ['ROI', Fp(m.roi), cls(m.roi)], ['SPY ROI', Fp(m.spy_roi), cls(m.spy_roi)],

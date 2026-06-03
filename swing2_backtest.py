@@ -102,6 +102,8 @@ class Config:
     initial_capital: float = 100_000.0
     max_positions: int = 5
     max_position_pct: float = 0.20
+    sizing_mode: str = "fixed"         # 'fixed' (poz başına sermaye×%20) | 'risk' (işlem başına sabit risk)
+    risk_per_trade_pct: float = 1.0    # risk modunda: işlem başına riske edilecek sermaye %'si
     compounding: bool = True
 
     warmup_bars: int = 220
@@ -1225,8 +1227,8 @@ class Swing2Backtester:
         return float(rs)
 
     def _open(self, sym, date, row, plan, score):
-        cfg = self.cfg; size = self._size(date)
-        if self.cash < size or plan["risk"] <= 0: return False
+        cfg = self.cfg
+        if plan["risk"] <= 0: return False
         base = plan["entry"]                              # plan girişi = T-Close
         if cfg.entry_fill_mode == "real_1545":
             rp = self.px1545.get(sym)
@@ -1240,7 +1242,23 @@ class Swing2Backtester:
             if not pd.isna(op):
                 base = op + cfg.preclose_frac * (plan["entry"] - op)  # 15:45 ET proxy
         fill = base * (1 + self._entry_slip)              # girişe özel 8bps (kapanış anı)
-        shares = (size - cfg.commission_per_trade) / fill
+        # ---- Pozisyon boyutlandırma ----
+        eq = self._equity(date) if cfg.compounding else cfg.initial_capital
+        cap = eq * cfg.max_position_pct                   # poz tavanı (her iki modda)
+        if cfg.sizing_mode == "risk":
+            # ilk stop referansı: 8-EMA modlarında 8-EMA, diğerlerinde plan stop (LOW10/ATR)
+            sref = row["EMA8"] if cfg.exit_mode == "tp_grid" else plan["stop"]
+            if pd.isna(sref) or sref >= fill: sref = plan["stop"]
+            rps = fill - sref                             # lot başına dolar risk
+            if rps <= 0: return False
+            shares = (eq * cfg.risk_per_trade_pct / 100.0) / rps
+            size = shares * fill + cfg.commission_per_trade
+            if size > cap:                                # poz tavanını aşarsa kırp
+                size = cap; shares = (size - cfg.commission_per_trade) / fill
+        else:
+            size = cap                                    # sabit: sermaye × poz%
+            shares = (size - cfg.commission_per_trade) / fill
+        if self.cash < size or shares <= 0: return False
         self.cash -= size
         self.positions[sym] = Position(sym, date, fill, plan["stop"], plan["target"],
                                        shares, size, score, risk0=fill - plan["stop"])
@@ -1669,6 +1687,11 @@ def run_backtest_api(params: dict) -> dict:
     cfg.atr_stop_mult = float(max(0.5, min(5.0, params.get("atr_stop_mult", cfg.atr_stop_mult))))
     cfg.max_dist_sma20 = float(max(0.0, min(2.0, params.get("max_dist_sma20", cfg.max_dist_sma20))))
     cfg.max_positions = int(max(1, min(20, params.get("max_positions", cfg.max_positions))))
+    # Boyutlandırma: 'fixed' (sermaye×poz%) | 'risk' (işlem başına sabit risk%)
+    cfg.sizing_mode = "risk" if str(params.get("sizing_mode", "fixed")).lower() == "risk" else "fixed"
+    cfg.risk_per_trade_pct = float(max(0.1, min(10.0, params.get("risk_per_trade_pct", cfg.risk_per_trade_pct))))
+    if params.get("max_position_pct") is not None:
+        cfg.max_position_pct = float(max(0.02, min(1.0, params.get("max_position_pct"))))
     cfg.period = str(params.get("period", cfg.period))
     # El ile tarih aralığı (geçerli ISO ise period'u geçersiz kılar)
     def _vdate(s):
@@ -1770,6 +1793,8 @@ def run_backtest_api(params: dict) -> dict:
         "config": {"universe_n": len(bt.data), "min_score": cfg.min_score,
                    "rr_target": cfg.rr_target, "atr_stop_mult": cfg.atr_stop_mult,
                    "max_positions": cfg.max_positions,
+                   "sizing_mode": cfg.sizing_mode, "risk_per_trade_pct": cfg.risk_per_trade_pct,
+                   "max_position_pct": cfg.max_position_pct,
                    "period": cfg.period, "compounding": cfg.compounding,
                    "date_range": bool(cfg.start_date or cfg.end_date),
                    "req_start": cfg.start_date or None, "req_end": cfg.end_date or None,

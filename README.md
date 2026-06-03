@@ -144,6 +144,52 @@ Kalan runner, fiyat 10-gün ortalamanın altına kapanana dek tutulur → trend 
 
 > FMP ızgara sonucu (tam ~95 hisse evreni): qswing kırılım (lb=40) + ATR-trail şampiyon çıkış → 2y **+148.8% / DD −10.0%** (Win %58, PF 2.09), 5y **+149.2% / DD −24.1%**. 10-gün MA trail çıkış benzer (5y +119% / −17%). In-sample optimize; canlıda daha mütevazı beklenmeli.
 
+## Pozisyon boyutlandırma
+
+İki mod var (`sizing_mode`). Boyutlandırma **giriş yöntemine (swing2/qswing) bağlı değildir** — ikisi de aynı planı kullanır; risk-bazlıda farklılaşan tek şey **çıkış moduna göre stop referansıdır**.
+
+### 1) Sabit tahsis (`fixed`, varsayılan)
+Her pozisyon = sermaye × `max_position_pct`.
+```
+poz_$ = (compounding ? güncel_sermaye : başlangıç_sermaye) × max_position_pct
+hisse = (poz_$ − komisyon) / dolum
+```
+Varsayılan: $100k · %20/poz · maks 5 poz → poz başına ≈ $20k, 5 dolunca %100 yatırımda. Equal-weight; **işlem başına dolar-riski stop mesafesine göre değişir** (geniş stop = daha çok risk).
+
+### 2) Risk-bazlı (`risk`)
+Her işlem sermayenin sabit bir %'sini riske eder (`risk_per_trade_pct`). Lot, stop mesafesine göre ayarlanır:
+```
+risk_$ = sermaye × (risk_per_trade_pct / 100)        # örn. $100k × %1 = $1.000
+hisse  = risk_$ / (dolum − ilk_stop)                  # lot başına risk ile böl
+poz_$  = hisse × dolum   (poz tavanı: sermaye × max_position_pct ile kırpılır)
+```
+
+**İlk stop referansı çıkış moduna göre değişir** (giriş yöntemi değiştirmez):
+
+| Çıkış | İlk stop (risk referansı) |
+|-------|---------------------------|
+| Şampiyon (ATR-trail) · MA-trail | `compute_trade_plan` stopu = **LOW10**, `kapanış − 1.5×ATR` tabanlı |
+| 8-EMA modları (RR/RSI/Climax/Hibrit) | **giriş barındaki 8-EMA** (gerçek stop) |
+
+Yani **risk %'si tek bir sayıdır**, yöntem başına farklı belirlenmez; değişen, o yüzdenin kaç lot aldığıdır (stop mesafesi). Dar stop → büyük pozisyon, geniş stop → küçük pozisyon; her işlem stop'a takılırsa **aynı doları** kaybeder.
+
+**Örnek** (sermaye $100k, risk %1 → $1.000, giriş $50):
+- Şampiyon, plan stop $46 → risk/lot $4 → 250 lot = **$12.500**
+- RR (8-EMA), 8-EMA $48 → risk/lot $2 → 500 lot = **$25.000** (poz tavanıyla sınırlanır)
+- Geniş stoplu işlem, stop $40 → risk/lot $10 → 100 lot = **$5.000**
+
+**Koruyucular:** poz tavanı (`max_position_pct`) çok dar stoplu işlemi sınırlar · nakit yetmezse atlanır · `giriş − stop ≤ 0` ise işlem açılmaz.
+
+| Parametre | Varsayılan | Anlamı |
+|-----------|-----------|--------|
+| `sizing_mode` | `fixed` | `fixed` (tahsis) · `risk` (risk-bazlı) |
+| `risk_per_trade_pct` | 1.0 | risk modunda işlem başına riske edilen sermaye % |
+| `max_position_pct` | 0.20 | sabit: poz payı · risk: poz tavanı |
+| `max_positions` | 5 | eşzamanlı açık poz |
+| `initial_capital` | 100000 | başlangıç sermaye |
+
+Etki (örnek, mega 2y qswing): Sabit ROI +21.7%/DD −10.6% · Risk %1 ROI +21.1%/DD **−8.7%** · Risk %0.5 ROI +7.0%/DD −8.2% — risk düştükçe pozisyonlar küçülür, getiri ve drawdown birlikte azalır.
+
 ## Notlar
 
 - Varsayılan fiyat kaynağı **FMP** (`price_source='fmp'`); `'yfinance'` fallback mevcut.
