@@ -400,6 +400,35 @@ function qsScan(){
 }
 refreshForm();
 if(location.hash==='#qs') showTab('qs');
+
+/* ---- Görünür/anlık tooltip: tüm title'ları stilize kutuya çevirir (statik + JS-üretilen) ---- */
+(function(){
+  const tip=document.createElement('div');
+  tip.style.cssText='position:fixed;z-index:9999;max-width:340px;background:#0f1620;color:#e6ebf2;'
+    +'border:1px solid #3a4a5c;border-radius:8px;padding:9px 12px;font-size:12.5px;line-height:1.5;'
+    +'pointer-events:none;box-shadow:0 8px 28px rgba(0,0,0,.55);display:none;white-space:normal;';
+  document.body.appendChild(tip);
+  let cur=null;
+  function place(x,y){
+    const r=tip.getBoundingClientRect();
+    let nx=x+15, ny=y+18;
+    if(nx+r.width>innerWidth-8) nx=Math.max(8,x-r.width-14);
+    if(ny+r.height>innerHeight-8) ny=Math.max(8,y-r.height-14);
+    tip.style.left=nx+'px'; tip.style.top=ny+'px';
+  }
+  document.addEventListener('mouseover',e=>{
+    const el=e.target.closest('[title],[data-tip]');
+    if(!el){ if(cur){tip.style.display='none';cur=null;} return; }
+    if(el.hasAttribute('title')){ el.setAttribute('data-tip',el.getAttribute('title')); el.removeAttribute('title'); }
+    const txt=el.getAttribute('data-tip'); if(!txt){return;}
+    cur=el; tip.textContent=txt; tip.style.display='block'; place(e.clientX,e.clientY);
+  });
+  document.addEventListener('mousemove',e=>{ if(cur) place(e.clientX,e.clientY); });
+  document.addEventListener('mouseout',e=>{
+    if(cur && (!e.relatedTarget || !cur.contains(e.relatedTarget))){ tip.style.display='none'; cur=null; }
+  });
+  window.addEventListener('scroll',()=>{ if(cur){tip.style.display='none';cur=null;} }, true);
+})();
 </script>
 </body>
 </html>
