@@ -57,12 +57,12 @@ th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:
       <h1>Swing Backtest Lab</h1>
       <div class="muted" style="font-size:12px;">swing2 (8-katman) + qswing (Qullamaggie kırılım) · veri ve trade mantığı motordan birebir</div>
     </div>
-    <div class="muted" style="font-size:12px;text-align:right;">Portföy takipten ayrı.<br><a href="/portfolio-tracker.html">← Portföy</a></div>
+    <div class="muted" style="font-size:12px;text-align:right;">Portföy takipten ayrı.<br><a href="/portfolio-tracker.html" title="Portföy takip uygulamasına dön (ayrı sayfa/port).">← Portföy</a></div>
   </div>
 
   <div class="tabs">
-    <div class="tab active" id="tab-bt" onclick="showTab('bt')">📊 Backtest</div>
-    <div class="tab" id="tab-qs" onclick="showTab('qs')">🔎 qswing Tarama / Rapor</div>
+    <div class="tab active" id="tab-bt" onclick="showTab('bt')" title="Geçmiş veriyle strateji simülasyonu: giriş/çıkış seç, koştur, getiri/DD/işlemleri gör.">📊 Backtest</div>
+    <div class="tab" id="tab-qs" onclick="showTab('qs')" title="Anlık qswing analizi: tek hisse raporu veya bir evreni tarayıp net duruş (AL/İZLE/KAÇIN) listesi.">🔎 qswing Tarama / Rapor</div>
   </div>
 
   <!-- ===================== BACKTEST ===================== -->
@@ -77,20 +77,20 @@ th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:
             <option value="nasdaq100">NASDAQ-100 (~86)</option>
             <option value="sp500">Mega+Large (~350)</option>
           </select></label>
-        <label class="fld"><span class="kicker">Özel semboller (ops.)</span>
+        <label class="fld" title="Virgülle ayrılmış özel sembol listesi. Doluysa preset'i yok sayar (en çok 120 sembol)."><span class="kicker">Özel semboller (ops.)</span>
           <input type="text" id="symbols" placeholder="AAPL,MSFT,... (preset'i ezer)"></label>
-        <label class="fld"><span class="kicker">Dönem</span>
+        <label class="fld" title="Geriye dönük test süresi. Aşağıdaki tarih aralığı girilirse bu yok sayılır."><span class="kicker">Dönem</span>
           <select id="period"><option value="2y">2 yıl</option><option value="1y">1 yıl</option><option value="5y">5 yıl</option><option value="10y">10 yıl</option></select></label>
-        <label class="fld"><span class="kicker">Başlangıç (ops.)</span><input type="date" id="start"></label>
-        <label class="fld"><span class="kicker">Bitiş (ops.)</span><input type="date" id="end"></label>
+        <label class="fld" title="El ile test aralığı başlangıcı. İkisi de doluysa 'Dönem'i ezer; öncesinden ~420 takvim günü ısınma (SMA200 vb.) indirilir."><span class="kicker">Başlangıç (ops.)</span><input type="date" id="start"></label>
+        <label class="fld" title="El ile test aralığı bitişi. İkisi de doluysa 'Dönem'i ezer."><span class="kicker">Bitiş (ops.)</span><input type="date" id="end"></label>
       </div>
       <div class="grid" style="margin-top:12px;">
-        <label class="fld"><span class="kicker">Giriş Stratejisi</span>
+        <label class="fld" title="Giriş sinyali motoru. swing2 = 8-katman skor (24p) + kill-switch. qswing = Qullamaggie kırılım (40g tepe + 52H yakınlık + SPY'ı geçen momentum)."><span class="kicker">Giriş Stratejisi</span>
           <select id="entry" onchange="refreshForm()">
             <option value="swing2">swing2 · 8-katman skor</option>
             <option value="qswing">qswing · Qullamaggie kırılım</option>
           </select></label>
-        <label class="fld"><span class="kicker">Çıkış Stratejisi</span>
+        <label class="fld" title="Çıkış/stop motoru. Şampiyon = ATR-trail (kısmi @2R + 2.5×ATR süren stop). MA-trail = 10g SMA altına kapanış. 8-EMA modları = sabit 8-EMA stop + farklı kâr-al (TP)."><span class="kicker">Çıkış Stratejisi</span>
           <select id="exit" onchange="refreshForm()">
             <option value="champion">⭐ Şampiyon (ATR-trail)</option>
             <option value="ma_trail">Qullamaggie · 10g MA trail</option>
@@ -128,7 +128,7 @@ th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:
         <label class="chk" id="fld-confirm" title="MA-trail ve 8-EMA çıkışlarında: günü MA'nın ALTINDA kapatınca çık (gün-içi fitili yok say). Şampiyon çıkışta etkisiz."><input type="checkbox" id="confirm" checked> MA kapanış teyidi</label>
         <label class="chk" id="fld-earnings" title="Bilançosuna <7 gün kalan hisseleri ele. Yalnız swing2 girişinde; yavaşlatır."><input type="checkbox" id="earnings"> Earnings filtresi (yavaş)</label>
         <label class="chk" title="Parametre grid-search (swing2 skor/risk/çıkış kombinasyonları). qswing girişinde skor dimi etkisizdir."><input type="checkbox" id="grid"> Grid-search</label>
-        <button class="btn" id="run" onclick="runBacktest()">Backtest Çalıştır</button>
+        <button class="btn" id="run" onclick="runBacktest()" title="Seçili tek giriş+çıkış kombinasyonunu koştur. Sonuç: metrikler + equity grafiği + çıkış dağılımı + aylık tablo + işlemler.">Backtest Çalıştır</button>
       </div>
       <div class="hint" id="hint"></div>
 
@@ -143,12 +143,12 @@ th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:
           <div>
             <div class="kicker" style="margin-bottom:4px;">Çıkışlar</div>
             <div class="row" style="gap:10px;">
-              <label class="chk"><input type="checkbox" class="cmp-exit" value="champion" checked> Şampiyon</label>
-              <label class="chk"><input type="checkbox" class="cmp-exit" value="ma_trail" checked> MA-trail 10g</label>
-              <label class="chk"><input type="checkbox" class="cmp-exit" value="rr_based"> RR</label>
-              <label class="chk"><input type="checkbox" class="cmp-exit" value="momentum"> RSI</label>
-              <label class="chk"><input type="checkbox" class="cmp-exit" value="atr_climax"> Climax</label>
-              <label class="chk"><input type="checkbox" class="cmp-exit" value="hybrid"> Hibrit</label>
+              <label class="chk" title="ATR-trail şampiyon çıkış"><input type="checkbox" class="cmp-exit" value="champion" checked> Şampiyon</label>
+              <label class="chk" title="Qullamaggie 10-gün MA trail çıkış"><input type="checkbox" class="cmp-exit" value="ma_trail" checked> MA-trail 10g</label>
+              <label class="chk" title="8-EMA stop + R hedef (varsayılan alt-parametrelerle)"><input type="checkbox" class="cmp-exit" value="rr_based"> RR</label>
+              <label class="chk" title="8-EMA stop + RSI/Stoch aşırı-alımda kâr-al"><input type="checkbox" class="cmp-exit" value="momentum"> RSI</label>
+              <label class="chk" title="8-EMA stop + ATR climax kâr-al"><input type="checkbox" class="cmp-exit" value="atr_climax"> Climax</label>
+              <label class="chk" title="8-EMA stop + 21-EMA hibrit gövde takibi"><input type="checkbox" class="cmp-exit" value="hybrid"> Hibrit</label>
             </div>
           </div>
           <button class="btn alt" id="cmp-run" onclick="compareBacktest()" title="Seçili tüm giriş×çıkış kombinasyonlarını aynı evren/dönemde koşturup yan yana göster">Karşılaştır</button>
@@ -158,43 +158,43 @@ th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:
     </div>
 
     <div id="cmp-results" class="hide">
-      <div class="card"><div class="kicker" style="margin-bottom:8px;">Karşılaştırma sonuçları (ROI'ye göre)</div><div class="scroll"><table id="cmp-table"></table></div></div>
-      <div class="card"><div class="kicker" style="margin-bottom:8px;">Equity eğrileri</div><div style="position:relative;height:360px;width:100%;"><canvas id="cmpchart"></canvas></div></div>
+      <div class="card" title="Her satır bir giriş×çıkış kombinasyonu; ROI'ye göre sıralı, en iyi satır yeşil vurgulu."><div class="kicker" style="margin-bottom:8px;">Karşılaştırma sonuçları (ROI'ye göre)</div><div class="scroll"><table id="cmp-table"></table></div></div>
+      <div class="card" title="Her kombinasyonun sermaye eğrisi üst üste (gri kesik = SPY). Aynı evren/dönem → eğriler hizalı."><div class="kicker" style="margin-bottom:8px;">Equity eğrileri</div><div style="position:relative;height:360px;width:100%;"><canvas id="cmpchart"></canvas></div></div>
     </div>
 
     <div id="bt-results" class="hide">
-      <div class="card">
-        <div class="muted" id="bt-cfgline" style="font-size:12px;margin-bottom:10px;"></div>
+      <div class="card" title="Koşulan yapılandırmanın özeti + ana metrikler.">
+        <div class="muted" id="bt-cfgline" style="font-size:12px;margin-bottom:10px;" title="Evren · tarih · giriş · çıkış · boyutlandırma özeti"></div>
         <div class="mcards" id="bt-metrics"></div>
       </div>
-      <div class="card"><div style="position:relative;height:320px;width:100%;"><canvas id="eqchart"></canvas></div></div>
-      <div class="card"><div class="kicker" style="margin-bottom:8px;">Çıkış dağılımı</div><div id="bt-outcomes" class="mono"></div></div>
-      <div class="card" id="bt-grid-wrap" style="display:none;"><div class="kicker" style="margin-bottom:8px;">Grid-Search (ROI'ye göre)</div><div class="scroll"><table id="bt-grid"></table></div></div>
-      <div class="card"><div class="kicker" style="margin-bottom:8px;">Aylık getiri (%)</div><div class="scroll"><table id="bt-monthly"></table></div></div>
-      <div class="card"><div class="kicker" style="margin-bottom:8px;">İşlemler (<span id="bt-trade-n">0</span>)</div><div class="scroll"><table id="bt-trades"></table></div></div>
+      <div class="card" title="Strateji sermaye eğrisi (yeşil) vs SPY (mavi kesik), zaman içinde."><div style="position:relative;height:320px;width:100%;"><canvas id="eqchart"></canvas></div></div>
+      <div class="card" title="İşlemlerin nasıl kapandığının dağılımı: TP=hedef, Kısmi=kısmi kâr, Trail=süren stop, Stop=ilk stop, MA8=MA altı kapanış, Gün-sonu."><div class="kicker" style="margin-bottom:8px;">Çıkış dağılımı</div><div id="bt-outcomes" class="mono"></div></div>
+      <div class="card" id="bt-grid-wrap" style="display:none;" title="Grid-search açıkken: taranan parametre kombinasyonları, ROI'ye göre."><div class="kicker" style="margin-bottom:8px;">Grid-Search (ROI'ye göre)</div><div class="scroll"><table id="bt-grid"></table></div></div>
+      <div class="card" title="Yıl × ay getiri ısı tablosu; sağda yıllık toplam."><div class="kicker" style="margin-bottom:8px;">Aylık getiri (%)</div><div class="scroll"><table id="bt-monthly"></table></div></div>
+      <div class="card" title="Kapanan tüm işlemler: giriş/çıkış tarihi ve fiyatı, P&L, % ve sonuç etiketi."><div class="kicker" style="margin-bottom:8px;">İşlemler (<span id="bt-trade-n">0</span>)</div><div class="scroll"><table id="bt-trades"></table></div></div>
     </div>
   </div>
 
   <!-- ===================== QSWING ===================== -->
   <div id="panel-qs" class="hide">
-    <div class="card">
+    <div class="card" title="Tek bir hissenin ANLIK qswing analizi: Aşama 2 skoru + 5-kapı pre-flight çeklist + net duruş (AL/İZLE/KAÇIN). Backtest değil; bugünkü durum.">
       <div class="kicker" style="margin-bottom:8px;">Tek hisse — anlık qswing raporu (yeni sekme)</div>
       <div class="row">
-        <input type="text" id="qs-ticker" placeholder="NNE" style="max-width:200px;" onkeydown="if(event.key==='Enter')qsReport()">
-        <button class="btn alt" onclick="qsReport()">Rapor Aç ↗</button>
+        <input type="text" id="qs-ticker" placeholder="NNE" style="max-width:200px;" onkeydown="if(event.key==='Enter')qsReport()" title="Hisse sembolü gir (örn. NNE) → Enter veya 'Rapor Aç'. Türkçe HTML rapor yeni sekmede açılır.">
+        <button class="btn alt" onclick="qsReport()" title="Girilen sembol için anlık qswing raporunu yeni sekmede aç.">Rapor Aç ↗</button>
       </div>
     </div>
-    <div class="card">
+    <div class="card" title="Bir evreni baştan sona qswing'den geçirir; net duruşa göre sıralı liste üretir (her satır tek-hisse raporuna linkli).">
       <div class="kicker" style="margin-bottom:8px;">Küme tarama — net duruşa sıralı liste (yeni sekme)</div>
       <div class="row">
-        <select id="qs-universe" style="max-width:260px;">
+        <select id="qs-universe" style="max-width:260px;" title="Taranacak evren. 'Özel liste' seçersen yanına virgülle semboller yaz.">
           <option value="swing2">Swing 2.0 Evreni (~95)</option>
           <option value="swing2_mega">Mega Cap (20)</option>
           <option value="swing2_tech">Teknoloji (18)</option>
           <option value="custom">Özel liste…</option>
         </select>
-        <input type="text" id="qs-custom" placeholder="AAPL,MSFT,NVDA" class="hide" style="max-width:300px;">
-        <button class="btn alt" onclick="qsScan()">Tara ↗</button>
+        <input type="text" id="qs-custom" placeholder="AAPL,MSFT,NVDA" class="hide" style="max-width:300px;" title="Virgülle ayrılmış özel sembol listesi (en çok 200).">
+        <button class="btn alt" onclick="qsScan()" title="Seçili evreni qswing ile tara → net duruşa sıralı liste yeni sekmede.">Tara ↗</button>
       </div>
       <div class="hint">qswing taraması FMP'den canlı veri çeker; her satır tek-hisse raporuna linkli.</div>
     </div>
@@ -295,11 +295,15 @@ function renderBacktest(d){
      + ` · ${c.sizing_mode==='risk'?('risk %'+c.risk_per_trade_pct+'/işlem'):('sabit %'+Math.round((c.max_position_pct||0.2)*100)+'/poz')}`;
   const cls=x=>x>=0?'pos':'neg';
   $('bt-metrics').innerHTML = [
-    ['ROI', Fp(m.roi), cls(m.roi)], ['SPY ROI', Fp(m.spy_roi), cls(m.spy_roi)],
-    ['Alpha', Fp(m.alpha), cls(m.alpha)], ['Max DD', Fp(m.max_dd), 'neg'],
-    ['Win', (m.win_rate==null?'—':m.win_rate+'%'), ''], ['Profit Factor', F(m.profit_factor), cls((m.profit_factor||0)-1)],
-    ['İşlem', m.trades, ''], ['Son $', '$'+F(m.final,0), cls(m.final-m.initial)],
-  ].map(([l,v,k])=>`<div class="mc"><div class="v ${k}">${v}</div><div class="l">${l}</div></div>`).join('');
+    ['ROI', Fp(m.roi), cls(m.roi), 'Toplam getiri: dönem sonu sermaye / başlangıç − 1.'],
+    ['SPY ROI', Fp(m.spy_roi), cls(m.spy_roi), 'Aynı dönemde SPY (S&P 500 ETF) getirisi — kıyas.'],
+    ['Alpha', Fp(m.alpha), cls(m.alpha), 'ROI − SPY ROI: piyasayı ne kadar geçtin (+ iyi).'],
+    ['Max DD', Fp(m.max_dd), 'neg', 'En büyük tepe→dip sermaye düşüşü (risk göstergesi).'],
+    ['Win', (m.win_rate==null?'—':m.win_rate+'%'), '', 'Kazanan işlem oranı (%). Momentumda ~%50 normaldir.'],
+    ['Profit Factor', F(m.profit_factor), cls((m.profit_factor||0)-1), 'Toplam kâr / toplam zarar. >1 kârlı, >1.5 iyi.'],
+    ['İşlem', m.trades, '', 'Kapanan toplam işlem sayısı (kısmi satışlar dahil).'],
+    ['Son $', '$'+F(m.final,0), cls(m.final-m.initial), 'Dönem sonu sermaye (başlangıç $100.000).'],
+  ].map(([l,v,k,t])=>`<div class="mc" title="${t}"><div class="v ${k}">${v}</div><div class="l">${l}</div></div>`).join('');
 
   // equity chart
   const labels=d.equity.map(e=>e.date), eq=d.equity.map(e=>e.equity), sp=d.equity.map(e=>e.spy);
@@ -312,9 +316,11 @@ function renderBacktest(d){
       scales:{x:{ticks:{color:'#8a95ad',maxTicksLimit:8,maxRotation:0,autoSkip:true},grid:{color:'#1c2531'}},
               y:{ticks:{color:'#8a95ad'},grid:{color:'#1c2531'}}}}});
 
+  const OTIP={tp:'Nihai hedefe (TP) ulaşıp kapandı',partial:'Kısmi kâr alındı (örn. %50 @ +2R)',trail:'Süren (trailing) stop ile çıktı',stop:'İlk stop tetiklendi (zarar kesildi)',eod:'Test sonunda hâlâ açıktı; gün-sonu kapatıldı'};
   $('bt-outcomes').innerHTML = ['tp','partial','trail','stop','eod'].map(k=>{
     const lbl={tp:'TP',partial:'Kısmi',trail:'Trail',stop:'Stop',eod:'Gün-sonu'}[k];
-    return `<span class="pill b" style="margin-right:8px;">${lbl}: ${m[k]??0}</span>`;}).join('') + ` · Tepe $${F(m.peak,0)}`;
+    return `<span class="pill b" title="${OTIP[k]}" style="margin-right:8px;">${lbl}: ${m[k]??0}</span>`;}).join('')
+    + ` · <span title="Sermayenin gördüğü en yüksek değer">Tepe $${F(m.peak,0)}</span>`;
 
   // grid
   const gw=$('bt-grid-wrap');
@@ -326,12 +332,12 @@ function renderBacktest(d){
 
   // monthly
   const mn=d.monthly||[]; const MO=['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
-  $('bt-monthly').innerHTML = '<thead><tr><th>Yıl</th>'+MO.map(x=>`<th>${x}</th>`).join('')+'<th>Yıl%</th></tr></thead><tbody>'+
+  $('bt-monthly').innerHTML = '<thead><tr><th title="Takvim yılı">Yıl</th>'+MO.map(x=>`<th title="${x} ayı getirisi (%)">${x}</th>`).join('')+'<th title="Yılın toplam getirisi (%)">Yıl%</th></tr></thead><tbody>'+
     mn.map(r=>'<tr><td>'+r.year+'</td>'+r.months.map(v=>`<td class="${v>=0?'pos':'neg'}">${v==null?'':F(v,1)}</td>`).join('')+`<td class="${r.year_pct>=0?'pos':'neg'}"><b>${Fp(r.year_pct)}</b></td></tr>`).join('')+'</tbody>';
 
   // trades
   const tr=d.trades||[]; $('bt-trade-n').textContent=tr.length;
-  $('bt-trades').innerHTML='<thead><tr><th>Sembol</th><th>Giriş t.</th><th>Çıkış t.</th><th>Giriş</th><th>Çıkış</th><th>P&L</th><th>%</th><th>Sonuç</th></tr></thead><tbody>'+
+  $('bt-trades').innerHTML='<thead><tr><th title="Hisse sembolü">Sembol</th><th title="Pozisyon açılış tarihi">Giriş t.</th><th title="Pozisyon kapanış tarihi">Çıkış t.</th><th title="Giriş dolum fiyatı (+8bps slippage dahil)">Giriş</th><th title="Çıkış dolum fiyatı">Çıkış</th><th title="Kâr/zarar ($, komisyon+slippage dahil)">P&L</th><th title="İşlem getirisi (%)">%</th><th title="Kapanış nedeni: TP/PARTIAL/MA8/STOP/TRAIL/EMA21">Sonuç</th></tr></thead><tbody>'+
     tr.map(t=>`<tr><td>${t.symbol}</td><td>${t.entry_date}</td><td>${t.exit_date}</td><td>${F(t.entry)}</td><td>${F(t.exit)}</td><td class="${t.pnl>=0?'pos':'neg'}">${F(t.pnl,0)}</td><td class="${t.pnl_pct>=0?'pos':'neg'}">${Fp(t.pnl_pct)}</td><td><span class="pill ${t.pnl>=0?'g':'r'}">${t.outcome}</span></td></tr>`).join('')+'</tbody>';
   $('bt-results').scrollIntoView({behavior:'smooth',block:'nearest'});
 }
@@ -368,7 +374,7 @@ function renderCompare(out){
   $('bt-results').classList.add('hide'); $('cmp-results').classList.remove('hide');
   out.sort((a,b)=>(b.m.roi==null?-1e9:b.m.roi)-(a.m.roi==null?-1e9:a.m.roi));
   const best=out[0];
-  $('cmp-table').innerHTML='<thead><tr><th>Giriş</th><th>Çıkış</th><th>ROI</th><th>SPY</th><th>Alpha</th><th>MaxDD</th><th>Win</th><th>PF</th><th>İşlem</th></tr></thead><tbody>'+
+  $('cmp-table').innerHTML='<thead><tr><th title="Giriş yöntemi">Giriş</th><th title="Çıkış yöntemi">Çıkış</th><th title="Toplam getiri">ROI</th><th title="SPY getirisi (kıyas)">SPY</th><th title="ROI − SPY">Alpha</th><th title="En büyük düşüş">MaxDD</th><th title="Kazanma oranı">Win</th><th title="Profit Factor (kâr/zarar)">PF</th><th title="İşlem sayısı">İşlem</th></tr></thead><tbody>'+
     out.map(r=>{const m=r.m;const hl=(r===best)?' style="background:rgba(39,194,129,.10)"':'';
       return `<tr${hl}><td><b>${r.en}</b></td><td>${EXLBL[r.ex]}</td>`+
       `<td class="${m.roi>=0?'pos':'neg'}"><b>${Fp(m.roi)}</b></td><td class="${m.spy_roi>=0?'pos':'neg'}">${Fp(m.spy_roi)}</td>`+
