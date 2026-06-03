@@ -132,7 +132,7 @@ th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:
         <div class="muted" id="bt-cfgline" style="font-size:12px;margin-bottom:10px;"></div>
         <div class="mcards" id="bt-metrics"></div>
       </div>
-      <div class="card"><canvas id="eqchart" height="110"></canvas></div>
+      <div class="card"><div style="position:relative;height:320px;width:100%;"><canvas id="eqchart"></canvas></div></div>
       <div class="card"><div class="kicker" style="margin-bottom:8px;">Çıkış dağılımı</div><div id="bt-outcomes" class="mono"></div></div>
       <div class="card" id="bt-grid-wrap" style="display:none;"><div class="kicker" style="margin-bottom:8px;">Grid-Search (ROI'ye göre)</div><div class="scroll"><table id="bt-grid"></table></div></div>
       <div class="card"><div class="kicker" style="margin-bottom:8px;">Aylık getiri (%)</div><div class="scroll"><table id="bt-monthly"></table></div></div>
@@ -256,9 +256,12 @@ function renderBacktest(d){
   const labels=d.equity.map(e=>e.date), eq=d.equity.map(e=>e.equity), sp=d.equity.map(e=>e.spy);
   if(eqChart) eqChart.destroy();
   eqChart=new Chart($('eqchart'),{type:'line',data:{labels,datasets:[
-    {label:'Strateji',data:eq,borderColor:'#27c281',borderWidth:1.6,pointRadius:0,tension:.1},
-    {label:'SPY',data:sp,borderColor:'#5aa2ff',borderWidth:1.2,pointRadius:0,tension:.1,borderDash:[4,3]}]},
-    options:{responsive:true,plugins:{legend:{labels:{color:'#8a95ad'}}},scales:{x:{ticks:{color:'#8a95ad',maxTicksLimit:8},grid:{color:'#1c2531'}},y:{ticks:{color:'#8a95ad'},grid:{color:'#1c2531'}}}}});
+    {label:'Strateji',data:eq,borderColor:'#27c281',borderWidth:1.6,pointRadius:0,tension:.1,spanGaps:true},
+    {label:'SPY',data:sp,borderColor:'#5aa2ff',borderWidth:1.2,pointRadius:0,tension:.1,borderDash:[4,3],spanGaps:true}]},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{intersect:false,mode:'index'},
+      plugins:{legend:{labels:{color:'#8a95ad'}}},
+      scales:{x:{ticks:{color:'#8a95ad',maxTicksLimit:8,maxRotation:0,autoSkip:true},grid:{color:'#1c2531'}},
+              y:{ticks:{color:'#8a95ad'},grid:{color:'#1c2531'}}}}});
 
   $('bt-outcomes').innerHTML = ['tp','partial','trail','stop','eod'].map(k=>{
     const lbl={tp:'TP',partial:'Kısmi',trail:'Trail',stop:'Stop',eod:'Gün-sonu'}[k];
