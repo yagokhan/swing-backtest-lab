@@ -84,12 +84,12 @@ th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:
       </div>
       <div class="grid" style="margin-top:12px;">
         <label class="fld"><span class="kicker">Giriş Stratejisi</span>
-          <select id="entry" onchange="entryChange()">
+          <select id="entry" onchange="refreshForm()">
             <option value="swing2">swing2 · 8-katman skor</option>
             <option value="qswing">qswing · Qullamaggie kırılım</option>
           </select></label>
         <label class="fld"><span class="kicker">Çıkış Stratejisi</span>
-          <select id="exit" onchange="exitChange()">
+          <select id="exit" onchange="refreshForm()">
             <option value="champion">⭐ Şampiyon (ATR-trail)</option>
             <option value="ma_trail">Qullamaggie · 10g MA trail</option>
             <option value="rr_based">8-EMA stop · RR hedef</option>
@@ -97,31 +97,31 @@ th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:
             <option value="atr_climax">8-EMA stop · ATR climax</option>
             <option value="hybrid">8-EMA stop · 21-EMA hibrit</option>
           </select></label>
-        <label class="fld" id="fld-min_score"><span class="kicker">Min skor (swing2)</span><input type="number" id="min_score" value="16" min="0" max="24"></label>
-        <label class="fld"><span class="kicker">R/R hedef</span><input type="number" id="rr_target" value="2.0" step="0.5" min="1" max="6"></label>
-        <label class="fld"><span class="kicker">ATR stop ×</span><input type="number" id="atr_stop" value="1.5" step="0.5" min="0.5" max="5"></label>
-        <label class="fld"><span class="kicker">Maks pozisyon</span><input type="number" id="max_pos" value="5" min="1" max="20"></label>
+        <label class="fld" id="fld-min_score" title="8-katman skor eşiği (0–24). Yalnız swing2 girişinde kullanılır; qswing kırılımı skor kullanmaz."><span class="kicker">Min skor (swing2)</span><input type="number" id="min_score" value="16" min="0" max="24"></label>
+        <label class="fld" id="fld-rr_target" title="İlk/nihai hedef = giriş + (giriş−stop) × bu (R cinsinden). Yalnız Şampiyon (ATR-trail) çıkışında devreye girer."><span class="kicker">R/R hedef</span><input type="number" id="rr_target" value="2.0" step="0.5" min="1" max="6"></label>
+        <label class="fld" id="fld-atr_stop" title="Stop tabanı = kapanış − bu × ATR(14). Şampiyon ve MA-trail çıkışında geçerli. 8-EMA modlarında stop daima 8-EMA'dır → kullanılmaz."><span class="kicker">ATR stop ×</span><input type="number" id="atr_stop" value="1.5" step="0.5" min="0.5" max="5"></label>
+        <label class="fld" title="Aynı anda taşınacak en fazla açık pozisyon sayısı."><span class="kicker">Maks pozisyon</span><input type="number" id="max_pos" value="5" min="1" max="20"></label>
       </div>
       <!-- çıkış alt-parametreleri -->
       <div class="row exsub ex-ma_trail hide" style="margin-top:12px;">
-        <label class="fld"><span class="kicker">MA periyodu</span><input type="number" id="ma_trail_len" value="10" min="3" max="50"></label>
+        <label class="fld" title="Süren çıkış için hareketli ortalama periyodu. Qullamaggie standardı 10 gün: fiyat bu SMA'nın altına KAPANINCA çıkılır."><span class="kicker">MA periyodu</span><input type="number" id="ma_trail_len" value="10" min="3" max="50"></label>
       </div>
       <div class="row exsub ex-rr_based hide" style="margin-top:12px;">
-        <label class="fld"><span class="kicker">Kısmi %</span><input type="number" id="partial_pct" value="0.3" step="0.1" min="0.1" max="1"></label>
-        <label class="fld"><span class="kicker">Kısmi tetik R</span><input type="number" id="partial_rr" value="1.5" step="0.5"></label>
-        <label class="fld"><span class="kicker">RR hedef</span><input type="number" id="rr_tp" value="3.0" step="0.5"></label>
+        <label class="fld" title="Kısmi kârda satılacak pozisyon oranı (0.3 = %30)."><span class="kicker">Kısmi %</span><input type="number" id="partial_pct" value="0.3" step="0.1" min="0.1" max="1"></label>
+        <label class="fld" title="Kısmi kâr tetiği: giriş + risk × bu (R cinsinden) seviyesinde kısmi sat."><span class="kicker">Kısmi tetik R</span><input type="number" id="partial_rr" value="1.5" step="0.5"></label>
+        <label class="fld" title="Kalan pozisyonun nihai hedefi (R cinsinden)."><span class="kicker">RR hedef</span><input type="number" id="rr_tp" value="3.0" step="0.5"></label>
       </div>
       <div class="row exsub ex-momentum hide" style="margin-top:12px;">
-        <label class="fld"><span class="kicker">RSI aşırı-alım</span><input type="number" id="rsi_ob" value="70" min="50" max="95"></label>
+        <label class="fld" title="RSI(14) bu eşiği aşarsa (aşırı-alım) pozisyon kârla kapatılır."><span class="kicker">RSI aşırı-alım</span><input type="number" id="rsi_ob" value="70" min="50" max="95"></label>
       </div>
       <div class="row exsub ex-atr_climax hide" style="margin-top:12px;">
-        <label class="fld"><span class="kicker">Climax ATR ×</span><input type="number" id="climax" value="2.0" step="0.5"></label>
+        <label class="fld" title="Fiyat 8-EMA'dan bu × ATR kadar yukarı saparsa (climax/parabolik) kâr al."><span class="kicker">Climax ATR ×</span><input type="number" id="climax" value="2.0" step="0.5"></label>
       </div>
       <div class="row" style="margin-top:14px;align-items:center;">
-        <label class="chk"><input type="checkbox" id="compound" checked> Bileşik</label>
-        <label class="chk"><input type="checkbox" id="confirm" checked> MA kapanış teyidi (8-EMA modları)</label>
-        <label class="chk" id="fld-earnings"><input type="checkbox" id="earnings"> Earnings filtresi (yavaş)</label>
-        <label class="chk"><input type="checkbox" id="grid"> Grid-search</label>
+        <label class="chk" title="Kâr/zararı sermayeye ekleyerek pozisyon büyüt (bileşik). Kapalıysa sabit sermaye."><input type="checkbox" id="compound" checked> Bileşik</label>
+        <label class="chk" id="fld-confirm" title="MA-trail ve 8-EMA çıkışlarında: günü MA'nın ALTINDA kapatınca çık (gün-içi fitili yok say). Şampiyon çıkışta etkisiz."><input type="checkbox" id="confirm" checked> MA kapanış teyidi</label>
+        <label class="chk" id="fld-earnings" title="Bilançosuna <7 gün kalan hisseleri ele. Yalnız swing2 girişinde; yavaşlatır."><input type="checkbox" id="earnings"> Earnings filtresi (yavaş)</label>
+        <label class="chk" title="Parametre grid-search (swing2 skor/risk/çıkış kombinasyonları). qswing girişinde skor dimi etkisizdir."><input type="checkbox" id="grid"> Grid-search</label>
         <button class="btn" id="run" onclick="runBacktest()">Backtest Çalıştır</button>
       </div>
       <div class="hint" id="hint"></div>
@@ -186,22 +186,22 @@ const HINTS = {
   atr_climax:'Stop = 8-EMA. Fiyat 8-EMA\'dan aşırı saparsa (climax) kâr al.',
   hybrid:'Stop = 8-EMA. İlk %50 8-EMA\'da, kalan %50 21-EMA gövde takibi.'
 };
-function exitChange(){
-  const es = $('exit').value;
-  document.querySelectorAll('.exsub').forEach(el=>el.classList.toggle('hide', !el.classList.contains('ex-'+es)));
-  syncHints();
-}
-function syncHints(){
-  const em = $('entry').value==='qswing' ? 'qswing kırılım girişi (40g tepe · 52H yakın · SPY\'ı geçen momentum). ' : '';
-  $('hint').textContent = em + (HINTS[$('exit').value]||'');
-}
-function entryChange(){
-  // qswing kırılımında 8-katman'a özgü parametreler kullanılmaz → gizle (kafa karışıklığını önle)
-  const q = $('entry').value==='qswing';
-  $('fld-min_score').style.display = q ? 'none' : '';
-  $('fld-earnings').style.display  = q ? 'none' : '';
-  if(q) $('earnings').checked = false;   // qswing girişi earnings'i kontrol etmez → boşa yavaş çekim olmasın
-  syncHints();
+function show(id,on){ const el=$(id); if(el) el.style.display = on ? '' : 'none'; }
+function refreshForm(){
+  const entry=$('entry').value, exit=$('exit').value, q=entry==='qswing';
+  // çıkış alt-parametreleri (yalnız ilgili çıkış modunda)
+  document.querySelectorAll('.exsub').forEach(el=>el.classList.toggle('hide', !el.classList.contains('ex-'+exit)));
+  // GİRİŞ'e özgü — yalnız swing2 (8-katman)
+  show('fld-min_score', !q);
+  show('fld-earnings',  !q);
+  if(q) $('earnings').checked = false;   // qswing earnings'i kontrol etmez → boşa yavaş çekim olmasın
+  // ÇIKIŞ'a göre — plan stop/hedef yalnız ilgili modlarda kullanılır
+  show('fld-atr_stop',  exit==='champion' || exit==='ma_trail');  // 8-EMA modlarında stop 8-EMA
+  show('fld-rr_target', exit==='champion');                       // nihai R hedefi yalnız şampiyon
+  show('fld-confirm',   exit!=='champion');                       // MA kapanış teyidi şampiyonda etkisiz
+  // ipucu
+  const em = q ? 'qswing kırılım girişi (40g tepe · 52H yakın · SPY\'ı geçen momentum). ' : '';
+  $('hint').textContent = em + (HINTS[exit]||'');
 }
 
 function buildPayload(){
@@ -302,8 +302,7 @@ function qsScan(){
   if(u==='custom'){ const s=($('qs-custom').value||'').trim(); if(!s){$('qs-custom').focus();return;} window.open('/api/qswing/scan?tickers='+encodeURIComponent(s.split(/[ ,]+/).filter(Boolean).join(',')),'_blank'); }
   else window.open('/api/qswing/scan?preset='+u,'_blank');
 }
-exitChange();
-entryChange();
+refreshForm();
 if(location.hash==='#qs') showTab('qs');
 </script>
 </body>
