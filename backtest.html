@@ -70,10 +70,12 @@ th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:
     <div class="card">
       <div class="grid">
         <label class="fld"><span class="kicker">Evren (preset)</span>
-          <select id="preset">
+          <select id="preset" title="qswing girişi tüm evrenlerde temiz çalışır. swing2 girişinde sp500/nasdaq100'ün sektör-haritası olmayan isimleri 4. katman puanını kaybeder.">
             <option value="default">Geniş (~95)</option>
             <option value="mega">Mega Cap (20)</option>
             <option value="tech">Teknoloji (18)</option>
+            <option value="nasdaq100">NASDAQ-100 (~86)</option>
+            <option value="sp500">Mega+Large (~350)</option>
           </select></label>
         <label class="fld"><span class="kicker">Özel semboller (ops.)</span>
           <input type="text" id="symbols" placeholder="AAPL,MSFT,... (preset'i ezer)"></label>
