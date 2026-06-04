@@ -1273,6 +1273,16 @@ class Swing2Backtester:
                                  outcome, pos.score, SECTOR_MAP.get(sym, "—")))
 
     # ---- v6: BÖLÜNMÜŞ ÇIKIŞ yardımcıları ----
+    def _build_split_legs(self, tag, rule, param, shares, cost, fill):
+        """Bir yarı için bacak(lar) üret. 'hybrid' = o yarıyı kendi içinde 8-EMA / 21-EMA
+        runner olarak ikiye böler (HYBRID_TREND mantığı); diğer kurallar tek bacak."""
+        if rule == "hybrid":
+            return [
+                {"tag": tag, "rule": "ema8",  "param": 0, "shares": shares / 2, "cost": cost / 2, "peak": fill},
+                {"tag": tag, "rule": "ema21", "param": 0, "shares": shares - shares / 2, "cost": cost - cost / 2, "peak": fill},
+            ]
+        return [{"tag": tag, "rule": rule, "param": param, "shares": shares, "cost": cost, "peak": fill}]
+
     def _close_leg(self, sym, pos, leg, date, price, label, slip=None):
         """Bir yarı-bacağı kapat: işlem kaydı + nakit + pozisyon toplamından düş.
         İki bacak da bittiğinde pozisyon silinir."""
@@ -1392,12 +1402,9 @@ class Swing2Backtester:
                        shares, size, score, risk0=fill - plan["stop"])
         if cfg.exit_mode == "split":
             ra = cfg.split_ratio
-            sa = shares * ra
-            ca = size * ra
-            pos.legs = [
-                {"tag": "A", "rule": cfg.split_a, "param": cfg.split_a_param, "shares": sa, "cost": ca, "peak": fill},
-                {"tag": "B", "rule": cfg.split_b, "param": cfg.split_b_param, "shares": shares - sa, "cost": size - ca, "peak": fill},
-            ]
+            sa, ca = shares * ra, size * ra
+            pos.legs = (self._build_split_legs("A", cfg.split_a, cfg.split_a_param, sa, ca, fill)
+                        + self._build_split_legs("B", cfg.split_b, cfg.split_b_param, shares - sa, size - ca, fill))
         self.positions[sym] = pos
         return True
 
@@ -1906,7 +1913,7 @@ def run_backtest_api(params: dict) -> dict:
             cfg.ma_confirm_close = True   # ilk %50 daima KAPANIŞ teyitli (iğne elemez)
         elif es == "split":
             cfg.exit_mode = "split"; cfg.partial_tp = False; cfg.trailing_stop = False
-            _RULES = {"ema8", "ema21", "ma10", "ma20", "ma50", "target", "atr_trail"}
+            _RULES = {"ema8", "ema21", "ma10", "ma20", "ma50", "target", "atr_trail", "hybrid"}
             cfg.split_a = str(params.get("split_a", "ema8")).lower()
             cfg.split_b = str(params.get("split_b", "ema21")).lower()
             if cfg.split_a not in _RULES: cfg.split_a = "ema8"
