@@ -1147,6 +1147,29 @@ class Swing2Backtester:
                         self._close(sym, date, _ma_fill(ema21), "EMA21", slip=self._stop_slip)
                     continue
 
+                # ---- D2) HYBRID_TREND2: 8-EMA(KAPANIŞ) %50 + runner BE-kilidi/21-EMA + LOW10 felaket stopu ----
+                # Kurallar (kullanıcı tanımı):
+                #  • İlk %50 SADECE 8-EMA altında KAPANIŞ ile satılır (gün-içi iğne elemez).
+                #  • Felaket stopu (LOW10/ATR plan stopu) gün-içi İĞNEDE (touch) aktif kalır.
+                #  • İlk %50 satılınca kalan runner'ın stopu giriş fiyatına (BREAKEVEN) çekilir;
+                #    runner ya BE'ye değince (gün-içi) ya da 21-EMA altında KAPANINCA çıkar.
+                if cfg.tp_mode == "HYBRID_TREND2":
+                    # 0) Stop (gün-içi touch): partial öncesi=felaket(LOW10), sonrası=breakeven(giriş)
+                    if not pd.isna(pos.stop) and low <= pos.stop:
+                        fill = op if (cfg.gap_fills and not pd.isna(op) and op < pos.stop) else pos.stop
+                        self._close(sym, date, fill, ("BE" if pos.partial_done else "STOP"),
+                                    slip=self._stop_slip); continue
+                    # 1) İlk %50: yalnız 8-EMA altında KAPANIŞ → sat + stopu breakeven'a çek
+                    if not pos.partial_done:
+                        if not pd.isna(ema8) and close < ema8:
+                            self._sell_partial(sym, date, close, 0.5); pos.partial_done = True
+                            pos.stop = max(pos.stop, pos.entry)       # kâr kilidi: runner stop = giriş
+                        continue
+                    # 2) Runner (%50): 21-EMA altında KAPANINCA çık (BE stopu yukarıda kontrol edildi)
+                    if not pd.isna(ema21) and close < ema21:
+                        self._close(sym, date, close, "EMA21", slip=self._stop_slip)
+                    continue
+
                 # ---- Diğer modlar: ÖNCE 8-EMA stop (koruma + süren stop) ----
                 if _ma_break(ema8):
                     self._close(sym, date, _ma_fill(ema8), "EMA8", slip=self._stop_slip); continue
@@ -1798,6 +1821,9 @@ def run_backtest_api(params: dict) -> dict:
             cfg.climax_atr_mult = _clf(params.get("climax_atr_mult", 2.0), 0.5, 6.0, 2.0)
         elif es == "hybrid":
             cfg.tp_mode = "HYBRID_TREND"; cfg.partial_tp = False
+        elif es == "hybrid2":
+            cfg.tp_mode = "HYBRID_TREND2"; cfg.partial_tp = False
+            cfg.ma_confirm_close = True   # ilk %50 daima KAPANIŞ teyitli (iğne elemez)
         else:
             es = "champion"; cfg.exit_mode = "optimized"   # bilinmeyen → şampiyon (B)
             cfg.partial_tp = True; cfg.partial_pct = 0.5; cfg.partial_rr = 2.0
