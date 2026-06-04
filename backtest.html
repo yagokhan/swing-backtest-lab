@@ -130,7 +130,7 @@ th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:
         <div class="muted" style="font-size:12px;margin-bottom:8px;">Pozisyon <b>%50 / %50</b> ikiye bölünür; her yarı kendi kuralıyla çıkar (ortak felaket stopu yok). “+R hedef” ve “ATR-trail” için sağdaki param kullanılır.</div>
         <div class="row">
           <label class="fld" title="A yarısının (%50) çıkış kuralı."><span class="kicker">Çıkış A (%50)</span>
-            <select id="split_a">
+            <select id="split_a" onchange="updateCmpSplitLabel()">
               <option value="ema8">8-EMA kapanış</option>
               <option value="ema21">21-EMA kapanış</option>
               <option value="hybrid">8/21-EMA hibrit (yarısı 8-EMA · yarısı 21-EMA runner)</option>
@@ -142,7 +142,7 @@ th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:
             </select></label>
           <label class="fld" title="Yalnız 'A: +R hedef' (R katı) veya 'A: ATR-trail' (ATR×) seçilince kullanılır. 0 = varsayılan (hedef 2R · trail 2.5×)."><span class="kicker">A param (R / ATR×)</span><input type="number" id="split_a_param" value="0" step="0.5" min="0" max="10"></label>
           <label class="fld" title="B yarısının (%50) çıkış kuralı."><span class="kicker">Çıkış B (%50)</span>
-            <select id="split_b">
+            <select id="split_b" onchange="updateCmpSplitLabel()">
               <option value="ema8">8-EMA kapanış</option>
               <option value="ema21" selected>21-EMA kapanış</option>
               <option value="hybrid">8/21-EMA hibrit (yarısı 8-EMA · yarısı 21-EMA runner)</option>
@@ -182,6 +182,7 @@ th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:
               <label class="chk" title="8-EMA stop + ATR climax kâr-al"><input type="checkbox" class="cmp-exit" value="atr_climax"> Climax</label>
               <label class="chk" title="8-EMA stop + 21-EMA hibrit gövde takibi"><input type="checkbox" class="cmp-exit" value="hybrid"> Hibrit</label>
               <label class="chk" title="Hibrit 2: ilk %50 8-EMA KAPANIŞ altında + LOW10 felaket stop; runner BREAKEVEN kilidi, 21-EMA kapanışta çıkar"><input type="checkbox" class="cmp-exit" value="hybrid2"> Hibrit 2</label>
+              <label class="chk" title="Bölünmüş çıkış — yukarıdaki 'Çıkış A / Çıkış B' seçimini kullanır. Karşılaştırmadan önce ana formda Çıkış=Bölünmüş seçip A/B kurallarını ayarla."><input type="checkbox" class="cmp-exit" value="split"> ✂️ Bölünmüş (<span id="cmp-split-lbl">A/B</span>)</label>
             </div>
           </div>
           <button class="btn alt" id="cmp-run" onclick="compareBacktest()" title="Seçili tüm giriş×çıkış kombinasyonlarını aynı evren/dönemde koşturup yan yana göster">Karşılaştır</button>
@@ -294,9 +295,15 @@ function refreshForm(){
   show('fld-rr_target', exit==='champion');                       // nihai R hedefi yalnız şampiyon
   show('fld-confirm',   exit!=='champion' && exit!=='split');     // split kuralları zaten kapanış-teyitli
   show('fld-risk_pct',  $('sizing').value==='risk');              // risk %'si yalnız risk-bazlı modda
+  updateCmpSplitLabel();
   // ipucu
   const em = q ? 'qswing kırılım girişi (40g tepe · 52H yakın · SPY\'ı geçen momentum). ' : '';
   $('hint').textContent = em + (HINTS[exit]||'');
+}
+// Karşılaştırma menüsündeki "Bölünmüş (A/B)" etiketini ana formdaki seçimle güncel tut
+function updateCmpSplitLabel(){
+  const a=$('split_a'), b=$('split_b'), el=$('cmp-split-lbl');
+  if(a&&b&&el) el.textContent = a.value+'/'+b.value;
 }
 
 function buildPayload(){
@@ -475,6 +482,11 @@ function renderBacktest(d){
   $('cmp-results').classList.add('hide');
   $('bt-results').classList.remove('hide');
   const c=d.config, m=d.metrics;
+  // Bölünmüş çıkış koşulduysa: karşılaştırma menüsünde seçili kalsın (A/B etiketiyle)
+  if(c.exit_strategy==='split'){
+    const cb=document.querySelector('.cmp-exit[value="split"]'); if(cb) cb.checked=true;
+    updateCmpSplitLabel();
+  }
   $('bt-cfgline').textContent = `${c.universe_n} hisse · ${c.start}→${c.end}`+(c.date_range?' (el ile aralık)':' · '+c.period)
      + ` · giriş ${ ($('entry').value) }`+((c.entry_mode==='qswing_breakout'&&c.qswing_min_score>0)?` (skor≥${c.qswing_min_score})`:'')+` · çıkış ${c.exit_strategy}`+(c.tp_mode?'/'+c.tp_mode:'')+(c.split_a?` (A:${c.split_a} · B:${c.split_b})`:'')
      + ` · ${c.sizing_mode==='risk'?('risk %'+c.risk_per_trade_pct+'/işlem'):('sabit %'+Math.round((c.max_position_pct||0.2)*100)+'/poz')}`;
@@ -534,6 +546,7 @@ async function compareBacktest(){
   const combos=[]; entries.forEach(en=>exits.forEach(ex=>combos.push({en,ex})));
   const btn=$('cmp-run'); btn.disabled=true; const old=btn.textContent;
   const base=buildPayload(); base.use_earnings=false; base.run_grid=false;   // aynı evren → tek market cache
+  if($('split_a')&&$('split_b')) EXLBL.split='Böl: '+$('split_a').value+'/'+$('split_b').value;  // etiket A/B'yi yansıtsın
   const out=[];
   for(let i=0;i<combos.length;i++){
     const {en,ex}=combos[i];
@@ -545,6 +558,8 @@ async function compareBacktest(){
     if(ex==='atr_climax'){p.climax_atr_mult=2.0;p.ma_confirm_close=true;}
     if(ex==='hybrid') p.ma_confirm_close=true;
     if(ex==='hybrid2') p.ma_confirm_close=true;
+    if(ex==='split'){ p.split_a=$('split_a').value; p.split_b=$('split_b').value;
+      p.split_a_param=parseFloat($('split_a_param').value)||0; p.split_b_param=parseFloat($('split_b_param').value)||0; }
     try{ const r=await fetch('/api/backtest',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)}); const d=await r.json();
       if(d&&!d.error&&d.metrics) out.push({en,ex,m:d.metrics,eq:d.equity}); }catch(e){}
   }
