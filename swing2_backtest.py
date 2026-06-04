@@ -32,7 +32,7 @@ import warnings
 import pickle
 import hashlib
 import concurrent.futures as _cf
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
@@ -161,6 +161,17 @@ class Config:
     rsi_overbought_limit: float = 70.0 # MOMENTUM_OSCILLATOR: RSI bu seviyede tam TP
     climax_atr_mult: float = 2.0       # ATR_CLIMAX: Close > 8EMA + mult*ATR → aşırı uzama, çık
     hybrid_runner_ma: int = 21         # HYBRID_TREND: gövde yarısının takip ettiği EMA
+
+    # --- v6: BÖLÜNMÜŞ ÇIKIŞ (exit_mode='split') ---
+    # Pozisyon split_ratio / (1-split_ratio) iki yarıya bölünür; her yarı KENDİ atomik
+    # kuralıyla yönetilir (ortak felaket stopu YOK). Atomik kural id'leri:
+    #   'ema8' | 'ema21' | 'ma10' | 'ma20' | 'ma50' (kapanış MA altına inince) ·
+    #   'target' (+param×R sabit hedef, limit) · 'atr_trail' (param×ATR şamdan trail).
+    split_a: str = "ema8"
+    split_b: str = "ema21"
+    split_a_param: float = 0.0         # 'target'→R katı (vars. 2.0) · 'atr_trail'→ATR× (vars. 2.5)
+    split_b_param: float = 0.0
+    split_ratio: float = 0.5           # A yarısının payı (kalan B'ye)
 
     out_dir: str = "swing2_out"
     trades_csv: str = "trades.csv"
@@ -356,6 +367,7 @@ class Position:
     symbol: str; entry_date: pd.Timestamp; entry: float
     stop: float; target: float; shares: float; cost: float; score: int
     risk0: float; partial_done: bool = False
+    legs: list = field(default_factory=list)   # 'split' çıkışta iki yarı-bacak (½/½)
 
 
 @dataclass
@@ -1100,6 +1112,11 @@ class Swing2Backtester:
             op, low, high, close, atr_v = row["Open"], row["Low"], row["High"], row["Close"], row["ATR"]
             if pd.isna(low) or pd.isna(high): continue
 
+            # ===== v6: BÖLÜNMÜŞ ÇIKIŞ (½ + ½, iki bağımsız atomik kural) =====
+            if cfg.exit_mode == "split":
+                self._manage_split(sym, pos, date, row); continue
+            # ===== /v6 =====
+
             # ===== v4: 8-MA TRAILING ÇIKIŞ MODU =====
             if cfg.exit_mode == "ma_trail":
                 ma = row["EMA8" if cfg.ma_trail_type == "ema" else "SMA8"]
@@ -1255,6 +1272,60 @@ class Swing2Backtester:
                                  proceeds - pos.cost, (fill / pos.entry - 1) * 100,
                                  outcome, pos.score, SECTOR_MAP.get(sym, "—")))
 
+    # ---- v6: BÖLÜNMÜŞ ÇIKIŞ yardımcıları ----
+    def _close_leg(self, sym, pos, leg, date, price, label, slip=None):
+        """Bir yarı-bacağı kapat: işlem kaydı + nakit + pozisyon toplamından düş.
+        İki bacak da bittiğinde pozisyon silinir."""
+        cfg = self.cfg
+        fill = price * (1 - (self._slip if slip is None else slip))
+        proceeds = leg["shares"] * fill - cfg.commission_per_trade
+        self.cash += proceeds
+        self.trades.append(Trade(sym, pos.entry_date, date, pos.entry, fill, leg["shares"],
+                                 proceeds - leg["cost"], (fill / pos.entry - 1) * 100,
+                                 f"{leg['tag']}:{label}", pos.score, SECTOR_MAP.get(sym, "—")))
+        pos.shares -= leg["shares"]; pos.cost -= leg["cost"]; leg["shares"] = 0.0
+
+    def _split_leg_exit(self, leg, pos, row):
+        """Atomik kural değerlendir. Tetiklenirse (fill, etiket, market_mi) döndür; yoksa None.
+        Kapanış-teyitli kurallar (ema/ma/atr_trail) close ile çıkar (market); 'target' limittir."""
+        cfg = self.cfg
+        rule = leg["rule"]; p = leg["param"]
+        close, high, op, atr_v = row["Close"], row["High"], row["Open"], row["ATR"]
+        if rule in ("ema8", "ema21", "ma10", "ma20", "ma50"):
+            col = {"ema8": "EMA8", "ema21": "EMA21", "ma10": "SMA10", "ma20": "SMA20", "ma50": "SMA50"}[rule]
+            ma = row.get(col)
+            if ma is not None and not pd.isna(ma) and close < ma:
+                return (close, col.replace("SMA", "MA"), True)         # kapanış altında → market çıkış
+            return None
+        if rule == "target":
+            r = p if p > 0 else 2.0
+            tgt = pos.entry + r * pos.risk0
+            if not pd.isna(high) and high >= tgt:
+                fill = op if (cfg.gap_fills and not pd.isna(op) and op > tgt) else tgt
+                return (fill, f"+{r:g}R", False)                       # limit emir
+            return None
+        if rule == "atr_trail":
+            m = p if p > 0 else 2.5
+            if not pd.isna(high):
+                leg["peak"] = max(leg["peak"], high)                   # şamdan tepe (en yüksek HIGH)
+            if not pd.isna(atr_v) and not pd.isna(close) and close < leg["peak"] - m * atr_v:
+                return (close, f"ATR{m:g}x", True)
+            return None
+        return None
+
+    def _manage_split(self, sym, pos, date, row):
+        """İki yarı-bacağı bağımsız yönet. Ortak felaket stopu YOK — her bacak kendi kuralıyla."""
+        for leg in pos.legs:
+            if leg["shares"] <= 0:
+                continue
+            res = self._split_leg_exit(leg, pos, row)
+            if res is not None:
+                fill, label, market = res
+                self._close_leg(sym, pos, leg, date, fill, label,
+                                slip=(self._stop_slip if market else self._slip))
+        if all(l["shares"] <= 0 for l in pos.legs):
+            self.positions.pop(sym, None)
+
     def _size(self, date):
         eq = self._equity(date) if self.cfg.compounding else self.cfg.initial_capital
         return eq * self.cfg.max_position_pct
@@ -1317,8 +1388,17 @@ class Swing2Backtester:
             shares = (size - cfg.commission_per_trade) / fill
         if self.cash < size or shares <= 0: return False
         self.cash -= size
-        self.positions[sym] = Position(sym, date, fill, plan["stop"], plan["target"],
-                                       shares, size, score, risk0=fill - plan["stop"])
+        pos = Position(sym, date, fill, plan["stop"], plan["target"],
+                       shares, size, score, risk0=fill - plan["stop"])
+        if cfg.exit_mode == "split":
+            ra = cfg.split_ratio
+            sa = shares * ra
+            ca = size * ra
+            pos.legs = [
+                {"tag": "A", "rule": cfg.split_a, "param": cfg.split_a_param, "shares": sa, "cost": ca, "peak": fill},
+                {"tag": "B", "rule": cfg.split_b, "param": cfg.split_b_param, "shares": shares - sa, "cost": size - ca, "peak": fill},
+            ]
+        self.positions[sym] = pos
         return True
 
     def _equity(self, date):
@@ -1824,6 +1904,16 @@ def run_backtest_api(params: dict) -> dict:
         elif es == "hybrid2":
             cfg.tp_mode = "HYBRID_TREND2"; cfg.partial_tp = False
             cfg.ma_confirm_close = True   # ilk %50 daima KAPANIŞ teyitli (iğne elemez)
+        elif es == "split":
+            cfg.exit_mode = "split"; cfg.partial_tp = False; cfg.trailing_stop = False
+            _RULES = {"ema8", "ema21", "ma10", "ma20", "ma50", "target", "atr_trail"}
+            cfg.split_a = str(params.get("split_a", "ema8")).lower()
+            cfg.split_b = str(params.get("split_b", "ema21")).lower()
+            if cfg.split_a not in _RULES: cfg.split_a = "ema8"
+            if cfg.split_b not in _RULES: cfg.split_b = "ema21"
+            cfg.split_a_param = _clf(params.get("split_a_param", 0), 0, 10, 0)
+            cfg.split_b_param = _clf(params.get("split_b_param", 0), 0, 10, 0)
+            cfg.split_ratio = _clf(params.get("split_ratio", 0.5), 0.1, 0.9, 0.5)
         else:
             es = "champion"; cfg.exit_mode = "optimized"   # bilinmeyen → şampiyon (B)
             cfg.partial_tp = True; cfg.partial_pct = 0.5; cfg.partial_rr = 2.0
@@ -1876,6 +1966,8 @@ def run_backtest_api(params: dict) -> dict:
                    "use_earnings": cfg.use_earnings,
                    "exit_strategy": es, "exit_mode": cfg.exit_mode,
                    "tp_mode": (cfg.tp_mode if cfg.exit_mode == "tp_grid" else None),
+                   "split_a": (cfg.split_a if cfg.exit_mode == "split" else None),
+                   "split_b": (cfg.split_b if cfg.exit_mode == "split" else None),
                    "ma_confirm_close": cfg.ma_confirm_close,
                    "start": eq.index[0].strftime("%Y-%m-%d"),
                    "end": eq.index[-1].strftime("%Y-%m-%d")},
