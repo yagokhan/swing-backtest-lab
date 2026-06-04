@@ -104,13 +104,11 @@ th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:
         <label class="fld" id="fld-qmin" title="qswing 0–100 öncelik skoru EŞİĞİ — canlı tarayıcıyla AYNI formül (RS 45 + 52H yakınlık 20 + tazelik/SMA20 20 + risk kalitesi 15). 0 = filtre kapalı (tüm kırılımlar). Ör. 65 = yalnız skoru ≥65 olan temiz kurulumlara gir. Yalnız qswing girişinde geçerli."><span class="kicker">Min qswing skoru (0–100)</span><input type="number" id="qmin" value="0" min="0" max="100" step="5"></label>
         <label class="fld" id="fld-rr_target" title="İlk/nihai hedef = giriş + (giriş−stop) × bu (R cinsinden). Yalnız Şampiyon (ATR-trail) çıkışında devreye girer."><span class="kicker">R/R hedef</span><input type="number" id="rr_target" value="2.0" step="0.5" min="1" max="6"></label>
         <label class="fld" id="fld-atr_stop" title="Stop tabanı = kapanış − bu × ATR(14). Şampiyon ve MA-trail çıkışında geçerli. 8-EMA modlarında stop daima 8-EMA'dır → kullanılmaz."><span class="kicker">ATR stop ×</span><input type="number" id="atr_stop" value="1.5" step="0.5" min="0.5" max="5"></label>
-        <label class="fld" title="Backtest başlangıç sermayesi (ana para). ROI ve $ sonuçlar bunun üzerinden hesaplanır."><span class="kicker">Ana para ($)</span><input type="number" id="initial_capital" value="10000" step="1000" min="100"></label>
         <label class="fld" title="Aynı anda taşınacak en fazla açık pozisyon sayısı."><span class="kicker">Maks pozisyon</span><input type="number" id="max_pos" value="5" min="1" max="20"></label>
         <label class="fld" title="Sabit: her poz = sermaye × 'Poz %'. Risk-bazlı: her işlem 'Risk/işlem %' kadar riske eder (lot = risk$ / stop-mesafesi); 'Poz %' tavan olur."><span class="kicker">Boyutlandırma</span>
-          <select id="sizing" onchange="refreshForm()"><option value="fixed">Sabit tahsis (%)</option><option value="risk">Risk-bazlı</option><option value="fixed_usd">Sabit $ / poz</option></select></label>
+          <select id="sizing" onchange="refreshForm()"><option value="fixed">Sabit tahsis</option><option value="risk">Risk-bazlı</option></select></label>
         <label class="fld" id="fld-risk_pct" title="İşlem başına riske edilecek sermaye %'si (stop'a takılırsa kaybedilecek). Stop referansı: 8-EMA modlarında 8-EMA, diğerlerinde LOW10/ATR plan stop. Giriş yöntemi (swing2/qswing) bunu değiştirmez."><span class="kicker">Risk/işlem %</span><input type="number" id="risk_pct" value="1.0" step="0.25" min="0.1" max="10"></label>
-        <label class="fld" id="fld-pos_pct" title="Sabit modda poz başına sermaye payı; Risk modda poz büyüklüğü tavanı."><span class="kicker">Poz %</span><input type="number" id="pos_pct" value="20" step="5" min="2" max="100"></label>
-        <label class="fld" id="fld-position_usd" title="Sabit $ modunda: her açılan pozisyona ayrılacak SABİT dolar tutarı (sermaye/compounding'den bağımsız). 'Maks pozisyon' ile birlikte toplam konuşlu sermaye = $tutar × maks poz."><span class="kicker">Poz başına $</span><input type="number" id="position_usd" value="1000" step="500" min="1"></label>
+        <label class="fld" title="Sabit modda poz başına sermaye payı; Risk modda poz büyüklüğü tavanı."><span class="kicker">Poz %</span><input type="number" id="pos_pct" value="20" step="5" min="2" max="100"></label>
       </div>
       <!-- çıkış alt-parametreleri -->
       <div class="row exsub ex-ma_trail hide" style="margin-top:12px;">
@@ -254,10 +252,7 @@ function refreshForm(){
   show('fld-atr_stop',  exit==='champion' || exit==='ma_trail' || exit==='hybrid2');  // hibrit2: LOW10/ATR felaket stopu aktif
   show('fld-rr_target', exit==='champion');                       // nihai R hedefi yalnız şampiyon
   show('fld-confirm',   exit!=='champion');                       // MA kapanış teyidi şampiyonda etkisiz
-  const sm=$('sizing').value;
-  show('fld-risk_pct',     sm==='risk');         // risk %'si yalnız risk-bazlı modda
-  show('fld-position_usd', sm==='fixed_usd');    // poz başına $ yalnız Sabit $ modunda
-  show('fld-pos_pct',      sm!=='fixed_usd');    // Poz % Sabit $ modunda anlamsız → gizle
+  show('fld-risk_pct',  $('sizing').value==='risk');              // risk %'si yalnız risk-bazlı modda
   // ipucu
   const em = q ? 'qswing kırılım girişi (40g tepe · 52H yakın · SPY\'ı geçen momentum). ' : '';
   $('hint').textContent = em + (HINTS[exit]||'');
@@ -270,7 +265,6 @@ function buildPayload(){
     rr_target: parseFloat($('rr_target').value)||2.0,
     atr_stop_mult: parseFloat($('atr_stop').value)||1.5,
     max_positions: parseInt($('max_pos').value)||5,
-    initial_capital: parseFloat($('initial_capital').value)||10000,
     compounding: $('compound').checked,
     use_earnings: $('earnings').checked,
     run_grid: $('grid').checked,
@@ -280,7 +274,6 @@ function buildPayload(){
     max_position_pct: (parseFloat($('pos_pct').value)||20)/100,
   };
   if(p.sizing_mode==='risk') p.risk_per_trade_pct = parseFloat($('risk_pct').value)||1.0;
-  if(p.sizing_mode==='fixed_usd') p.position_usd = parseFloat($('position_usd').value)||1000;
   if(p.entry_mode==='qswing') p.qswing_min_score = parseFloat($('qmin').value)||0;
   const sy = $('symbols').value.trim();
   if(sy) p.symbols = sy.split(/[ ,]+/).filter(Boolean);
@@ -426,7 +419,7 @@ function renderBacktest(d){
   const c=d.config, m=d.metrics;
   $('bt-cfgline').textContent = `${c.universe_n} hisse · ${c.start}→${c.end}`+(c.date_range?' (el ile aralık)':' · '+c.period)
      + ` · giriş ${ ($('entry').value) }`+((c.entry_mode==='qswing_breakout'&&c.qswing_min_score>0)?` (skor≥${c.qswing_min_score})`:'')+` · çıkış ${c.exit_strategy}`+(c.tp_mode?'/'+c.tp_mode:'')
-     + ` · ${c.sizing_mode==='risk'?('risk %'+c.risk_per_trade_pct+'/işlem'):c.sizing_mode==='fixed_usd'?('$'+Math.round(c.position_usd||1000)+'/poz'):('sabit %'+Math.round((c.max_position_pct||0.2)*100)+'/poz')}`;
+     + ` · ${c.sizing_mode==='risk'?('risk %'+c.risk_per_trade_pct+'/işlem'):('sabit %'+Math.round((c.max_position_pct||0.2)*100)+'/poz')}`;
   const cls=x=>x>=0?'pos':'neg';
   $('bt-metrics').innerHTML = [
     ['ROI', Fp(m.roi), cls(m.roi), 'Toplam getiri: dönem sonu sermaye / başlangıç − 1.'],
@@ -436,7 +429,7 @@ function renderBacktest(d){
     ['Win', (m.win_rate==null?'—':m.win_rate+'%'), '', 'Kazanan işlem oranı (%). Momentumda ~%50 normaldir.'],
     ['Profit Factor', F(m.profit_factor), cls((m.profit_factor||0)-1), 'Toplam kâr / toplam zarar. >1 kârlı, >1.5 iyi.'],
     ['İşlem', m.trades, '', 'Kapanan toplam işlem sayısı (kısmi satışlar dahil).'],
-    ['Son $', '$'+F(m.final,0), cls(m.final-m.initial), 'Dönem sonu sermaye (ana para $'+F(m.initial,0)+').'],
+    ['Son $', '$'+F(m.final,0), cls(m.final-m.initial), 'Dönem sonu sermaye (başlangıç $100.000).'],
   ].map(([l,v,k,t])=>`<div class="mc" title="${t}"><div class="v ${k}">${v}</div><div class="l">${l}</div></div>`).join('');
 
   // equity chart

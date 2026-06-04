@@ -99,12 +99,11 @@ class Config:
     end_date: str = ""
     warmup_calendar_buffer: int = 420   # start_date öncesi indirilecek tampon (takvim günü)
 
-    initial_capital: float = 10_000.0      # ana para (başlangıç sermayesi)
+    initial_capital: float = 100_000.0
     max_positions: int = 5
     max_position_pct: float = 0.20
-    sizing_mode: str = "fixed"         # 'fixed' (sermaye×poz%) | 'risk' (sabit risk%) | 'fixed_usd' (sabit $/poz)
+    sizing_mode: str = "fixed"         # 'fixed' (poz başına sermaye×%20) | 'risk' (işlem başına sabit risk)
     risk_per_trade_pct: float = 1.0    # risk modunda: işlem başına riske edilecek sermaye %'si
-    position_usd: float = 1000.0       # fixed_usd modunda: poz başına SABİT dolar tutarı
     compounding: bool = True
 
     warmup_bars: int = 220
@@ -1257,8 +1256,6 @@ class Swing2Backtester:
                                  outcome, pos.score, SECTOR_MAP.get(sym, "—")))
 
     def _size(self, date):
-        if self.cfg.sizing_mode == "fixed_usd":
-            return self.cfg.position_usd               # poz başına sabit dolar
         eq = self._equity(date) if self.cfg.compounding else self.cfg.initial_capital
         return eq * self.cfg.max_position_pct
 
@@ -1315,9 +1312,6 @@ class Swing2Backtester:
             size = shares * fill + cfg.commission_per_trade
             if size > cap:                                # poz tavanını aşarsa kırp
                 size = cap; shares = (size - cfg.commission_per_trade) / fill
-        elif cfg.sizing_mode == "fixed_usd":
-            size = cfg.position_usd                       # poz başına SABİT dolar (tavandan bağımsız)
-            shares = (size - cfg.commission_per_trade) / fill
         else:
             size = cap                                    # sabit: sermaye × poz%
             shares = (size - cfg.commission_per_trade) / fill
@@ -1758,20 +1752,9 @@ def run_backtest_api(params: dict) -> dict:
     cfg.atr_stop_mult = float(max(0.5, min(5.0, params.get("atr_stop_mult", cfg.atr_stop_mult))))
     cfg.max_dist_sma20 = float(max(0.0, min(2.0, params.get("max_dist_sma20", cfg.max_dist_sma20))))
     cfg.max_positions = int(max(1, min(20, params.get("max_positions", cfg.max_positions))))
-    try:                                  # ana para (başlangıç sermayesi); position_usd clamp'i buna bağlı
-        _ic = params.get("initial_capital", cfg.initial_capital) or cfg.initial_capital
-        cfg.initial_capital = float(max(100.0, min(1e9, _ic)))
-    except (TypeError, ValueError):
-        cfg.initial_capital = 10_000.0
     # Boyutlandırma: 'fixed' (sermaye×poz%) | 'risk' (işlem başına sabit risk%)
-    _sm = str(params.get("sizing_mode", "fixed")).lower()
-    cfg.sizing_mode = _sm if _sm in ("risk", "fixed", "fixed_usd") else "fixed"
+    cfg.sizing_mode = "risk" if str(params.get("sizing_mode", "fixed")).lower() == "risk" else "fixed"
     cfg.risk_per_trade_pct = float(max(0.1, min(10.0, params.get("risk_per_trade_pct", cfg.risk_per_trade_pct))))
-    try:                                  # fixed_usd: poz başına sabit dolar ($1 .. başlangıç sermayesi)
-        _pu = params.get("position_usd", cfg.position_usd) or cfg.position_usd
-        cfg.position_usd = float(max(1.0, min(cfg.initial_capital, _pu)))
-    except (TypeError, ValueError):
-        cfg.position_usd = 1000.0
     if params.get("max_position_pct") is not None:
         cfg.max_position_pct = float(max(0.02, min(1.0, params.get("max_position_pct"))))
     cfg.period = str(params.get("period", cfg.period))
@@ -1884,7 +1867,7 @@ def run_backtest_api(params: dict) -> dict:
                    "rr_target": cfg.rr_target, "atr_stop_mult": cfg.atr_stop_mult,
                    "max_positions": cfg.max_positions,
                    "sizing_mode": cfg.sizing_mode, "risk_per_trade_pct": cfg.risk_per_trade_pct,
-                   "max_position_pct": cfg.max_position_pct, "position_usd": cfg.position_usd,
+                   "max_position_pct": cfg.max_position_pct,
                    "entry_mode": cfg.entry_mode, "qswing_min_score": cfg.qswing_min_score,
                    "period": cfg.period, "compounding": cfg.compounding,
                    "date_range": bool(cfg.start_date or cfg.end_date),
