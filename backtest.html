@@ -100,6 +100,7 @@ th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:
             <option value="hybrid">8-EMA stop · 21-EMA hibrit</option>
           </select></label>
         <label class="fld" id="fld-min_score" title="8-katman skor eşiği (0–24). Yalnız swing2 girişinde kullanılır; qswing kırılımı skor kullanmaz."><span class="kicker">Min skor (swing2)</span><input type="number" id="min_score" value="16" min="0" max="24"></label>
+        <label class="fld" id="fld-qmin" title="qswing 0–100 öncelik skoru EŞİĞİ — canlı tarayıcıyla AYNI formül (RS 45 + 52H yakınlık 20 + tazelik/SMA20 20 + risk kalitesi 15). 0 = filtre kapalı (tüm kırılımlar). Ör. 65 = yalnız skoru ≥65 olan temiz kurulumlara gir. Yalnız qswing girişinde geçerli."><span class="kicker">Min qswing skoru (0–100)</span><input type="number" id="qmin" value="0" min="0" max="100" step="5"></label>
         <label class="fld" id="fld-rr_target" title="İlk/nihai hedef = giriş + (giriş−stop) × bu (R cinsinden). Yalnız Şampiyon (ATR-trail) çıkışında devreye girer."><span class="kicker">R/R hedef</span><input type="number" id="rr_target" value="2.0" step="0.5" min="1" max="6"></label>
         <label class="fld" id="fld-atr_stop" title="Stop tabanı = kapanış − bu × ATR(14). Şampiyon ve MA-trail çıkışında geçerli. 8-EMA modlarında stop daima 8-EMA'dır → kullanılmaz."><span class="kicker">ATR stop ×</span><input type="number" id="atr_stop" value="1.5" step="0.5" min="0.5" max="5"></label>
         <label class="fld" title="Aynı anda taşınacak en fazla açık pozisyon sayısı."><span class="kicker">Maks pozisyon</span><input type="number" id="max_pos" value="5" min="1" max="20"></label>
@@ -171,7 +172,20 @@ th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:
       <div class="card" title="İşlemlerin nasıl kapandığının dağılımı: TP=hedef, Kısmi=kısmi kâr, Trail=süren stop, Stop=ilk stop, MA8=MA altı kapanış, Gün-sonu."><div class="kicker" style="margin-bottom:8px;">Çıkış dağılımı</div><div id="bt-outcomes" class="mono"></div></div>
       <div class="card" id="bt-grid-wrap" style="display:none;" title="Grid-search açıkken: taranan parametre kombinasyonları, ROI'ye göre."><div class="kicker" style="margin-bottom:8px;">Grid-Search (ROI'ye göre)</div><div class="scroll"><table id="bt-grid"></table></div></div>
       <div class="card" title="Yıl × ay getiri ısı tablosu; sağda yıllık toplam."><div class="kicker" style="margin-bottom:8px;">Aylık getiri (%)</div><div class="scroll"><table id="bt-monthly"></table></div></div>
-      <div class="card" title="Kapanan tüm işlemler: giriş/çıkış tarihi ve fiyatı, P&L, % ve sonuç etiketi."><div class="kicker" style="margin-bottom:8px;">İşlemler (<span id="bt-trade-n">0</span>)</div><div class="scroll"><table id="bt-trades"></table></div></div>
+      <div class="card" title="Kapanan tüm işlemler: giriş/çıkış tarihi ve fiyatı, P&L, % ve sonuç etiketi."><div class="kicker" style="margin-bottom:8px;">İşlemler (<span id="bt-trade-n">0</span>) <span class="muted" style="font-weight:400;font-size:11px;">— satıra tıkla → mum grafiği</span></div><div class="scroll"><table id="bt-trades"></table></div></div>
+      <div class="card" id="bt-trade-chart-card" style="display:none;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:10px;flex-wrap:wrap;">
+          <div class="kicker" id="bt-trade-chart-title">İşlem Grafiği</div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span id="bt-trade-chart-meta" class="mono muted" style="font-size:11px;"></span>
+            <label class="mono muted" style="font-size:11px;display:flex;align-items:center;gap:4px;cursor:pointer;user-select:none;" title="Mumları Heikin Ashi olarak çiz (görsel; trade mantığını değiştirmez)">
+              <input type="checkbox" id="bt-ha-toggle" onchange="toggleHA(this.checked)"> Heikin Ashi</label>
+          </div>
+        </div>
+        <div style="height:340px;position:relative;"><canvas id="bt-trade-canvas"></canvas></div>
+        <div class="mono muted" style="font-size:10px;margin-top:6px;">
+          <span style="color:#27c281;">▲ ALIŞ</span> · <span style="color:#f5b14c;">◆ TP (+2R · %50)</span> · <span style="color:#5aa2ff;">▼ TAM SATIŞ</span> · <span id="bt-candle-legend">yeşil/kırmızı mum = Heikin Ashi yön · hacim = gerçek gün</span></div>
+      </div>
     </div>
   </div>
 
@@ -228,6 +242,7 @@ function refreshForm(){
   document.querySelectorAll('.exsub').forEach(el=>el.classList.toggle('hide', !el.classList.contains('ex-'+exit)));
   // GİRİŞ'e özgü — yalnız swing2 (8-katman)
   show('fld-min_score', !q);
+  show('fld-qmin',       q);    // qswing skor eşiği yalnız qswing girişinde
   show('fld-earnings',  !q);
   if(q) $('earnings').checked = false;   // qswing earnings'i kontrol etmez → boşa yavaş çekim olmasın
   // ÇIKIŞ'a göre — plan stop/hedef yalnız ilgili modlarda kullanılır
@@ -256,6 +271,7 @@ function buildPayload(){
     max_position_pct: (parseFloat($('pos_pct').value)||20)/100,
   };
   if(p.sizing_mode==='risk') p.risk_per_trade_pct = parseFloat($('risk_pct').value)||1.0;
+  if(p.entry_mode==='qswing') p.qswing_min_score = parseFloat($('qmin').value)||0;
   const sy = $('symbols').value.trim();
   if(sy) p.symbols = sy.split(/[ ,]+/).filter(Boolean);
   const sd=$('start').value, ed=$('end').value;
@@ -272,6 +288,110 @@ function buildPayload(){
 let eqChart=null;
 const F=(x,d=2)=> (x==null||isNaN(x))?'—':Number(x).toLocaleString('tr-TR',{minimumFractionDigits:d,maximumFractionDigits:d});
 const Fp=(x,d=1)=> (x==null||isNaN(x))?'—':((x>=0?'+':'')+Number(x).toLocaleString('tr-TR',{minimumFractionDigits:d,maximumFractionDigits:d})+'%');
+
+// ═════════ İşlem mum grafiği (AL → kısmi TP → tam SAT) ═════════
+let btTradesBT=[], btPeriodBT='2y';
+let HA_CHART=(localStorage.getItem('haChart')!=='0');   // varsayılan: Heikin Ashi AÇIK
+// Heikin Ashi (SADECE GÖRSEL; trade/veri/skor mantığını ETKİLEMEZ)
+function toHeikinAshi(bars){
+  const out=[]; let pO=null,pC=null;
+  for(let i=0;i<bars.length;i++){ const b=bars[i];
+    const haC=(b.open+b.high+b.low+b.close)/4;
+    const haO=(pO===null)?(b.open+b.close)/2:(pO+pC)/2;
+    out.push({...b,open:haO,high:Math.max(b.high,haO,haC),low:Math.min(b.low,haO,haC),close:haC});
+    pO=haO; pC=haC; }
+  return out;
+}
+function haIfOn(bars){ return HA_CHART?toHeikinAshi(bars):bars; }
+
+// Aynı pozisyonun (symbol+entry_date) tüm bacaklarını birleştir: ALIŞ + kısmi TP + tam SATIŞ
+function btMergeTrade(t){
+  const sibs=btTradesBT.filter(x=>x.symbol===t.symbol && x.entry_date===t.entry_date);
+  const partial=sibs.find(x=>x.outcome==='PARTIAL');
+  const finalT=sibs.find(x=>x.outcome!=='PARTIAL')||t;
+  const total=sibs.reduce((s,x)=>s+(x.pnl||0),0);
+  return {...finalT,
+    partial_date: partial?partial.exit_date:null,
+    partial_price:partial?partial.exit:null,
+    partial_pct:  partial?partial.pnl_pct:null,
+    total_pnl: sibs.length>1?total:(finalT.pnl||0)};
+}
+
+async function showTrade(idx){
+  const t0=btTradesBT[idx]; if(!t0) return;
+  const t=btMergeTrade(t0);
+  const card=$('bt-trade-chart-card'); card.style.display='';
+  $('bt-trade-chart-title').textContent=`🕯️ ${t.symbol} — ${t.outcome}${t.partial_price!=null?' (+ kısmi TP)':''}`;
+  $('bt-trade-chart-meta').textContent='OHLCV yükleniyor…';
+  card.scrollIntoView({behavior:'smooth',block:'nearest'});
+  try{
+    const r=await fetch(`/api/history/${encodeURIComponent(t.symbol)}?range=${encodeURIComponent(btPeriodBT)}`);
+    const data=await r.json();
+    if(!r.ok||data.error||!data.bars) throw new Error(data.error||('HTTP '+r.status));
+    const tp=t.partial_price!=null?`TP ${t.partial_date} $${F(t.partial_price)} (${Fp(t.partial_pct)}, %50) → `:'';
+    $('bt-trade-chart-meta').textContent=
+      `AL ${t.entry_date} $${F(t.entry)} → ${tp}SAT ${t.exit_date} $${F(t.exit)} (${Fp(t.pnl_pct)}) · Toplam K/Z ${(t.total_pnl>=0?'+':'')+Math.round(t.total_pnl)}$`;
+    btLastBars=data.bars; btLastTrade=t;
+    const ha=$('bt-ha-toggle'); if(ha) ha.checked=HA_CHART;
+    drawTradeCandles($('bt-trade-canvas'),data.bars,t);
+  }catch(e){ $('bt-trade-chart-meta').textContent='Grafik verisi alınamadı: '+e.message; }
+}
+
+let btLastBars=null, btLastTrade=null;
+function toggleHA(on){
+  HA_CHART=!!on; localStorage.setItem('haChart',HA_CHART?'1':'0');
+  const lg=$('bt-candle-legend');
+  if(lg) lg.textContent=HA_CHART?'yeşil/kırmızı mum = Heikin Ashi yön · hacim = gerçek gün':'yeşil mum = yükseliş günü, kırmızı = düşüş';
+  if(btLastBars&&btLastTrade) drawTradeCandles($('bt-trade-canvas'),btLastBars,btLastTrade);
+}
+
+function drawTradeCandles(canvas,bars,trade){
+  const dpr=window.devicePixelRatio||1;
+  const cssW=canvas.parentElement.clientWidth, cssH=canvas.parentElement.clientHeight;
+  canvas.width=cssW*dpr; canvas.height=cssH*dpr; canvas.style.width=cssW+'px'; canvas.style.height=cssH+'px';
+  const ctx=canvas.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,cssW,cssH);
+  const G='#27c281',R='#ff5d6c',B='#5aa2ff',A='#f5b14c',M='#8a95ad',BD='#243046';
+  const dates=bars.map(b=>b.date);
+  let ei=dates.indexOf(trade.entry_date), xi=dates.indexOf(trade.exit_date);
+  if(ei<0) ei=dates.findIndex(d=>d>=trade.entry_date);
+  if(xi<0) xi=dates.findIndex(d=>d>=trade.exit_date);
+  if(ei<0) ei=0; if(xi<0) xi=bars.length-1;
+  let pi=-1; if(trade.partial_date){ pi=dates.indexOf(trade.partial_date); if(pi<0) pi=dates.findIndex(d=>d>=trade.partial_date); }
+  const s=Math.max(0,ei-25), e=Math.min(bars.length-1,xi+12);
+  const sub=bars.slice(s,e+1), hsub=haIfOn(bars).slice(s,e+1);
+  if(!sub.length) return;
+  const eIdx=ei-s, xIdx=xi-s, pIdx=(pi>=0)?pi-s:-1;
+  let pmin=Infinity,pmax=-Infinity,vmax=0;
+  for(const b of sub){ pmin=Math.min(pmin,b.low); pmax=Math.max(pmax,b.high); vmax=Math.max(vmax,b.volume||0); }
+  [trade.entry,trade.exit,trade.partial_price].forEach(p=>{ if(p!=null){ pmin=Math.min(pmin,p); pmax=Math.max(pmax,p);} });
+  const pad=(pmax-pmin)*0.08||1; pmin-=pad; pmax+=pad;
+  const padL=8,padR=58,padT=10,padB=22, volH=cssH*0.16, priceH=cssH-padT-padB-volH, chartW=cssW-padL-padR;
+  const n=sub.length, step=chartW/n, bw=Math.max(1.5,step*0.62);
+  const yP=p=>padT+(pmax-p)/(pmax-pmin)*priceH;
+  const yV=v=>(padT+priceH+volH)-(v/(vmax||1))*volH;
+  const xC=i=>padL+(i+0.5)*step;
+  ctx.font='10px ui-monospace, monospace'; ctx.textBaseline='middle';
+  for(let g=0;g<=4;g++){ const p=pmin+(pmax-pmin)*g/4, y=yP(p);
+    ctx.strokeStyle=BD; ctx.globalAlpha=0.5; ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(padL+chartW,y); ctx.stroke(); ctx.globalAlpha=1;
+    ctx.fillStyle=M; ctx.textAlign='left'; ctx.fillText('$'+p.toFixed(2),padL+chartW+4,y); }
+  for(let i=0;i<n;i++){ const b=sub[i],hb=hsub[i],x=xC(i);
+    const colV=(b.close>=b.open)?G:R, col=(hb.close>=hb.open)?G:R;
+    ctx.fillStyle=colV; ctx.globalAlpha=0.25; ctx.fillRect(x-bw/2,yV(b.volume||0),bw,(padT+priceH+volH)-yV(b.volume||0)); ctx.globalAlpha=1;
+    ctx.strokeStyle=col; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(x,yP(hb.high)); ctx.lineTo(x,yP(hb.low)); ctx.stroke();
+    const yo=yP(hb.open),yc=yP(hb.close); ctx.fillStyle=col; ctx.fillRect(x-bw/2,Math.min(yo,yc),bw,Math.max(1,Math.abs(yc-yo))); }
+  const hl=(price,color,dash)=>{ ctx.strokeStyle=color; ctx.setLineDash(dash); ctx.globalAlpha=0.7; ctx.beginPath(); ctx.moveTo(padL,yP(price)); ctx.lineTo(padL+chartW,yP(price)); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha=1; };
+  hl(trade.entry,G,[4,3]);
+  if(trade.partial_price!=null) hl(trade.partial_price,A,[3,3]);
+  hl(trade.exit,B,[4,3]);
+  // ▲ ALIŞ
+  const exC=xC(eIdx),eyP=yP(trade.entry); ctx.fillStyle=G; ctx.beginPath(); ctx.moveTo(exC,eyP+14); ctx.lineTo(exC-6,eyP+24); ctx.lineTo(exC+6,eyP+24); ctx.closePath(); ctx.fill(); ctx.textAlign='center'; ctx.fillText('AL',exC,eyP+32);
+  // ◆ TP
+  if(trade.partial_price!=null&&pIdx>=0&&pIdx<n){ const tx=xC(pIdx),tyP=yP(trade.partial_price); ctx.fillStyle=A; ctx.beginPath(); ctx.moveTo(tx,tyP-22); ctx.lineTo(tx-7,tyP-13); ctx.lineTo(tx,tyP-4); ctx.lineTo(tx+7,tyP-13); ctx.closePath(); ctx.fill(); ctx.textAlign='center'; ctx.fillText('TP',tx,tyP-27); }
+  // ▼ TAM SAT
+  const sxC=xC(xIdx),syP=yP(trade.exit); ctx.fillStyle=B; ctx.beginPath(); ctx.moveTo(sxC,syP-14); ctx.lineTo(sxC-6,syP-24); ctx.lineTo(sxC+6,syP-24); ctx.closePath(); ctx.fill(); ctx.fillText(trade.partial_price!=null?'TAM SAT':'SAT',sxC,syP-30);
+  ctx.fillStyle=M; ctx.textAlign='center';
+  [0,Math.floor(n/2),n-1].forEach(i=>ctx.fillText(sub[i].date.slice(5),xC(i),cssH-8));
+}
 
 async function runBacktest(){
   const btn=$('run'); btn.disabled=true; const old=btn.textContent; btn.textContent='Çalışıyor…';
@@ -291,7 +411,7 @@ function renderBacktest(d){
   $('bt-results').classList.remove('hide');
   const c=d.config, m=d.metrics;
   $('bt-cfgline').textContent = `${c.universe_n} hisse · ${c.start}→${c.end}`+(c.date_range?' (el ile aralık)':' · '+c.period)
-     + ` · giriş ${ ($('entry').value) } · çıkış ${c.exit_strategy}`+(c.tp_mode?'/'+c.tp_mode:'')
+     + ` · giriş ${ ($('entry').value) }`+((c.entry_mode==='qswing_breakout'&&c.qswing_min_score>0)?` (skor≥${c.qswing_min_score})`:'')+` · çıkış ${c.exit_strategy}`+(c.tp_mode?'/'+c.tp_mode:'')
      + ` · ${c.sizing_mode==='risk'?('risk %'+c.risk_per_trade_pct+'/işlem'):('sabit %'+Math.round((c.max_position_pct||0.2)*100)+'/poz')}`;
   const cls=x=>x>=0?'pos':'neg';
   $('bt-metrics').innerHTML = [
@@ -337,8 +457,11 @@ function renderBacktest(d){
 
   // trades
   const tr=d.trades||[]; $('bt-trade-n').textContent=tr.length;
+  btTradesBT = tr;                                            // mum grafiği için sakla
+  btPeriodBT = (d.config && d.config.period) || '2y';
+  $('bt-trade-chart-card').style.display='none';              // önceki grafiği gizle
   $('bt-trades').innerHTML='<thead><tr><th title="Hisse sembolü">Sembol</th><th title="Pozisyon açılış tarihi">Giriş t.</th><th title="Pozisyon kapanış tarihi">Çıkış t.</th><th title="Giriş dolum fiyatı (+8bps slippage dahil)">Giriş</th><th title="Çıkış dolum fiyatı">Çıkış</th><th title="Kâr/zarar ($, komisyon+slippage dahil)">P&L</th><th title="İşlem getirisi (%)">%</th><th title="Kapanış nedeni: TP/PARTIAL/MA8/STOP/TRAIL/EMA21">Sonuç</th></tr></thead><tbody>'+
-    tr.map(t=>`<tr><td>${t.symbol}</td><td>${t.entry_date}</td><td>${t.exit_date}</td><td>${F(t.entry)}</td><td>${F(t.exit)}</td><td class="${t.pnl>=0?'pos':'neg'}">${F(t.pnl,0)}</td><td class="${t.pnl_pct>=0?'pos':'neg'}">${Fp(t.pnl_pct)}</td><td><span class="pill ${t.pnl>=0?'g':'r'}">${t.outcome}</span></td></tr>`).join('')+'</tbody>';
+    tr.map((t,i)=>`<tr onclick="showTrade(${i})" style="cursor:pointer;" title="Mum grafiğini aç"><td>${t.symbol}</td><td>${t.entry_date}</td><td>${t.exit_date}</td><td>${F(t.entry)}</td><td>${F(t.exit)}</td><td class="${t.pnl>=0?'pos':'neg'}">${F(t.pnl,0)}</td><td class="${t.pnl_pct>=0?'pos':'neg'}">${Fp(t.pnl_pct)}</td><td><span class="pill ${t.pnl>=0?'g':'r'}">${t.outcome}</span></td></tr>`).join('')+'</tbody>';
   $('bt-results').scrollIntoView({behavior:'smooth',block:'nearest'});
 }
 

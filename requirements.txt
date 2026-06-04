@@ -6,3 +6,5 @@ jinja2>=3.1
 # Opsiyonel: yfinance (price_source='yfinance' fallback), matplotlib (grafik üretimi)
 yfinance>=0.2
 matplotlib>=3.7
+# Telegram bot pipeline (live_scan_telegram.py) — Telegram API çağrıları
+requests>=2.31

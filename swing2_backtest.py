@@ -148,6 +148,7 @@ class Config:
     qswing_near_high: float = 0.75 # 52H zirveye yakınlık (fiyat ≥ bu × 52H)
     qswing_vdu_max: float = 9.0    # VDU (vol5/vol50) tavanı; ≥9 = kapalı, ör. 1.0 = hacim kurumuş şart
     qswing_rs_min: float = 0.0     # min görece güç (60g getiri − SPY 60g); ör. 8 = SPY'ı ≥%8 geç
+    qswing_min_score: float = 0.0  # qswing 0–100 öncelik skoru EŞİĞİ (0 = kapalı); ör. 65 = sadece skor≥65 gir
     exit_mode: str = "optimized"   # 'optimized' (mevcut) | 'ma_trail' (8-MA altına kapanınca çık)
     ma_trail_len: int = 8          # hareketli ortalama periyodu
     ma_trail_type: str = "sma"     # 'sma' | 'ema'
@@ -384,6 +385,39 @@ def earnings_days_until(dates, date):
 
 
 OHLCV = ["Open", "High", "Low", "Close", "Volume"]
+
+
+def heikin_ashi(d):
+    """Gerçek OHLC DataFrame'inden Heikin Ashi OHLC üretir — SADECE GÖRSEL.
+    Trade mantığını / veri çekmeyi ETKİLEMEZ; çağıran kod ham fiyatla devam eder.
+    HA_Close=(O+H+L+C)/4 · HA_Open=(önceki HA_Open+önceki HA_Close)/2 ·
+    HA_High=max(H,HA_O,HA_C) · HA_Low=min(L,HA_O,HA_C).
+    İlk açılışın doğru olması için TÜM geçmişle (pencere kesilmeden) çağrılmalı."""
+    o = d["Open"].to_numpy(dtype=float); h = d["High"].to_numpy(dtype=float)
+    lo = d["Low"].to_numpy(dtype=float); c = d["Close"].to_numpy(dtype=float)
+    n = len(d)
+    ha = d.copy()
+    if n == 0:
+        return ha
+    ha_close = (o + h + lo + c) / 4.0
+    ha_open = ha_close.copy()
+    ha_open[0] = (o[0] + c[0]) / 2.0
+    for i in range(1, n):
+        ha_open[i] = (ha_open[i - 1] + ha_close[i - 1]) / 2.0
+    ha_high = pd_np_max3(h, ha_open, ha_close)
+    ha_low = pd_np_min3(lo, ha_open, ha_close)
+    ha["Open"], ha["High"], ha["Low"], ha["Close"] = ha_open, ha_high, ha_low, ha_close
+    return ha
+
+
+def pd_np_max3(a, b, c):
+    import numpy as _np
+    return _np.maximum(_np.maximum(a, b), c)
+
+
+def pd_np_min3(a, b, c):
+    import numpy as _np
+    return _np.minimum(_np.minimum(a, b), c)
 
 
 def _flatten_ohlcv(df, ticker):
@@ -1304,7 +1338,15 @@ class Swing2Backtester:
                         # ----- qswing GİRİŞ: Qullamaggie kırılım (20g tepe + 52H yakın + SPY'ı geçen momentum) -----
                         rs = self._qswing_entry_ok(row, spy_ret60)
                         if rs is None: continue
-                        cands.append((rs, -dist, sym, row, plan))
+                        # 0–100 öncelik skoru (canlı tarayıcıyla AYNI formül) → filtre + sıralama
+                        _risk = plan["entry"] - plan["stop"]
+                        _rec = {"rs": rs,
+                                "dist_52h_pct": (row["Close"] / row["HIGH52"] - 1) * 100,
+                                "dist_sma20_pct": dist * 100,
+                                "risk_pct": (_risk / plan["entry"] * 100) if plan["entry"] else None}
+                        qscore, _ = _qswing_priority_score(_rec)
+                        if cfg.qswing_min_score > 0 and qscore < cfg.qswing_min_score: continue
+                        cands.append((qscore, -dist, sym, row, plan))
                     else:
                         # ----- swing2 GİRİŞ: 8-katman skor + kill-switch -----
                         stage = detect_stage(row); vcp = self._vcp(sym, df, date)
@@ -1715,6 +1757,11 @@ def run_backtest_api(params: dict) -> dict:
     cfg.entry_mode = ("qswing_breakout"
                       if str(params.get("entry_mode", "swing2")).lower() in ("qswing", "qswing_breakout", "breakout")
                       else "swing2")
+    # qswing 0–100 öncelik skoru EŞİĞİ (canlı tarayıcıyla aynı formül; 0 = filtre kapalı)
+    try:
+        cfg.qswing_min_score = float(max(0.0, min(100.0, params.get("qswing_min_score", 0) or 0)))
+    except (TypeError, ValueError):
+        cfg.qswing_min_score = 0.0
     run_grid = bool(params.get("run_grid", False))
 
     # --- Çıkış stratejisi (UI dropdown) ---
@@ -1795,6 +1842,7 @@ def run_backtest_api(params: dict) -> dict:
                    "max_positions": cfg.max_positions,
                    "sizing_mode": cfg.sizing_mode, "risk_per_trade_pct": cfg.risk_per_trade_pct,
                    "max_position_pct": cfg.max_position_pct,
+                   "entry_mode": cfg.entry_mode, "qswing_min_score": cfg.qswing_min_score,
                    "period": cfg.period, "compounding": cfg.compounding,
                    "date_range": bool(cfg.start_date or cfg.end_date),
                    "req_start": cfg.start_date or None, "req_end": cfg.end_date or None,
@@ -1909,6 +1957,125 @@ def run_live_pre_close_scan(current_market_data, cfg=None, asof=None,
     return {"asof": date.strftime("%Y-%m-%d"), "regime_open": regime_open,
             "spy_close": round(spy_close, 2), "n_universe": len(rows),
             "buyable": buyable, "watch": watch}
+
+
+def _qswing_priority_score(rec):
+    """KIRILIM adayları için 0–100 birleşik öncelik skoru (Qullamaggie hiyerarşisi).
+
+    Bileşenler (ağırlık):
+      • RS (göreli güç, 60g SPY'a karşı)        45  — birincil lider sinyali
+      • 52H yakınlık (dirençsizlik)             20  — zirveye ne kadar yakın
+      • Tazelik (SMA20'ye mesafe, az uzamış)    20  — kovalama değil taze giriş
+      • Risk kalitesi (stop ne kadar sıkı)      15  — düşük risk% → daha iyi R:R
+    Her bileşen 0–1'e normalize edilip ağırlıkla toplanır. Skor mesajda gösterilir
+    ve buyable bu skora göre sıralanır.
+    """
+    def clip(x, lo=0.0, hi=1.0):
+        return lo if x < lo else hi if x > hi else x
+    rs = rec.get("rs") or 0.0
+    d52 = rec.get("dist_52h_pct")
+    d20 = rec.get("dist_sma20_pct")
+    rk = rec.get("risk_pct")
+    rs_c   = clip(rs / 60.0)                                   # RS 60+ = tam puan
+    prox_c = clip(1.0 + (d52 / 10.0)) if d52 is not None else 0.5   # 0%→1, -10%→0
+    fresh_c = clip(1.0 - max(0.0, (d20 - 5.0)) / 20.0) if d20 is not None else 0.5  # ≤%5→1, %25→0
+    risk_c = clip(1.0 - max(0.0, (rk - 3.0)) / 6.0) if rk is not None else 0.5      # ≤%3→1, %9→0
+    score = 45.0 * rs_c + 20.0 * prox_c + 20.0 * fresh_c + 15.0 * risk_c
+    return round(score), {
+        "rs": round(45.0 * rs_c), "near52": round(20.0 * prox_c),
+        "fresh": round(20.0 * fresh_c), "risk": round(15.0 * risk_c),
+    }
+
+
+def run_live_qswing_scan(current_market_data, cfg=None, asof=None,
+                         include_watch=True, held=None):
+    """qswing KIRILIM girişi + Qullamaggie 10g MA trail çıkış — canlı tarama (son bar).
+
+    Kapı (backtest qswing_breakout ile birebir): rejim AÇIK (SPY>SMA200) +
+    Aşama 2 (fiyat > SMA20/50/200, SLOPE200>0) + `qswing_breakout_lb`-gün tepe
+    KIRILIMI + 52H yakınlık + SPY'ı geçen 60g momentum (RS).
+    Çıkış planı: %50 kısmi @ +2R, kalan **10-gün SMA altına KAPANINCA**.
+    İZLE = kapının diğer şartları tamam ama tepeye ≤%3 kala (henüz kırmadı).
+    """
+    cfg = cfg or Config()
+    cfg.entry_mode = "qswing_breakout"
+    cfg.exit_mode = "ma_trail"; cfg.ma_trail_len = 10
+    held = set(held or [])
+    bt = Swing2Backtester(cfg, market=current_market_data)
+    cal = bt.calendar
+    if asof is None:
+        date = cal[-1]
+    else:
+        pos = int(cal.searchsorted(pd.Timestamp(asof), side="right")) - 1
+        date = cal[max(0, pos)]
+    common = bt._common(date)
+    regime_open = bool(common["spy_above_sma200"])
+    spy_close = float(bt.spy.loc[date, "Close"])
+    spy_ret60 = bt.spy.loc[date, "RET60"]
+    lb = cfg.qswing_breakout_lb
+
+    buyable, watch = [], []
+    for sym, df in bt.data.items():
+        if sym in held:
+            continue
+        row = df.loc[date]
+        c = row["Close"]
+        if pd.isna(c):
+            continue
+        pre = (regime_open and not pd.isna(row["SMA200"]) and c > row["SMA200"]
+               and not pd.isna(row["SMA50"]) and c > row["SMA50"]
+               and not pd.isna(row["SMA20"]) and c > row["SMA20"]
+               and not pd.isna(row["SLOPE200"]) and row["SLOPE200"] > 0)
+        if not pre:
+            continue
+        hi52, r60 = row["HIGH52"], row["RET60"]
+        h = row.get(f"HIGH_PRIOR_{lb}")
+        if h is None:
+            h = row.get("HIGH_PRIOR")
+        if pd.isna(h) or pd.isna(hi52) or pd.isna(r60):
+            continue
+        sp = spy_ret60 if not pd.isna(spy_ret60) else 0.0
+        rs = r60 - sp
+        if not (c >= cfg.qswing_near_high * hi52 and r60 > 0 and rs >= cfg.qswing_rs_min):
+            continue
+        if cfg.qswing_vdu_max < 9.0:
+            vdu = row.get("VDU")
+            if vdu is None or pd.isna(vdu) or vdu > cfg.qswing_vdu_max:
+                continue
+        plan = compute_trade_plan(row, cfg)
+        ma10 = row.get("SMA10")
+        dist20 = ((c - row["SMA20"]) / row["SMA20"]) if not pd.isna(row["SMA20"]) else None
+        risk = plan["entry"] - plan["stop"]
+        rec = {
+            "symbol": sym, "sector_etf": SECTOR_MAP.get(sym, "—"),
+            "close": round(float(c), 2),
+            "entry": round(float(plan["entry"]), 2), "stop": round(float(plan["stop"]), 2),
+            "partial_target": round(float(plan["entry"] + 2 * risk), 2),   # %50 kısmi @ +2R
+            "ma10": (round(float(ma10), 2) if ma10 is not None and not pd.isna(ma10) else None),
+            "risk_pct": (round(risk / plan["entry"] * 100, 2) if plan["entry"] else None),
+            "rs": round(float(rs), 1), "ret_3m": round(float(r60), 1),
+            "high40": round(float(h), 2),
+            "dist_52h_pct": round((c / hi52 - 1) * 100, 1),
+            "dist_sma20_pct": (round(dist20 * 100, 1) if dist20 is not None else None),
+            "dist_to_breakout_pct": round((h - c) / c * 100, 2),
+            "breakout_lb": lb,
+            "overext": bool(dist20 is not None and dist20 > 0.25),
+        }
+        rec["score"], rec["score_parts"] = _qswing_priority_score(rec)
+        if c > h and not rec["overext"]:                    # taze, sağlıklı kırılım → AL
+            rec["status"] = "KIRILIM"; buyable.append(rec)
+        elif c > h and rec["overext"]:                      # kırdı ama aşırı uzamış → İZLE'ye düş
+            rec["status"] = "İZLE"; rec["watch_reason"] = "overext"; watch.append(rec)
+        elif (h - c) / c <= 0.03:                           # tepeye ≤%3 kala → İZLE
+            rec["status"] = "İZLE"; rec["watch_reason"] = "near"; watch.append(rec)
+    buyable.sort(key=lambda r: r["score"], reverse=True)
+    # İZLE sıralaması: önce 'tepeye yakın' (kırılıma en yakın), sonra 'aşırı uzamış' (RS güçlü)
+    watch.sort(key=lambda r: (0 if r.get("watch_reason") == "near" else 1,
+                              r["dist_to_breakout_pct"] if r.get("watch_reason") == "near" else -r["rs"]))
+    return {"asof": date.strftime("%Y-%m-%d"), "regime_open": regime_open,
+            "spy_close": round(spy_close, 2), "n_universe": len(bt.data),
+            "buyable": buyable, "watch": (watch if include_watch else []),
+            "breakout_lb": lb}
 
 
 def print_live_scan(res):

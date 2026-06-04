@@ -50,6 +50,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *a, **kw):
         super().__init__(*a, directory=DIRECTORY, **kw)
 
+    def end_headers(self):
+        # Tarayıcı eski HTML/JS'i önbellekten çalıştırmasın diye no-cache.
+        self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Expires", "0")
+        super().end_headers()
+
     def do_GET(self):
         if self.path == "/" or self.path == "":
             self.path = "/backtest.html"
@@ -58,6 +65,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self.handle_qswing_scan()
         if self.path.startswith("/api/qswing"):
             return self.handle_qswing()
+        if self.path.startswith("/api/history/"):
+            return self.handle_history()
         return super().do_GET()
 
     def do_POST(self):
@@ -134,6 +143,33 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             traceback.print_exc()
             self.send_html(502, f"<div style='font-family:sans-serif;color:#ff5d6c;background:#0d1218;padding:24px'>"
                                 f"<h3>qswing tarama hatası</h3><p>{e}</p></div>")
+
+    # ---- /api/history/<SYM>?range=2y  → işlem grafiği için günlük OHLCV ----
+    def handle_history(self):
+        parts = self.path.split("?", 1)
+        sym = urllib.parse.unquote(parts[0].split("/api/history/", 1)[1]).upper().strip()
+        q = urllib.parse.parse_qs(parts[1]) if len(parts) > 1 else {}
+        rng = (q.get("range", ["2y"])[0] or "2y")
+        if not sym:
+            return self.send_json(400, {"error": "symbol gerekli"})
+        try:
+            import swing2_backtest as s2
+            key = s2._fmp_key()
+            if not key:
+                return self.send_json(502, {"error": "FMP_API_KEY yok"})
+            start = s2._period_to_start(rng, 10)          # backtest dönemini kapsayacak kadar geri
+            df = s2._fmp_daily_one(sym, key, start, None)  # motorla AYNI veri kaynağı (FMP /stable)
+            if df is None or df.empty:
+                return self.send_json(404, {"error": f"{sym} için veri yok"})
+            bars = [{"date": idx.strftime("%Y-%m-%d"),
+                     "open": float(o), "high": float(h), "low": float(lo),
+                     "close": float(c), "volume": float(v)}
+                    for idx, (o, h, lo, c, v) in zip(df.index, df[s2.OHLCV].itertuples(index=False))]
+            self.send_json(200, {"symbol": sym, "bars": bars})
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            self.send_json(502, {"error": str(e)})
 
     # ---- yardımcılar ----
     def send_json(self, code, data):
