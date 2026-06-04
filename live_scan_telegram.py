@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """qswing KIRILIM canlı tarayıcı → TELEGRAM (grafik + H/R detayı).
-Strateji: Qullamaggie 40-gün tepe KIRILIM girişi + 10-gün MA trail çıkış.
+Strateji: Qullamaggie 40-gün tepe KIRILIM girişi + 8/21-EMA hibrit çıkış
+(%50 8-EMA altına kapanınca, kalan %50 21-EMA altına kapanınca).
 Veri: FMP /stable, 5 yıl (sağlayıcı varsayılan-azamisi → sağlam indikatör).
 
 Kapanışa ~15 dk kala (15:45 ET) cron ile çağrılır:
   1) canlı günlük bar (son bar = gün-içi snapshot = 'kapanış' varsayımı)
   2) run_live_qswing_scan → KIRILIM + İZLE (backtest qswing_breakout ile aynı kapı)
-  3) Telegram'a: özet + her KIRILIM için mum grafiği (giriş/stop/10g-MA) + H/R detayı
+  3) Telegram'a: özet + her KIRILIM için mum grafiği (giriş/stop/8-EMA/21-EMA) + H/R detayı
 
 Gizli (~/.portfolio_keys.json | env): TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, FMP_API_KEY
 Açık pozisyonlar (ops.): ~/.swing_held.json → ["AAPL","MSFT"]  (KIRILIM listesinden düşülür)
