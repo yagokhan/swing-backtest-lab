@@ -83,12 +83,11 @@ def draw_chart(sym, df, c, asof, path, nbars=50):
         h = abs(r["Close"] - r["Open"]) or (r["Close"] * 0.001)
         ax.add_patch(Rectangle((i - 0.3, min(r["Open"], r["Close"])), 0.6, h, color=col, zorder=3))
     x = range(len(d))
-    if "SMA10" in d: ax.plot(x, d["SMA10"].values, color="#a855f7", lw=1.6, label="10g MA (trail)")
-    if "SMA20" in d: ax.plot(x, d["SMA20"].values, color="#2563eb", lw=1.0, label="SMA20")
+    if "EMA8" in d:  ax.plot(x, d["EMA8"].values,  color="#a855f7", lw=1.7, label="8-EMA (%50 çıkış)")
+    if "EMA21" in d: ax.plot(x, d["EMA21"].values, color="#0891b2", lw=1.7, label="21-EMA (runner çıkış)")
     if "SMA50" in d: ax.plot(x, d["SMA50"].values, color="#f59e0b", lw=1.0, label="SMA50")
     ax.axhline(c["entry"], color="#3b82f6", ls="--", lw=1.2, label=f"Giriş {c['entry']}")
     ax.axhline(c["stop"], color="#dc2626", ls="--", lw=1.2, label=f"Stop {c['stop']}")
-    ax.axhline(c["partial_target"], color="#16a34a", ls="--", lw=1.0, label=f"+2R kısmi {c['partial_target']}")
     if c.get("high40"):
         ax.axhline(c["high40"], color="#8a95ad", ls=":", lw=1.0, label=f"{c['breakout_lb']}g tepe {c['high40']}")
     idx = list(d.index)
@@ -130,8 +129,9 @@ def candidate_caption(c, watch=False):
            f"{' aşıldı' if not watch else ''} · 52H'ye %{c['dist_52h_pct']} · "
            f"SMA20'ye %{c['dist_sma20_pct']}\n"
            f"⚖️ RS <b>+{c['rs']}</b> (60g · SPY'a karşı) · 3a getiri %{c['ret_3m']}\n"
-           f"📤 Çıkış: %50 kısmi @ +2R (<code>${c['partial_target']}</code>) · "
-           f"kalan <b>10g MA</b> (<code>${c['ma10']}</code>) altına KAPANINCA")
+           f"📤 Çıkış (8/21-EMA hibrit): %50 → <b>8-EMA</b> "
+           f"(<code>${c.get('ema8','—')}</code>) altına KAPANINCA · "
+           f"kalan %50 → <b>21-EMA</b> (<code>${c.get('ema21','—')}</code>) altına KAPANINCA")
     if c.get("overext"):
         cap += (f"\n⚠️ <b>AŞIRI UZAMIŞ</b> (SMA20'ye %{c['dist_sma20_pct']}) — "
                 f"parabolik/climax, geri çekilmeyi bekle.")
@@ -161,7 +161,8 @@ def summary_text(res, demo=False):
     if over:
         w = " · ".join(f"{html.escape(r['symbol'])}(SMA20'ye %{r['dist_sma20_pct']})" for r in over[:10])
         L.append(f"⚠️ <b>İZLE — kırdı ama AŞIRI UZAMIŞ:</b> {w}")
-    L.append("\n<i>Strateji: Qullamaggie 40g kırılım girişi · 10g MA trail çıkış. "
+    L.append("\n<i>Strateji: Qullamaggie 40g kırılım girişi · 8/21-EMA hibrit çıkış "
+             "(%50 8-EMA, kalan 21-EMA altına kapanınca). "
              "Sinyal 15:45 anlık fiyatına göre — geçici. Eğitim amaçlı.</i>")
     return "\n".join(L)
 

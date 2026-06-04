@@ -1989,17 +1989,18 @@ def _qswing_priority_score(rec):
 
 def run_live_qswing_scan(current_market_data, cfg=None, asof=None,
                          include_watch=True, held=None):
-    """qswing KIRILIM girişi + Qullamaggie 10g MA trail çıkış — canlı tarama (son bar).
+    """qswing KIRILIM girişi + 8/21-EMA HİBRİT çıkış — canlı tarama (son bar).
 
     Kapı (backtest qswing_breakout ile birebir): rejim AÇIK (SPY>SMA200) +
     Aşama 2 (fiyat > SMA20/50/200, SLOPE200>0) + `qswing_breakout_lb`-gün tepe
     KIRILIMI + 52H yakınlık + SPY'ı geçen 60g momentum (RS).
-    Çıkış planı: %50 kısmi @ +2R, kalan **10-gün SMA altına KAPANINCA**.
+    Çıkış planı (HYBRID_TREND): %50 → **8-EMA altına KAPANINCA**,
+    kalan %50 (runner) → **21-EMA altına KAPANINCA**. Sabit +2R hedefi YOK.
     İZLE = kapının diğer şartları tamam ama tepeye ≤%3 kala (henüz kırmadı).
     """
     cfg = cfg or Config()
     cfg.entry_mode = "qswing_breakout"
-    cfg.exit_mode = "ma_trail"; cfg.ma_trail_len = 10
+    cfg.exit_mode = "tp_grid"; cfg.tp_mode = "HYBRID_TREND"; cfg.ma_confirm_close = True
     held = set(held or [])
     bt = Swing2Backtester(cfg, market=current_market_data)
     cal = bt.calendar
@@ -2044,14 +2045,17 @@ def run_live_qswing_scan(current_market_data, cfg=None, asof=None,
                 continue
         plan = compute_trade_plan(row, cfg)
         ma10 = row.get("SMA10")
+        ema8 = row.get("EMA8"); ema21 = row.get("EMA21")
         dist20 = ((c - row["SMA20"]) / row["SMA20"]) if not pd.isna(row["SMA20"]) else None
         risk = plan["entry"] - plan["stop"]
         rec = {
             "symbol": sym, "sector_etf": SECTOR_MAP.get(sym, "—"),
             "close": round(float(c), 2),
             "entry": round(float(plan["entry"]), 2), "stop": round(float(plan["stop"]), 2),
-            "partial_target": round(float(plan["entry"] + 2 * risk), 2),   # %50 kısmi @ +2R
+            "partial_target": round(float(plan["entry"] + 2 * risk), 2),   # referans (+2R) — hibride zorunlu değil
             "ma10": (round(float(ma10), 2) if ma10 is not None and not pd.isna(ma10) else None),
+            "ema8": (round(float(ema8), 2) if ema8 is not None and not pd.isna(ema8) else None),    # %50 çıkış (hibrit)
+            "ema21": (round(float(ema21), 2) if ema21 is not None and not pd.isna(ema21) else None),  # runner çıkışı (hibrit)
             "risk_pct": (round(risk / plan["entry"] * 100, 2) if plan["entry"] else None),
             "rs": round(float(rs), 1), "ret_3m": round(float(r60), 1),
             "high40": round(float(h), 2),
