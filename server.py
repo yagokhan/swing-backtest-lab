@@ -150,6 +150,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         sym = urllib.parse.unquote(parts[0].split("/api/history/", 1)[1]).upper().strip()
         q = urllib.parse.parse_qs(parts[1]) if len(parts) > 1 else {}
         rng = (q.get("range", ["2y"])[0] or "2y")
+        frm = (q.get("from", [""])[0] or "").strip()   # ISO: işlemin gerçek penceresi (range'i ezer)
+        to = (q.get("to", [""])[0] or "").strip()
         if not sym:
             return self.send_json(400, {"error": "symbol gerekli"})
         try:
@@ -157,8 +159,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             key = s2._fmp_key()
             if not key:
                 return self.send_json(502, {"error": "FMP_API_KEY yok"})
-            start = s2._period_to_start(rng, 10)          # backtest dönemini kapsayacak kadar geri
-            df = s2._fmp_daily_one(sym, key, start, None)  # motorla AYNI veri kaynağı (FMP /stable)
+            # from/to verilirse onu kullan (işlem tarihlerini garanti kapsar); yoksa period'tan türet
+            start = frm if frm else s2._period_to_start(rng, 10)
+            dl_end = to if to else None
+            df = s2._fmp_daily_one(sym, key, start, dl_end)  # motorla AYNI veri kaynağı (FMP /stable)
             if df is None or df.empty:
                 return self.send_json(404, {"error": f"{sym} için veri yok"})
             bars = [{"date": idx.strftime("%Y-%m-%d"),

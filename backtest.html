@@ -328,7 +328,11 @@ async function showTrade(idx){
   $('bt-trade-chart-meta').textContent='OHLCV yükleniyor…';
   card.scrollIntoView({behavior:'smooth',block:'nearest'});
   try{
-    const r=await fetch(`/api/history/${encodeURIComponent(t.symbol)}?range=${encodeURIComponent(btPeriodBT)}`);
+    // Grafiği işlemin GERÇEK tarih penceresi etrafında çek (period değil) — eski/el-ile
+    // tarihli backtest'lerde işaretlerin yanlış yere düşmesini önler.
+    const shift=(iso,days)=>{ const d=new Date(iso+'T00:00:00Z'); d.setUTCDate(d.getUTCDate()+days); return d.toISOString().slice(0,10); };
+    const frm=shift(t.entry_date,-60), to=shift(t.exit_date,35);
+    const r=await fetch(`/api/history/${encodeURIComponent(t.symbol)}?from=${frm}&to=${to}`);
     const data=await r.json();
     if(!r.ok||data.error||!data.bars) throw new Error(data.error||('HTTP '+r.status));
     const tp=t.partial_price!=null?`TP ${t.partial_date} $${F(t.partial_price)} (${Fp(t.partial_pct)}, %50) → `:'';
