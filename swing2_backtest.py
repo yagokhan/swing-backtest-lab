@@ -368,6 +368,7 @@ class Position:
     stop: float; target: float; shares: float; cost: float; score: int
     risk0: float; partial_done: bool = False
     legs: list = field(default_factory=list)   # 'split' çıkışta iki yarı-bacak (½/½)
+    atr_peak: float = 0.0                      # 'atr_full' çıkış: şamdan tepe (en yüksek HIGH)
 
 
 @dataclass
@@ -1116,6 +1117,15 @@ class Swing2Backtester:
             if cfg.exit_mode == "split":
                 self._manage_split(sym, pos, date, row); continue
             # ===== /v6 =====
+
+            # ===== v6b: TAM POZİSYON ATR-TRAIL (şamdan; partial yok) =====
+            if cfg.exit_mode == "atr_full":
+                if pos.atr_peak <= 0: pos.atr_peak = pos.entry
+                if not pd.isna(high): pos.atr_peak = max(pos.atr_peak, high)
+                if not pd.isna(atr_v) and not pd.isna(close) and close < pos.atr_peak - cfg.atr_trail_mult * atr_v:
+                    self._close(sym, date, close, "ATR", slip=self._stop_slip)
+                continue
+            # ===== /v6b =====
 
             # ===== v4: 8-MA TRAILING ÇIKIŞ MODU =====
             if cfg.exit_mode == "ma_trail":
@@ -1881,10 +1891,14 @@ def run_backtest_api(params: dict) -> dict:
         try: return float(max(lo, min(hi, v)))
         except (TypeError, ValueError): return d
     es = str(params.get("exit_strategy", "champion")).lower()
-    if es in ("champion", "optimized", "atr_trail"):
+    if es in ("champion", "optimized"):
         cfg.exit_mode = "optimized"          # FMP kalibrasyon şampiyonu (B): ATR-trail 2.5× · strict BE
         cfg.partial_tp = True; cfg.partial_pct = 0.5; cfg.partial_rr = 2.0
         cfg.trailing_stop = True; cfg.atr_trail_mult = 2.5; cfg.breakeven_mode = "strict_entry"
+    elif es == "atr_trail":
+        cfg.exit_mode = "atr_full"           # tam pozisyon SAF ATR-trail (şamdan, partial yok)
+        cfg.atr_trail_mult = _clf(params.get("atr_trail_mult", 2.5), 0.5, 6.0, 2.5)
+        cfg.partial_tp = False; cfg.trailing_stop = False
     elif es in ("ma_trail", "qullamaggie", "ma10"):
         cfg.exit_mode = "ma_trail"           # Qullamaggie: N-gün MA altına kapanınca çık
         cfg.ma_trail_len = int(_clf(params.get("ma_trail_len", 10), 3, 50, 10))
