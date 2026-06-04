@@ -162,7 +162,12 @@ th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:
 
     <div id="cmp-results" class="hide">
       <div class="card" title="Her satır bir giriş×çıkış kombinasyonu; ROI'ye göre sıralı, en iyi satır yeşil vurgulu."><div class="kicker" style="margin-bottom:8px;">Karşılaştırma sonuçları (ROI'ye göre)</div><div class="scroll"><table id="cmp-table"></table></div></div>
-      <div class="card" title="Her kombinasyonun sermaye eğrisi üst üste (gri kesik = SPY). Aynı evren/dönem → eğriler hizalı."><div class="kicker" style="margin-bottom:8px;">Equity eğrileri</div><div style="position:relative;height:360px;width:100%;"><canvas id="cmpchart"></canvas></div></div>
+      <div class="card" title="Her kombinasyonun sermaye eğrisi üst üste (gri kesik = SPY). Aynı evren/dönem → eğriler hizalı.">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <div class="kicker">Equity eğrileri</div>
+          <label class="chk" style="font-size:12px;cursor:pointer;" title="Logaritmik Y ekseni: eşit yüzde değişimleri eşit dikey mesafe gösterir → kombinasyonların bileşik büyümesini daha adil kıyaslatır."><input type="checkbox" id="cmp-log" onchange="drawCmpChart()"> Logaritmik</label>
+        </div>
+        <div style="position:relative;height:360px;width:100%;"><canvas id="cmpchart"></canvas></div></div>
     </div>
 
     <div id="bt-results" class="hide">
@@ -486,7 +491,7 @@ function renderBacktest(d){
 }
 
 // ---- karşılaştırma ----
-let cmpChart=null;
+let cmpChart=null, cmpLabels=[], cmpDs=[];
 const EXLBL={champion:'ATR-trail',ma_trail:'MA-trail 10g',rr_based:'RR (8-EMA)',momentum:'RSI (8-EMA)',atr_climax:'Climax (8-EMA)',hybrid:'Hibrit (8-EMA)',hybrid2:'Hibrit 2 (BE)'};
 const CMPCOL=['#27c281','#5aa2ff','#f5b14c','#ff5d6c','#a78bfa','#34d399','#fb923c','#22d3ee','#f472b6','#a3e635','#e879f9','#facc15'];
 async function compareBacktest(){
@@ -524,15 +529,25 @@ function renderCompare(out){
       `<td class="${m.roi>=0?'pos':'neg'}"><b>${Fp(m.roi)}</b></td><td class="${m.spy_roi>=0?'pos':'neg'}">${Fp(m.spy_roi)}</td>`+
       `<td class="${m.alpha>=0?'pos':'neg'}">${Fp(m.alpha)}</td><td class="neg">${Fp(m.max_dd)}</td>`+
       `<td>${m.win_rate==null?'—':m.win_rate+'%'}</td><td>${F(m.profit_factor)}</td><td>${m.trades}</td></tr>`;}).join('')+'</tbody>';
-  const labels=best.eq.map(e=>e.date);
-  const ds=out.map((r,i)=>({label:r.en+' · '+EXLBL[r.ex],data:r.eq.map(e=>e.equity),borderColor:CMPCOL[i%CMPCOL.length],borderWidth:1.5,pointRadius:0,tension:.1,spanGaps:true}));
-  ds.push({label:'SPY',data:best.eq.map(e=>e.spy),borderColor:'#8a95ad',borderWidth:1,pointRadius:0,borderDash:[4,3],tension:.1,spanGaps:true});
-  if(cmpChart) cmpChart.destroy();
-  cmpChart=new Chart($('cmpchart'),{type:'line',data:{labels,datasets:ds},
-    options:{responsive:true,maintainAspectRatio:false,interaction:{intersect:false,mode:'index'},
-      plugins:{legend:{labels:{color:'#8a95ad',boxWidth:12,font:{size:11}}}},
-      scales:{x:{ticks:{color:'#8a95ad',maxTicksLimit:8,maxRotation:0,autoSkip:true},grid:{color:'#1c2531'}},y:{ticks:{color:'#8a95ad'},grid:{color:'#1c2531'}}}}});
+  cmpLabels=best.eq.map(e=>e.date);
+  cmpDs=out.map((r,i)=>({label:r.en+' · '+EXLBL[r.ex],data:r.eq.map(e=>e.equity),borderColor:CMPCOL[i%CMPCOL.length],borderWidth:1.5,pointRadius:0,tension:.1,spanGaps:true}));
+  cmpDs.push({label:'SPY',data:best.eq.map(e=>e.spy),borderColor:'#8a95ad',borderWidth:1,pointRadius:0,borderDash:[4,3],tension:.1,spanGaps:true});
+  drawCmpChart();
   $('cmp-results').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+function drawCmpChart(){
+  if(!cmpLabels.length) return;
+  const logEl=$('cmp-log'), log = logEl && logEl.checked;
+  const yfmt = v => '$'+(v>=1000? (v/1000).toFixed(0)+'k' : v.toFixed(0));
+  if(cmpChart) cmpChart.destroy();
+  cmpChart=new Chart($('cmpchart'),{type:'line',data:{labels:cmpLabels,datasets:cmpDs},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{intersect:false,mode:'index'},
+      plugins:{legend:{labels:{color:'#8a95ad',boxWidth:12,font:{size:11}}},
+        tooltip:{callbacks:{label:c=>c.dataset.label+': $'+Math.round(c.parsed.y).toLocaleString('en-US')}}},
+      scales:{x:{ticks:{color:'#8a95ad',maxTicksLimit:8,maxRotation:0,autoSkip:true},grid:{color:'#1c2531'}},
+              y:{type: log?'logarithmic':'linear',
+                 ticks:{color:'#8a95ad', callback:yfmt},grid:{color:'#1c2531'}}}}});
 }
 
 // qswing
