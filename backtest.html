@@ -170,7 +170,12 @@ th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:
         <div class="muted" id="bt-cfgline" style="font-size:12px;margin-bottom:10px;" title="Evren · tarih · giriş · çıkış · boyutlandırma özeti"></div>
         <div class="mcards" id="bt-metrics"></div>
       </div>
-      <div class="card" title="Strateji sermaye eğrisi (yeşil) vs SPY (mavi kesik), zaman içinde."><div style="position:relative;height:320px;width:100%;"><canvas id="eqchart"></canvas></div></div>
+      <div class="card" title="Strateji sermaye eğrisi (yeşil) vs SPY (mavi kesik), zaman içinde.">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <div class="kicker">Sermaye eğrisi</div>
+          <label class="chk" style="font-size:12px;cursor:pointer;" title="Logaritmik Y ekseni: eşit yüzde değişimleri eşit dikey mesafe gösterir → bileşik büyümeyi ve erken/küçük sermaye dönemlerini daha adil okutur."><input type="checkbox" id="eq-log" onchange="renderEqChart()"> Logaritmik</label>
+        </div>
+        <div style="position:relative;height:320px;width:100%;"><canvas id="eqchart"></canvas></div></div>
       <div class="card" title="İşlemlerin nasıl kapandığının dağılımı: TP=hedef, Kısmi=kısmi kâr, Trail=süren stop, Stop=ilk stop, MA8=MA altı kapanış, Gün-sonu."><div class="kicker" style="margin-bottom:8px;">Çıkış dağılımı</div><div id="bt-outcomes" class="mono"></div></div>
       <div class="card" id="bt-grid-wrap" style="display:none;" title="Grid-search açıkken: taranan parametre kombinasyonları, ROI'ye göre."><div class="kicker" style="margin-bottom:8px;">Grid-Search (ROI'ye göre)</div><div class="scroll"><table id="bt-grid"></table></div></div>
       <div class="card" title="Yıl × ay getiri ısı tablosu; sağda yıllık toplam."><div class="kicker" style="margin-bottom:8px;">Aylık getiri (%)</div><div class="scroll"><table id="bt-monthly"></table></div></div>
@@ -288,7 +293,22 @@ function buildPayload(){
   return p;
 }
 
-let eqChart=null;
+let eqChart=null, eqLabels=[], eqStrat=[], eqSpy=[];
+function renderEqChart(){
+  if(!eqLabels.length) return;
+  const logEl=$('eq-log'), log = logEl && logEl.checked;
+  if(eqChart) eqChart.destroy();
+  const yfmt = v => '$'+(v>=1000? (v/1000).toFixed(0)+'k' : v.toFixed(0));
+  eqChart=new Chart($('eqchart'),{type:'line',data:{labels:eqLabels,datasets:[
+    {label:'Strateji',data:eqStrat,borderColor:'#27c281',borderWidth:1.6,pointRadius:0,tension:.1,spanGaps:true},
+    {label:'SPY',data:eqSpy,borderColor:'#5aa2ff',borderWidth:1.2,pointRadius:0,tension:.1,borderDash:[4,3],spanGaps:true}]},
+    options:{responsive:true,maintainAspectRatio:false,interaction:{intersect:false,mode:'index'},
+      plugins:{legend:{labels:{color:'#8a95ad'}},
+        tooltip:{callbacks:{label:c=>c.dataset.label+': $'+Math.round(c.parsed.y).toLocaleString('en-US')}}},
+      scales:{x:{ticks:{color:'#8a95ad',maxTicksLimit:8,maxRotation:0,autoSkip:true},grid:{color:'#1c2531'}},
+              y:{type: log?'logarithmic':'linear',
+                 ticks:{color:'#8a95ad', callback:yfmt},grid:{color:'#1c2531'}}}}});
+}
 const F=(x,d=2)=> (x==null||isNaN(x))?'—':Number(x).toLocaleString('tr-TR',{minimumFractionDigits:d,maximumFractionDigits:d});
 const Fp=(x,d=1)=> (x==null||isNaN(x))?'—':((x>=0?'+':'')+Number(x).toLocaleString('tr-TR',{minimumFractionDigits:d,maximumFractionDigits:d})+'%');
 
@@ -432,16 +452,9 @@ function renderBacktest(d){
     ['Son $', '$'+F(m.final,0), cls(m.final-m.initial), 'Dönem sonu sermaye (başlangıç $100.000).'],
   ].map(([l,v,k,t])=>`<div class="mc" title="${t}"><div class="v ${k}">${v}</div><div class="l">${l}</div></div>`).join('');
 
-  // equity chart
-  const labels=d.equity.map(e=>e.date), eq=d.equity.map(e=>e.equity), sp=d.equity.map(e=>e.spy);
-  if(eqChart) eqChart.destroy();
-  eqChart=new Chart($('eqchart'),{type:'line',data:{labels,datasets:[
-    {label:'Strateji',data:eq,borderColor:'#27c281',borderWidth:1.6,pointRadius:0,tension:.1,spanGaps:true},
-    {label:'SPY',data:sp,borderColor:'#5aa2ff',borderWidth:1.2,pointRadius:0,tension:.1,borderDash:[4,3],spanGaps:true}]},
-    options:{responsive:true,maintainAspectRatio:false,interaction:{intersect:false,mode:'index'},
-      plugins:{legend:{labels:{color:'#8a95ad'}}},
-      scales:{x:{ticks:{color:'#8a95ad',maxTicksLimit:8,maxRotation:0,autoSkip:true},grid:{color:'#1c2531'}},
-              y:{ticks:{color:'#8a95ad'},grid:{color:'#1c2531'}}}}});
+  // equity chart — veriyi sakla, renderEqChart toggle'a göre lineer/log çizer
+  eqLabels=d.equity.map(e=>e.date); eqStrat=d.equity.map(e=>e.equity); eqSpy=d.equity.map(e=>e.spy);
+  renderEqChart();
 
   const OTIP={tp:'Nihai hedefe (TP) ulaşıp kapandı',partial:'Kısmi kâr alındı (örn. %50 @ +2R)',trail:'Süren (trailing) stop ile çıktı',stop:'İlk stop tetiklendi (zarar kesildi)',eod:'Test sonunda hâlâ açıktı; gün-sonu kapatıldı'};
   $('bt-outcomes').innerHTML = ['tp','partial','trail','stop','eod'].map(k=>{
