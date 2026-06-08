@@ -173,6 +173,16 @@ class Config:
     split_b_param: float = 0.0
     split_ratio: float = 0.5           # A yarısının payı (kalan B'ye)
 
+    # --- v7: ATR-REJİM (oynaklık/testere kilidi + saf ATR çıkış) ---
+    # Rejim kilidi: SPY 20g ATR% (= SPY_ATR20/SPY_Close*100) eşiği aşarsa piyasa aşırı
+    # çalkantılı/testere kabul edilir → skor ne olursa olsun YENİ İŞLEM AÇILMAZ.
+    # (opt-in: varsayılan kapalı; mevcut çıkış modlarının davranışını DEĞİŞTİRMEZ.)
+    regime_atr_filter: bool = False    # True → SPY oynaklık kilidi aktif
+    regime_atr_threshold: float = 1.5  # SPY ATR20% tavanı (%); ör. 1.5 veya 1.8 — aşılırsa kilitli
+    # exit_mode='atr_regime' (saf ATR: sabit kâr-al / zarar-kes, trailing/partial YOK):
+    atr_target_mult: float = 3.0       # sabit hedef = entry + mult × ATR0  (kâr-al)
+    risk_per_trade_usd: float = 1000.0 # sabit-dolar risk: lot = 1000 / (entry − ATR-stop)
+
     out_dir: str = "swing2_out"
     trades_csv: str = "trades.csv"
     equity_csv: str = "equity.csv"
@@ -225,6 +235,11 @@ def add_indicators(df, cfg):
     out["SMA50"] = sma(c, 50); out["SMA200"] = sma(c, 200)
     out["SLOPE200"] = slope_pct(out["SMA200"], cfg.slope_window)
     out["ATR"] = atr(out, cfg.atr_period); out["ATR_PCT"] = out["ATR"] / c * 100
+    # ATR-REJİM filtresi (v7): 20g BASİT TR ortalaması → oynaklık/testere metriği (SPY için kullanılır)
+    _pc = c.shift(1)
+    _tr20 = pd.concat([out["High"] - out["Low"], (out["High"] - _pc).abs(), (out["Low"] - _pc).abs()], axis=1).max(axis=1)
+    out["ATR20"] = _tr20.rolling(20).mean()
+    out["ATR20_PCT"] = out["ATR20"] / c * 100      # = (SPY_ATR_20 / SPY_Close) * 100
     out["RSI"] = rsi(c, 14)
     out["MACD"], out["MACD_SIG"], out["MACD_HIST"] = macd(c)
     out["STOCH_K"], out["STOCH_D"] = stochastic(out)
@@ -1078,9 +1093,19 @@ class Swing2Backtester:
     # ---- piyasa bağlamı --------------------------------------------------
     def _common(self, date):
         s = self.spy.loc[date]
+        _ratr = s.get("ATR20_PCT")   # eski disk-cache'lerde olmayabilir → güvenli erişim
         return {"spy_above_sma200": bool((not pd.isna(s["SMA200"])) and s["Close"] > s["SMA200"]),
                 "spy_atr_pct": None if pd.isna(s["ATR_PCT"]) else float(s["ATR_PCT"]),
+                "spy_regime_atr_pct": None if (_ratr is None or pd.isna(_ratr)) else float(_ratr),
                 "spy_ret60": None if pd.isna(s["RET60"]) else float(s["RET60"])}
+
+    def _vol_regime_locked(self, common):
+        """ATR-REJİM kilidi (hard-switch): SPY 20g ATR% eşiği aşarsa piyasa aşırı
+        çalkantılı/testere → YENİ İŞLEM AÇILMAZ. Filtre kapalıysa (vars.) daima False."""
+        if not self.cfg.regime_atr_filter:
+            return False
+        v = common.get("spy_regime_atr_pct")
+        return v is not None and v > self.cfg.regime_atr_threshold
 
     def _mctx(self, sym, row, date, common):
         etf = SECTOR_MAP.get(sym); sec = None
@@ -1126,6 +1151,19 @@ class Swing2Backtester:
                     self._close(sym, date, close, "ATR", slip=self._stop_slip)
                 continue
             # ===== /v6b =====
+
+            # ===== v7: ATR-REJİM ÇIKIŞI (saf ATR — sabit kâr-al / zarar-kes, trailing YOK) =====
+            # Stop/target girişte ATR0'dan SABİTLENDİ (pos.stop/pos.target). Pozisyon bölünmez;
+            # fiyat ya sabit hedefe ya sabit stopa değene kadar beklenir (gürültüden uzak).
+            if cfg.exit_mode == "atr_regime":
+                if low <= pos.stop:                                    # zarar-kes (gün-içi market)
+                    fill = op if (cfg.gap_fills and not pd.isna(op) and op < pos.stop) else pos.stop
+                    self._close(sym, date, fill, "STOP", slip=self._stop_slip); continue
+                if high >= pos.target:                                 # kâr-al (gün-içi limit)
+                    fill = op if (cfg.gap_fills and not pd.isna(op) and op > pos.target) else pos.target
+                    self._close(sym, date, fill, "TARGET", slip=self._slip)
+                continue
+            # ===== /v7 =====
 
             # ===== v4: 8-MA TRAILING ÇIKIŞ MODU =====
             if cfg.exit_mode == "ma_trail":
@@ -1393,7 +1431,18 @@ class Swing2Backtester:
         # ---- Pozisyon boyutlandırma ----
         eq = self._equity(date) if cfg.compounding else cfg.initial_capital
         cap = eq * cfg.max_position_pct                   # poz tavanı (her iki modda)
-        if cfg.sizing_mode == "risk":
+        if cfg.exit_mode == "atr_regime":
+            # SABİT-DOLAR RİSK: lot = 1000$ / (giriş − ATR-stop mesafesi); stop = entry − atr_stop_mult×ATR0
+            atr0 = row["ATR"]
+            a_stop = (fill - cfg.atr_stop_mult * atr0) if (not pd.isna(atr0) and atr0 > 0) else plan["stop"]
+            if a_stop >= fill: a_stop = plan["stop"]
+            rps = fill - a_stop
+            if rps <= 0: return False
+            shares = cfg.risk_per_trade_usd / rps
+            size = shares * fill + cfg.commission_per_trade
+            if size > cap:                                # poz tavanını aşarsa kırp (aşırı kaldıraç koruması)
+                size = cap; shares = (size - cfg.commission_per_trade) / fill
+        elif cfg.sizing_mode == "risk":
             # ilk stop referansı: 8-EMA modlarında 8-EMA, diğerlerinde plan stop (LOW10/ATR)
             sref = row["EMA8"] if cfg.exit_mode == "tp_grid" else plan["stop"]
             if pd.isna(sref) or sref >= fill: sref = plan["stop"]
@@ -1410,6 +1459,13 @@ class Swing2Backtester:
         self.cash -= size
         pos = Position(sym, date, fill, plan["stop"], plan["target"],
                        shares, size, score, risk0=fill - plan["stop"])
+        if cfg.exit_mode == "atr_regime":
+            # girişte SABİT ATR seviyeleri (ATR0 = giriş barı ATR'si, nedensel)
+            atr0 = row["ATR"]
+            if not pd.isna(atr0) and atr0 > 0:
+                pos.stop = fill - cfg.atr_stop_mult * atr0
+                pos.target = fill + cfg.atr_target_mult * atr0
+                pos.risk0 = fill - pos.stop
         if cfg.exit_mode == "split":
             ra = cfg.split_ratio
             sa, ca = shares * ra, size * ra
@@ -1442,7 +1498,9 @@ class Swing2Backtester:
         for date in trading:
             self._manage(date)
             common = self._common(date)
-            if common["spy_above_sma200"] and len(self.positions) < cfg.max_positions and self.cash >= self._size(date):
+            # ATR-REJİM kilidi: SPY oynaklığı eşiği aşarsa (testere) bu bar YENİ alım YOK
+            if (common["spy_above_sma200"] and not self._vol_regime_locked(common)
+                    and len(self.positions) < cfg.max_positions and self.cash >= self._size(date)):
                 cands = []
                 qmode = cfg.entry_mode == "qswing_breakout"
                 spy_ret60 = self.spy.loc[date, "RET60"] if qmode else None
@@ -1890,6 +1948,9 @@ def run_backtest_api(params: dict) -> dict:
     def _clf(v, lo, hi, d):  # float clamp
         try: return float(max(lo, min(hi, v)))
         except (TypeError, ValueError): return d
+    # ATR-REJİM oynaklık filtresi: her çıkışta opt-in (UI). 'atr_regime' çıkışı ayrıca zorlar.
+    cfg.regime_atr_filter = bool(params.get("regime_atr_filter", False))
+    cfg.regime_atr_threshold = _clf(params.get("regime_atr_threshold", 1.5), 0.3, 5.0, 1.5)
     es = str(params.get("exit_strategy", "champion")).lower()
     if es in ("champion", "optimized"):
         cfg.exit_mode = "optimized"          # FMP kalibrasyon şampiyonu (B): ATR-trail 2.5× · strict BE
@@ -1899,6 +1960,17 @@ def run_backtest_api(params: dict) -> dict:
         cfg.exit_mode = "atr_full"           # tam pozisyon SAF ATR-trail (şamdan, partial yok)
         cfg.atr_trail_mult = _clf(params.get("atr_trail_mult", 2.5), 0.5, 6.0, 2.5)
         cfg.partial_tp = False; cfg.trailing_stop = False
+    elif es in ("atr_regime", "atr-regime", "regime"):
+        # SAF ATR (sabit kâr-al / zarar-kes, trailing YOK) + sabit-dolar risk + SPY oynaklık kilidi
+        cfg.exit_mode = "atr_regime"
+        cfg.partial_tp = False; cfg.trailing_stop = False
+        cfg.regime_atr_filter = True         # bu modda oynaklık kilidi DAİMA açık (hard-switch)
+        cfg.atr_stop_mult = _clf(params.get("atr_stop_mult", 1.5), 0.5, 5.0, 1.5)
+        cfg.atr_target_mult = _clf(params.get("atr_target_mult", 3.0), 0.5, 10.0, 3.0)
+        cfg.risk_per_trade_usd = _clf(params.get("risk_per_trade_usd", 1000.0), 50.0, 100_000.0, 1000.0)
+        # sabit-dolar risk gerçekten bağlasın diye konsantrasyon tavanını gevşet (yine de güvenlik sınırı)
+        if params.get("max_position_pct") is None:
+            cfg.max_position_pct = 0.5
     elif es in ("ma_trail", "qullamaggie", "ma10"):
         cfg.exit_mode = "ma_trail"           # Qullamaggie: N-gün MA altına kapanınca çık
         cfg.ma_trail_len = int(_clf(params.get("ma_trail_len", 10), 3, 50, 10))
@@ -1989,6 +2061,10 @@ def run_backtest_api(params: dict) -> dict:
                    "tp_mode": (cfg.tp_mode if cfg.exit_mode == "tp_grid" else None),
                    "split_a": (cfg.split_a if cfg.exit_mode == "split" else None),
                    "split_b": (cfg.split_b if cfg.exit_mode == "split" else None),
+                   "regime_atr_filter": cfg.regime_atr_filter,
+                   "regime_atr_threshold": cfg.regime_atr_threshold,
+                   "atr_target_mult": (cfg.atr_target_mult if cfg.exit_mode == "atr_regime" else None),
+                   "risk_per_trade_usd": (cfg.risk_per_trade_usd if cfg.exit_mode == "atr_regime" else None),
                    "ma_confirm_close": cfg.ma_confirm_close,
                    "start": eq.index[0].strftime("%Y-%m-%d"),
                    "end": eq.index[-1].strftime("%Y-%m-%d")},
@@ -2150,6 +2226,8 @@ def run_live_qswing_scan(current_market_data, cfg=None, asof=None,
         date = cal[max(0, pos)]
     common = bt._common(date)
     regime_open = bool(common["spy_above_sma200"])
+    vol_locked = bt._vol_regime_locked(common)            # ATR-REJİM kilidi (opt-in; vars. kapalı)
+    spy_regime_atr = common.get("spy_regime_atr_pct")
     spy_close = float(bt.spy.loc[date, "Close"])
     spy_ret60 = bt.spy.loc[date, "RET60"]
     lb = cfg.qswing_breakout_lb
@@ -2205,7 +2283,9 @@ def run_live_qswing_scan(current_market_data, cfg=None, asof=None,
             "overext": bool(dist20 is not None and dist20 > 0.25),
         }
         rec["score"], rec["score_parts"] = _qswing_priority_score(rec)
-        if c > h and not rec["overext"]:                    # taze, sağlıklı kırılım → AL
+        if c > h and not rec["overext"] and vol_locked:     # kırılım var ama piyasa testere → AL'ı engelle
+            rec["status"] = "İZLE"; rec["watch_reason"] = "vol_lock"; watch.append(rec)
+        elif c > h and not rec["overext"]:                  # taze, sağlıklı kırılım → AL
             rec["status"] = "KIRILIM"; buyable.append(rec)
         elif c > h and rec["overext"]:                      # kırdı ama aşırı uzamış → İZLE'ye düş
             rec["status"] = "İZLE"; rec["watch_reason"] = "overext"; watch.append(rec)
@@ -2216,6 +2296,8 @@ def run_live_qswing_scan(current_market_data, cfg=None, asof=None,
     watch.sort(key=lambda r: (0 if r.get("watch_reason") == "near" else 1,
                               r["dist_to_breakout_pct"] if r.get("watch_reason") == "near" else -r["rs"]))
     return {"asof": date.strftime("%Y-%m-%d"), "regime_open": regime_open,
+            "vol_locked": bool(vol_locked),
+            "spy_atr_pct": (round(float(spy_regime_atr), 3) if spy_regime_atr is not None else None),
             "spy_close": round(spy_close, 2), "n_universe": len(bt.data),
             "buyable": buyable, "watch": (watch if include_watch else []),
             "breakout_lb": lb}

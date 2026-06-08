@@ -57,8 +57,13 @@ th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:
       <h1>Swing Backtest Lab</h1>
       <div class="muted" style="font-size:12px;">swing2 (8-katman) + qswing (Qullamaggie kırılım) · veri ve trade mantığı motordan birebir</div>
     </div>
-    <div class="muted" style="font-size:12px;text-align:right;">Portföy takipten ayrı.<br><a href="/portfolio-tracker.html" title="Portföy takip uygulamasına dön (ayrı sayfa/port).">← Portföy</a></div>
+    <div class="muted" style="font-size:12px;text-align:right;">
+      <a id="paperDashLink" href="http://localhost:8061/" target="_blank" rel="noopener" title="Canlı kağıt-trade dashboard: portföy, tarama, AL/SAT grafikleri (port 8061).">📓 Paper Dashboard ↗</a><br>
+      Portföy takipten ayrı.<br><a href="/portfolio-tracker.html" title="Portföy takip uygulamasına dön (ayrı sayfa/port).">← Portföy</a>
+    </div>
   </div>
+  <script>/* Paper Dashboard linkini geçerli host'a göre 8061'e ayarla (yerel/uzak fark etmez) */
+   (function(){var l=document.getElementById('paperDashLink');if(l)l.href=location.protocol+'//'+location.hostname+':8061/';})();</script>
 
   <div class="tabs">
     <div class="tab active" id="tab-bt" onclick="showTab('bt')" title="Geçmiş veriyle strateji simülasyonu: giriş/çıkış seç, koştur, getiri/DD/işlemleri gör.">📊 Backtest</div>
@@ -100,6 +105,7 @@ th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:
             <option value="hybrid">8-EMA stop · 21-EMA hibrit</option>
             <option value="hybrid2">8-EMA Hibrit 2 (kapanış + BE kilidi)</option>
             <option value="split">✂️ Bölünmüş çıkış (½ A + ½ B)</option>
+            <option value="atr_regime">🛡️ ATR-Rejim (saf ATR + oynaklık kilidi)</option>
           </select></label>
         <label class="fld" id="fld-min_score" title="8-katman skor eşiği (0–24). Yalnız swing2 girişinde kullanılır; qswing kırılımı skor kullanmaz."><span class="kicker">Min skor (swing2)</span><input type="number" id="min_score" value="16" min="0" max="24"></label>
         <label class="fld" id="fld-qmin" title="qswing 0–100 öncelik skoru EŞİĞİ — canlı tarayıcıyla AYNI formül (RS 45 + 52H yakınlık 20 + tazelik/SMA20 20 + risk kalitesi 15). 0 = filtre kapalı (tüm kırılımlar). Ör. 65 = yalnız skoru ≥65 olan temiz kurulumlara gir. Yalnız qswing girişinde geçerli."><span class="kicker">Min qswing skoru (0–100)</span><input type="number" id="qmin" value="0" min="0" max="100" step="5"></label>
@@ -155,6 +161,15 @@ th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:
           <label class="fld" title="Yalnız 'B: +R hedef' veya 'B: ATR-trail' seçilince kullanılır. 0 = varsayılan."><span class="kicker">B param (R / ATR×)</span><input type="number" id="split_b_param" value="0" step="0.5" min="0" max="10"></label>
         </div>
       </div>
+      <div class="exsub ex-atr_regime hide" style="margin-top:12px;">
+        <div class="muted" style="font-size:12px;margin-bottom:8px;">Saf ATR: pozisyon <b>bölünmez</b>, girişte sabitlenen hedef/stopa kadar beklenir (trailing yok). Boyut = <b>sabit $ risk</b>. <b>Oynaklık kilidi DAİMA açık</b>: SPY 20g ATR% eşiği aşarsa o gün yeni alım yok.</div>
+        <div class="row">
+          <label class="fld" title="SPY 20-gün ATR% (= SPY_ATR20/SPY_Close×100) tavanı. Bu değer aşılırsa piyasa testere kabul edilir → yeni işlem AÇILMAZ. Tipik 1.5–1.8."><span class="kicker">Rejim ATR% eşiği</span><input type="number" id="regime_thr" value="1.5" step="0.1" min="0.3" max="5"></label>
+          <label class="fld" title="Stop = giriş − bu × ATR0 (giriş barı ATR'si). Lot hesabı da bu mesafeye göre."><span class="kicker">ATR stop ×</span><input type="number" id="reg_stop" value="1.5" step="0.5" min="0.5" max="5"></label>
+          <label class="fld" title="Sabit kâr-al hedefi = giriş + bu × ATR0."><span class="kicker">ATR hedef ×</span><input type="number" id="reg_target" value="3.0" step="0.5" min="0.5" max="10"></label>
+          <label class="fld" title="İşlem başına riske edilecek sabit dolar. Lot = bu / (giriş − stop). Konsantrasyon tavanı %50 (poz% ile değiştirilebilir)."><span class="kicker">Sabit risk ($)</span><input type="number" id="reg_risk" value="1000" step="100" min="50" max="100000"></label>
+        </div>
+      </div>
       <div class="row" style="margin-top:14px;align-items:center;">
         <label class="chk" title="Kâr/zararı sermayeye ekleyerek pozisyon büyüt (bileşik). Kapalıysa sabit sermaye."><input type="checkbox" id="compound" checked> Bileşik</label>
         <label class="chk" id="fld-confirm" title="MA-trail ve 8-EMA çıkışlarında: günü MA'nın ALTINDA kapatınca çık (gün-içi fitili yok say). Şampiyon çıkışta etkisiz."><input type="checkbox" id="confirm" checked> MA kapanış teyidi</label>
@@ -183,6 +198,7 @@ th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:
               <label class="chk" title="8-EMA stop + 21-EMA hibrit gövde takibi"><input type="checkbox" class="cmp-exit" value="hybrid"> Hibrit</label>
               <label class="chk" title="Hibrit 2: ilk %50 8-EMA KAPANIŞ altında + LOW10 felaket stop; runner BREAKEVEN kilidi, 21-EMA kapanışta çıkar"><input type="checkbox" class="cmp-exit" value="hybrid2"> Hibrit 2</label>
               <label class="chk" title="Bölünmüş çıkış — yukarıdaki 'Çıkış A / Çıkış B' seçimini kullanır. Karşılaştırmadan önce ana formda Çıkış=Bölünmüş seçip A/B kurallarını ayarla."><input type="checkbox" class="cmp-exit" value="split"> ✂️ Bölünmüş (<span id="cmp-split-lbl">A/B</span>)</label>
+              <label class="chk" title="ATR-Rejim: saf ATR (sabit hedef/stop) + sabit $ risk + SPY oynaklık kilidi. ATR× ve eşik için ana formda Çıkış=ATR-Rejim seçip ayarla."><input type="checkbox" class="cmp-exit" value="atr_regime"> 🛡️ ATR-Rejim</label>
             </div>
           </div>
           <button class="btn alt" id="cmp-run" onclick="compareBacktest()" title="Seçili tüm giriş×çıkış kombinasyonlarını aynı evren/dönemde koşturup yan yana göster">Karşılaştır</button>
@@ -278,7 +294,8 @@ const HINTS = {
   atr_climax:'Stop = 8-EMA. Fiyat 8-EMA\'dan aşırı saparsa (climax) kâr al.',
   hybrid:'Stop = 8-EMA. İlk %50 8-EMA\'da, kalan %50 21-EMA gövde takibi.',
   hybrid2:'Hibrit 2: ilk %50 yalnız 8-EMA KAPANIŞ altında satılır (gün-içi iğne elemez); LOW10 felaket stopu gün-içi aktif. İlk %50 sonrası runner stopu BREAKEVEN\'e (giriş) çekilir → 21-EMA altına kapanınca veya BE\'ye değince çıkar.',
-  split:'Pozisyon %50/%50 ikiye bölünür; A ve B yarıları KENDİ atomik kurallarıyla bağımsız çıkar (ortak felaket stopu YOK). İşlem defterinde bacaklar A:… / B:… diye görünür. Örn. A=8-EMA (erken kilit) + B=21-EMA (runner) → küçük kaybı kes, kazananı koştur.'
+  split:'Pozisyon %50/%50 ikiye bölünür; A ve B yarıları KENDİ atomik kurallarıyla bağımsız çıkar (ortak felaket stopu YOK). İşlem defterinde bacaklar A:… / B:… diye görünür. Örn. A=8-EMA (erken kilit) + B=21-EMA (runner) → küçük kaybı kes, kazananı koştur.',
+  atr_regime:'SAF ATR rejim modu: pozisyon bölünmez; girişte ATR0 ile sabitlenen hedefe (kâr-al) ya da stopa (zarar-kes) kadar beklenir — trailing YOK. Boyut = sabit $ risk. Ayrıca SPY 20g ATR% eşiği aşılınca (testere/oynaklık) o gün YENİ İŞLEM AÇILMAZ → uzun vadeli backtestte gürültüden korur.'
 };
 function show(id,on){ const el=$(id); if(el) el.style.display = on ? '' : 'none'; }
 function refreshForm(){
@@ -293,7 +310,7 @@ function refreshForm(){
   // ÇIKIŞ'a göre — plan stop/hedef yalnız ilgili modlarda kullanılır
   show('fld-atr_stop',  exit==='champion' || exit==='ma_trail' || exit==='hybrid2');  // hibrit2: LOW10/ATR felaket stopu aktif
   show('fld-rr_target', exit==='champion');                       // nihai R hedefi yalnız şampiyon
-  show('fld-confirm',   exit!=='champion' && exit!=='split');     // split kuralları zaten kapanış-teyitli
+  show('fld-confirm',   exit!=='champion' && exit!=='split' && exit!=='atr_regime'); // atr-regime/split kapanış-teyiti kullanmaz
   show('fld-risk_pct',  $('sizing').value==='risk');              // risk %'si yalnız risk-bazlı modda
   updateCmpSplitLabel();
   // ipucu
@@ -335,6 +352,9 @@ function buildPayload(){
   if(es==='atr_climax') p.climax_atr_mult=parseFloat($('climax').value)||2.0;
   if(es==='split'){ p.split_a=$('split_a').value; p.split_b=$('split_b').value;
     p.split_a_param=parseFloat($('split_a_param').value)||0; p.split_b_param=parseFloat($('split_b_param').value)||0; }
+  if(es==='atr_regime'){ p.regime_atr_threshold=parseFloat($('regime_thr').value)||1.5;
+    p.atr_stop_mult=parseFloat($('reg_stop').value)||1.5; p.atr_target_mult=parseFloat($('reg_target').value)||3.0;
+    p.risk_per_trade_usd=parseFloat($('reg_risk').value)||1000; }
   return p;
 }
 
@@ -537,7 +557,7 @@ function renderBacktest(d){
 
 // ---- karşılaştırma ----
 let cmpChart=null, cmpLabels=[], cmpDs=[];
-const EXLBL={champion:'ATR-trail',ma_trail:'MA-trail 10g',rr_based:'RR (8-EMA)',momentum:'RSI (8-EMA)',atr_climax:'Climax (8-EMA)',hybrid:'Hibrit (8-EMA)',hybrid2:'Hibrit 2 (BE)',split:'Bölünmüş ½+½'};
+const EXLBL={champion:'ATR-trail',ma_trail:'MA-trail 10g',rr_based:'RR (8-EMA)',momentum:'RSI (8-EMA)',atr_climax:'Climax (8-EMA)',hybrid:'Hibrit (8-EMA)',hybrid2:'Hibrit 2 (BE)',split:'Bölünmüş ½+½',atr_regime:'ATR-Rejim'};
 const CMPCOL=['#27c281','#5aa2ff','#f5b14c','#ff5d6c','#a78bfa','#34d399','#fb923c','#22d3ee','#f472b6','#a3e635','#e879f9','#facc15'];
 async function compareBacktest(){
   const entries=[...document.querySelectorAll('.cmp-entry:checked')].map(c=>c.value);
@@ -560,6 +580,9 @@ async function compareBacktest(){
     if(ex==='hybrid2') p.ma_confirm_close=true;
     if(ex==='split'){ p.split_a=$('split_a').value; p.split_b=$('split_b').value;
       p.split_a_param=parseFloat($('split_a_param').value)||0; p.split_b_param=parseFloat($('split_b_param').value)||0; }
+    if(ex==='atr_regime'){ p.regime_atr_threshold=parseFloat($('regime_thr').value)||1.5;
+      p.atr_stop_mult=parseFloat($('reg_stop').value)||1.5; p.atr_target_mult=parseFloat($('reg_target').value)||3.0;
+      p.risk_per_trade_usd=parseFloat($('reg_risk').value)||1000; }
     try{ const r=await fetch('/api/backtest',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)}); const d=await r.json();
       if(d&&!d.error&&d.metrics) out.push({en,ex,m:d.metrics,eq:d.equity}); }catch(e){}
   }
