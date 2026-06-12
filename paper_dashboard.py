@@ -341,13 +341,55 @@ def _portfolio_payload(st, prices):
         "positions": positions, "closed": closed}
 
 
+def _ls_payload(st, prices):
+    """⚖️ Birleşik U/K defteri: uzun + kısa pozisyonlar tek listede ('side' alanlı)."""
+    base = _portfolio_payload(st, prices)            # uzunlar + kapananlar (side alanı geçer)
+    for p in base["positions"]:
+        p["side"] = "L"
+    shorts, s_unreal = [], 0.0
+    for p in sorted(st.get("short_positions", []), key=lambda x: x["symbol"]):
+        ef = p["entry_fill"]
+        px = prices.get(p["symbol"])
+        pnl = pct = None
+        if px is not None:
+            pnl = p["shares"] * (ef - px) - p["funding"]
+            pct = (ef / px - 1) * 100
+            s_unreal += pnl
+        rem = [("8E" if l["rule"] == "ema8" else "21E") for l in p["legs"] if l["shares"] > 0]
+        shorts.append({"symbol": p["symbol"], "side": "K",
+                       "entry": pt._px(p["entry"]), "entry_fill": pt._px(ef),
+                       "shares": round(p["shares"], 3), "alloc": p.get("alloc"),
+                       "stop": None, "target": None,
+                       "price": (pt._px(px) if px is not None else None),
+                       "pnl": (round(pnl, 2) if pnl is not None else None),
+                       "pct": (round(pct, 2) if pct is not None else None),
+                       "entry_ts": p.get("entry_ts", p.get("entry_date")),
+                       "entry_date": p.get("entry_date"), "score": p.get("rs"),
+                       "exit_plan": (">" + "·".join(rem)) if rem else "—"})
+    base["positions"] += shorts
+    base["n_open"] = len(base["positions"])
+    eq = pt._ls_equity(st, prices)
+    base["unrealized"] = round(base["unrealized"] + s_unreal, 2)
+    base["equity"] = round(eq, 2)
+    base["total_pl"] = round(eq - base["start_capital"], 2)
+    base["total_pl_pct"] = round((eq - base["start_capital"]) / base["start_capital"] * 100, 2)
+    # _portfolio_payload kapanan kayıtları sabit alanlarla yeniden kurar ('side' düşer) →
+    # kaynak kayıtlardan sırayla geri eşle (aynı liste, aynı sıra)
+    for c, src in zip(base["closed"], st["closed"]):
+        c["side"] = "K" if src.get("side") == "short" else "L"
+    return base
+
+
 def portfolio_json():
     st = pt.load_state()
     ema_st = pt.load_state(pt.PAPER_EMA, variant="ema")
     ch_st = pt.load_state(pt.PAPER_CHAND, variant="chand")
     cr_st = pt.load_state(pt.PAPER_CRYPTO, variant="ema")     # 🪙 HYBRID_TREND = ema bacakları
+    ls_st = pt.load_state(pt.PAPER_CRYPTO_LS, variant="ema")  # ⚖️ birleşik U/K
     held = sorted(pt.held_symbols(st) | pt.held_symbols(ema_st)
-                  | pt.held_symbols(ch_st) | pt.held_symbols(cr_st))
+                  | pt.held_symbols(ch_st) | pt.held_symbols(cr_st)
+                  | pt.held_symbols(ls_st)
+                  | {p["symbol"] for p in ls_st.get("short_positions", [])})
     prices = _live_quotes(held)
     out = _portfolio_payload(st, prices)
     out["market"] = market_status()
@@ -355,6 +397,7 @@ def portfolio_json():
     out["ema"] = _portfolio_payload(ema_st, prices)
     out["chand"] = _portfolio_payload(ch_st, prices)
     out["crypto"] = _portfolio_payload(cr_st, prices)
+    out["crypto_ls"] = _ls_payload(ls_st, prices)
     return out
 
 
@@ -421,6 +464,7 @@ PAGE = """<!doctype html><html lang="tr"><head><meta charset="utf-8">
   --buz:#7eb3e3;           /* 📐 sırtı */
   --fosfor:#5ee0a0;        /* 💡 sırtı */
   --btc:#f7931a;           /* 🪙 sırtı (bitcoin turuncusu) */
+  --mor:#b07ee3;           /* ⚖️ U/K birleşik sırtı */
   --b4:4px;                /* boşluk taban birimi */
  }
  *{box-sizing:border-box}
@@ -459,14 +503,14 @@ PAGE = """<!doctype html><html lang="tr"><head><meta charset="utf-8">
  .race{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin:0 0 44px}
  .lane{background:var(--defter);border:1px solid var(--cizgi);border-radius:10px;
   padding:12px 16px 14px;border-top:2px solid var(--sis)}
- .lane.r0{border-top-color:var(--altin)} .lane.r1{border-top-color:var(--buz)} .lane.r2{border-top-color:var(--fosfor)} .lane.r3{border-top-color:var(--btc)}
+ .lane.r0{border-top-color:var(--altin)} .lane.r1{border-top-color:var(--buz)} .lane.r2{border-top-color:var(--fosfor)} .lane.r3{border-top-color:var(--btc)} .lane.r4{border-top-color:var(--mor)}
  .lane .ln{font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--gumus)}
  .lane .ln .lead{color:var(--kehribar);letter-spacing:.04em;margin-left:6px;font-size:10px}
  .lane .lv{font-size:21px;font-weight:650;letter-spacing:-.01em;margin:6px 0 2px}
  .lane .lp{font-size:12.5px;font-weight:550}
  .lane .track{height:3px;background:var(--defter2);border-radius:2px;margin-top:10px;overflow:hidden}
  .lane .fill{height:100%;border-radius:2px;background:var(--sis)}
- .lane.r0 .fill{background:var(--altin)} .lane.r1 .fill{background:var(--buz)} .lane.r2 .fill{background:var(--fosfor)} .lane.r3 .fill{background:var(--btc)}
+ .lane.r0 .fill{background:var(--altin)} .lane.r1 .fill{background:var(--buz)} .lane.r2 .fill{background:var(--fosfor)} .lane.r3 .fill{background:var(--btc)} .lane.r4 .fill{background:var(--mor)}
 
  /* ---- DEFTER: her portföy, kimlik renginde sırtı olan bir kayıt defteri ---- */
  .defter{background:var(--defter);border:1px solid var(--cizgi);border-left:3px solid var(--sis);
@@ -475,6 +519,9 @@ PAGE = """<!doctype html><html lang="tr"><head><meta charset="utf-8">
  .defter.d-ema{border-left-color:var(--buz)}
  .defter.d-chand{border-left-color:var(--fosfor)}
  .defter.d-crypto{border-left-color:var(--btc)}
+ .defter.d-ls{border-left-color:var(--mor)}
+ .yon{display:inline-block;min-width:20px;text-align:center;border-radius:4px;font-size:10.5px;font-weight:700;padding:1px 4px}
+ .yon.L{background:var(--kar-bg);color:var(--kar)} .yon.K{background:var(--zarar-bg);color:var(--zarar)}
  .defter.d-scan{border-left-color:var(--cizgi2)}
  .defter h2{font-size:13px;font-weight:650;letter-spacing:.02em;margin:0 0 4px}
  .defter .kural{display:block;font-size:11.5px;font-weight:450;color:var(--sis);
@@ -574,6 +621,14 @@ PAGE = """<!doctype html><html lang="tr"><head><meta charset="utf-8">
     <h3 class="alt">Son Kripto Taraması</h3><div id="scanX" class="scanbox muted">…</div>
   </section>
 
+  <section class="defter d-ls">
+    <h2>⚖️ Kripto U/K Birleşik (rejim anahtarlı)</h2>
+    <span class="kural">BTC&gt;SMA200 → uzun (kırılım + ATR kilidi) · BTC&lt;SMA200 → kısa ½ boy (kilitsiz, 3bps/gün funding) · tek nakit havuzu · çıkış: kapanış 8/21-EMA'ya göre (uzunda altı, kısada üstü)</span>
+    <div class="kpis" id="kpisLS"></div>
+    <h3 class="alt">Açık Pozisyonlar</h3><div id="openLS"></div>
+    <h3 class="alt">Kapanan İşlemler</h3><div id="closedLS"></div>
+  </section>
+
   <section class="defter d-scan">
     <h2>Son Tarama</h2>
     <span class="kural">22:45 (15:45 ET) qswing kırılım taraması — yapısal veri varsa tablo, yoksa mesaj metni</span>
@@ -609,6 +664,7 @@ async function loadAll(){
   if(p.ema){renderKpis(p.ema,'kpisE',p); renderOpen(p.ema,'openE',true); renderClosed(p.ema,'closedE');}
   if(p.chand){renderKpis(p.chand,'kpisC',p); renderOpen(p.chand,'openC',true); renderClosed(p.chand,'closedC');}
   if(p.crypto){renderKpis(p.crypto,'kpisX',null); renderOpen(p.crypto,'openX',true); renderClosed(p.crypto,'closedX');}
+  if(p.crypto_ls){renderKpis(p.crypto_ls,'kpisLS',null); renderOpenLS(p.crypto_ls,'openLS'); renderClosedLS(p.crypto_ls,'closedLS');}
   $('scanX').innerHTML=s.crypto?`<div class="muted">🕒 ${s.crypto.ts} (asof ${s.crypto.asof})</div><div style="margin-top:8px;white-space:pre-wrap">${s.crypto.text}</div>`:'<span class="muted">Henüz kayıtlı kripto taraması yok.</span>';
   renderScan(s); renderMkt(p.market);
   $('meta').textContent=`başlangıç ${p.started||'?'} · ${p.slippage||'slippage kapalı'}`;
@@ -616,7 +672,7 @@ async function loadAll(){
 }
 function renderRace(p){
   // yarış rayı: üç defterin özsermayesi tek bakışta (salt görüntü — /api/portfolio verisinden)
-  const L=[['🏆 ATR-trail',p,'r0'],['📐 8/21-EMA',p.ema,'r1'],['💡 63G-Şamdan',p.chand,'r2'],['🪙 Kripto',p.crypto,'r3']].filter(x=>x[1]&&x[1].equity!=null);
+  const L=[['🏆 ATR-trail',p,'r0'],['📐 8/21-EMA',p.ema,'r1'],['💡 63G-Şamdan',p.chand,'r2'],['🪙 Kripto',p.crypto,'r3'],['⚖️ Kripto U/K',p.crypto_ls,'r4']].filter(x=>x[1]&&x[1].equity!=null);
   if(!L.length){$('race').innerHTML='';return;}
   const eqs=L.map(x=>x[1].equity),mx=Math.max(...eqs),mn=Math.min(...eqs);
   $('race').innerHTML=L.map(([n,d,c])=>{
@@ -658,6 +714,26 @@ function renderClosed(p,el){
   let h='<table><tr><th>Hisse</th><th>Sonuç</th><th>Giriş</th><th>Çıkış</th><th>K/Z</th><th>%</th><th>Giriş→Çıkış</th></tr>';
   for(const x of p.closed){const b=(x.outcome==='TP'||(x.pnl!=null&&x.pnl>=0))?'b-tp':'b-stop';
    h+=`<tr class="clk" onclick="openChart('${x.symbol}')"><td class="sym">${x.symbol}</td><td><span class="badge ${b}">${x.outcome||''}</span></td>
+   <td>${f(x.entry_fill)}</td><td>${f(x.exit)}</td><td class="${cls(x.pnl)}">${sign(x.pnl)}$</td>
+   <td class="${cls(x.pnl_pct)}">${sign(x.pnl_pct)}%</td><td class="muted">${x.entry_date} → ${x.exit_date}</td></tr>`;}
+  $(el).innerHTML=h+'</table>';
+}
+function renderOpenLS(p,el){
+  if(!p.positions.length){$(el).innerHTML='<p class="muted">Açık pozisyon yok.</p>';return;}
+  let h='<table><tr><th>Yön</th><th>Coin</th><th>Fiyat</th><th>Giriş</th><th>Adet</th><th>K/Z</th><th>%</th><th>Çıkış planı</th><th>Giriş zamanı</th></tr>';
+  for(const x of p.positions){
+   h+=`<tr class="clk" onclick="openChart('${x.symbol}')"><td><span class="yon ${x.side}">${x.side==='K'?'🔻K':'🟢U'}</span></td>
+   <td class="sym">${x.symbol}</td><td>${f(x.price)}</td><td>${f(x.entry_fill)}</td>
+   <td>${f(x.shares,3)}</td><td class="${cls(x.pnl)}">${sign(x.pnl)}$</td><td class="${cls(x.pct)}">${sign(x.pct)}%</td>
+   <td>${x.exit_plan||'—'}</td><td class="muted">${x.entry_ts||''}</td></tr>`;}
+  $(el).innerHTML=h+'</table>';
+}
+function renderClosedLS(p,el){
+  if(!p.closed.length){$(el).innerHTML='<p class="muted">Kapanan işlem yok.</p>';return;}
+  let h='<table><tr><th>Yön</th><th>Coin</th><th>Sonuç</th><th>Giriş</th><th>Çıkış</th><th>K/Z</th><th>%</th><th>Giriş→Çıkış</th></tr>';
+  for(const x of p.closed){const b=(x.pnl!=null&&x.pnl>=0)?'b-tp':'b-stop';
+   h+=`<tr class="clk" onclick="openChart('${x.symbol}')"><td><span class="yon ${x.side||'L'}">${x.side==='K'?'🔻K':'🟢U'}</span></td>
+   <td class="sym">${x.symbol}</td><td><span class="badge ${b}">${x.outcome||''}</span></td>
    <td>${f(x.entry_fill)}</td><td>${f(x.exit)}</td><td class="${cls(x.pnl)}">${sign(x.pnl)}$</td>
    <td class="${cls(x.pnl_pct)}">${sign(x.pnl_pct)}%</td><td class="muted">${x.entry_date} → ${x.exit_date}</td></tr>`;}
   $(el).innerHTML=h+'</table>';

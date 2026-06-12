@@ -250,6 +250,49 @@ def heatmap_monthly(title, rets, yearly):
     return "".join(out)
 
 
+def _year_ticks(s, eqrows, x, MT, H, MB):
+    seen = set()
+    for i, (d, _v) in enumerate(eqrows):
+        yy = d[:4]
+        if yy not in seen:
+            seen.add(yy)
+            if i > 0:
+                s.append(f'<line x1="{x(i):.1f}" y1="{MT}" x2="{x(i):.1f}" y2="{H-MB}" '
+                         f'stroke="{C["cizgi"]}"/>'
+                         f'<text x="{x(i)+3:.1f}" y="{H-8}" font-size="11" fill="{C["sis"]}">{yy}</text>')
+
+
+def chart_equity(eqrows):
+    """Özsermaye eğrileri: ⚖️ birleşik (kısa ½) vs ₿ BTC al-tut (100k$ başlangıç, lineer)."""
+    sv = [v["combined_half"] for _d, v in eqrows]
+    bv = [v["btc_bh"] for _d, v in eqrows]
+    lo = min(min(sv), min(bv)) * 0.96
+    hi = max(max(sv), max(bv)) * 1.04
+    n = len(eqrows)
+    W, H, ML, MB, MT = 920, 300, 56, 26, 8
+    def y(v): return MT + (hi - v) / (hi - lo) * (H - MT - MB)
+    def x(i): return ML + i / max(n - 1, 1) * (W - ML - 12)
+    step = max(1, n // 460)
+    s = [f'<svg viewBox="0 0 {W} {H}" xmlns="http://www.w3.org/2000/svg" role="img">']
+    for gv in (50_000, 100_000, 150_000, 200_000, 250_000, 300_000, 350_000):
+        if lo <= gv <= hi:
+            s.append(f'<line x1="{ML}" y1="{y(gv):.1f}" x2="{W-12}" y2="{y(gv):.1f}" '
+                     f'stroke="{C["cizgi2" if gv == 100_000 else "cizgi"]}"/>'
+                     f'<text x="{ML-6}" y="{y(gv)+4:.1f}" text-anchor="end" font-size="11" '
+                     f'fill="{C["sis"]}">{gv//1000}k</text>')
+    _year_ticks(s, eqrows, x, MT, H, MB)
+    idx = list(range(0, n, step)) + ([n - 1] if (n - 1) % step else [])
+    bpts = " ".join(f"{x(i):.1f},{y(bv[i]):.1f}" for i in idx)
+    s.append(f'<polyline points="{bpts}" fill="none" stroke="{C["btc"]}" '
+             f'stroke-width="1.1" stroke-opacity="0.75"/>')
+    spts = " ".join(f"{x(i):.1f},{y(sv[i]):.1f}" for i in idx)
+    s.append(f'<polygon points="{x(idx[0]):.1f},{y(lo):.1f} {spts} {x(idx[-1]):.1f},{y(lo):.1f}" '
+             f'fill="{C["buz"]}" fill-opacity="0.10" stroke="none"/>')
+    s.append(f'<polyline points="{spts}" fill="none" stroke="{C["buz"]}" stroke-width="1.5"/>')
+    s.append("</svg>")
+    return "".join(s), sv[-1], bv[-1]
+
+
 def chart_drawdown(eqrows, cols=(("combined_half", None, "⚖️ birleşik (kısa ½)"),
                                  ("btc_bh", None, "₿ BTC al-tut"))):
     """Sualtı (underwater) grafiği: zirveden düşüş %, iki seri (SVG)."""
@@ -275,16 +318,7 @@ def chart_drawdown(eqrows, cols=(("combined_half", None, "⚖️ birleşik (kıs
                      f'stroke="{C["cizgi2" if gv == 0 else "cizgi"]}"/>'
                      f'<text x="{ML-6}" y="{y(gv)+4:.1f}" text-anchor="end" font-size="11" '
                      f'fill="{C["sis"]}">{gv}%</text>')
-    seen = set()
-    for i, (d, _v) in enumerate(eqrows):
-        yy = d[:4]
-        if yy not in seen and i > 0:
-            seen.add(yy)
-            s.append(f'<line x1="{x(i):.1f}" y1="{MT}" x2="{x(i):.1f}" y2="{H-MB}" '
-                     f'stroke="{C["cizgi"]}"/>'
-                     f'<text x="{x(i)+3:.1f}" y="{H-8}" font-size="11" fill="{C["sis"]}">{yy}</text>')
-        elif i == 0:
-            seen.add(yy)
+    _year_ticks(s, eqrows, x, MT, H, MB)
     # BTC: çizgi · strateji: dolgulu alan
     idx = list(range(0, n, step)) + ([n - 1] if (n - 1) % step else [])
     btc_pts = " ".join(f"{x(i):.1f},{y(series['btc_bh'][i]):.1f}" for i in idx)
@@ -403,18 +437,28 @@ def build():
     if eqrows:
         sr, sy = _monthly(eqrows, "combined_half")
         br, by = _monthly(eqrows, "btc_bh")
+        eqsvg, sfin, bfin = chart_equity(eqrows)
         ddsvg, sdd, bdd = chart_drawdown(eqrows)
-        monthly_html = f"""<section><h2>Aylık ızgara & drawdown — ⚖️ birleşik (kısa ½) vs ₿ al-tut</h2>
-<span class="kural">5y penceresi ({eqrows[0][0]} → {eqrows[-1][0]}) · aylık % = ay-sonu özsermayeden ·
-hücre rengi getiri şiddetiyle koyulaşır · "·" = veri yok (ilk kısmi ay)</span>
-{heatmap_monthly("⚖️ Birleşik (kısa ½ boy) ★ — aylık %", sr, sy)}
-{heatmap_monthly("₿ BTC al-tut — aylık %", br, by)}
+        monthly_html = f"""<section><h2>Özsermaye, drawdown & aylık ızgara — ⚖️ birleşik (kısa ½) vs ₿ al-tut</h2>
+<span class="kural">5y penceresi ({eqrows[0][0]} → {eqrows[-1][0]}) · 100.000$ başlangıç · iki grafik aynı zaman
+eksenini paylaşır (üstte özsermaye, altta zirveden düşüş) · aylık % = ay-sonu özsermayeden</span>
+<h3 style="font-size:11px;font-weight:650;letter-spacing:.07em;text-transform:uppercase;color:{C['gumus']};margin:14px 0 8px">
+Özsermaye eğrisi — günlük</h3>
+<div class="legend"><span><span class="dot" style="background:{C['buz']}"></span>⚖️ birleşik (kısa ½) ·
+son <b>${sfin:,.0f}</b> ({(sfin/1000-100):+.1f}%)</span>
+<span><span class="dot" style="background:{C['btc']}"></span>₿ BTC al-tut · son <b>${bfin:,.0f}</b> ({(bfin/1000-100):+.1f}%)</span></div>
+{eqsvg}
 <h3 style="font-size:11px;font-weight:650;letter-spacing:.07em;text-transform:uppercase;color:{C['gumus']};margin:20px 0 8px">
 Zirveden düşüş (underwater) — günlük</h3>
 <div class="legend"><span><span class="dot" style="background:{C['buz']}"></span>⚖️ birleşik (kısa ½) ·
 maxDD <b class="neg">{sdd:.1f}%</b></span>
 <span><span class="dot" style="background:{C['btc']}"></span>₿ BTC al-tut · maxDD <b class="neg">{bdd:.1f}%</b></span></div>
 {ddsvg}
+<p class="muted" style="font-size:12.5px;margin:8px 0 0">Eğri okuma: BTC'nin dağ-vadi silüetine karşı stratejinin
+basamaklı çizgisi — düz bölümler nakitte beklenen aylar (rejim kapısı/kilit), basamaklar rejim uygunken alınan
+trendler. BTC zirvede stratejiden öndeyken vadide çok gerisinde; strateji yolu aynı yere <b>çok daha sığ çukurlarla</b> gidiyor.</p>
+{heatmap_monthly("⚖️ Birleşik (kısa ½ boy) ★ — aylık %", sr, sy)}
+{heatmap_monthly("₿ BTC al-tut — aylık %", br, by)}
 <p class="muted" style="font-size:12.5px;margin-bottom:0">Okuma: stratejinin ızgarasındaki uzun <b>0.0 şeritleri</b>
 hata değil — rejim kapısı + oynaklık kilidi o aylarda portföyü <b>nakitte</b> tuttu (BTC satırındaki derin kırmızı
 aylarla karşılaştırın). Sualtı grafiğinde fark daha net: BTC iki kez %60+ çukura inerken strateji çukuru

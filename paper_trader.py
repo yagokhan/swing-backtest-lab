@@ -33,6 +33,7 @@ PAPER = os.path.expanduser("~/.swing_paper.json")
 PAPER_EMA = os.path.expanduser("~/.swing_paper_ema.json")      # 8/21-EMA çıkış varyantı (karşılaştırma)
 PAPER_CHAND = os.path.expanduser("~/.swing_paper_chand.json")  # 💡 63g kırılım + şamdan trail varyantı
 PAPER_CRYPTO = os.path.expanduser("~/.swing_paper_crypto.json")  # 🪙 kripto (Binance) HYBRID_TREND portföyü
+PAPER_CRYPTO_LS = os.path.expanduser("~/.swing_paper_crypto_ls.json")  # ⚖️ kripto BİRLEŞİK uzun/kısa (tek havuz)
 LASTSCAN = os.path.expanduser("~/.swing_lastscan.json")
 LASTSCAN_CRYPTO = os.path.expanduser("~/.swing_lastscan_crypto.json")
 SCANDATA = os.path.expanduser("~/.swing_lastscan_data.json")   # yapısal tarama (dashboard için)
@@ -50,6 +51,10 @@ EMA_FAST, EMA_SLOW = 8, 21   # EMA varyantı: hibrit çıkış — %50 kapanış
 CHAND_MULT = 3.25            # şamdan trail çarpanı (tepe − mult × ATR)
 CHAND_LB = 63                # giriş kırılım penceresi (çeyreklik tepe)
 
+# ⚖️ Birleşik U/K kripto defteri — kısa taraf (backtest bulgularıyla):
+SHORT_SIZE_FRAC = 0.5            # kısa ½ boy: eşit-ağırlık payının yarısı (her karışık pencerede kazanan)
+SHORT_FUNDING_BPS_DAILY = 3.0    # perp funding maliyeti (bps/gün, pozisyon açıkken — muhafazakâr)
+
 # --- Slippage modeli (opt-in; YALNIZ dolum fiyatına uygulanır, karar/sinyal mantığı değişmez) ---
 SLIPPAGE = True          # False → ideal (slippage'sız) dolum
 SLIP_ENTRY_BPS = 3.0     # giriş market emri: fiyat +3 bps (daha pahalı al)
@@ -64,7 +69,8 @@ _FMP_QUOTE = "https://financialmodelingprep.com/stable/quote"
 def _default_state(variant="champion"):
     return {"start_capital": START_CAPITAL, "per_position": PER_POSITION,
             "max_positions": MAX_POSITIONS, "cash": START_CAPITAL,
-            "variant": variant, "started": None, "positions": [], "closed": []}
+            "variant": variant, "started": None, "positions": [],
+            "short_positions": [], "closed": []}
 
 
 def load_state(path=PAPER, variant="champion"):
@@ -333,6 +339,182 @@ def open_new(st, buyable, asof):
     return opened
 
 
+# ------------------- ⚖️ kısa taraf (birleşik U/K kripto defteri) ----------
+def open_new_short(st, cands, asof):
+    """KISA aç (yalnız ayı rejiminde çağrılır): eşit-ağırlık × ½ boy (SHORT_SIZE_FRAC).
+    cands: [{'symbol','entry','rs','ema8','ema21'}]. Teminat 1× nakitten rezerve edilir.
+    Dolum: market SAT → entry×(1−SLIP_ENTRY_BPS). Çift yön yok (uzunu açık sembol atlanır)."""
+    if st.get("started") is None:
+        st["started"] = pd.Timestamp(asof).strftime("%Y-%m-%d")
+    held = held_symbols(st) | {p["symbol"] for p in st.get("short_positions", [])}
+    fresh = [c for c in sorted(cands, key=lambda r: r.get("rs", 0)) if
+             c["symbol"] not in held and float(c["entry"]) > 0]
+    if not fresh or st["cash"] <= 1e-6:
+        return []
+    per = st["cash"] / len(fresh) * SHORT_SIZE_FRAC      # ½ boy — kalan nakitte bekler
+    asof_s = pd.Timestamp(asof).strftime("%Y-%m-%d")
+    now_ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    opened = []
+    for c in fresh:
+        entry = float(c["entry"])
+        ef = _px(entry * (1 - SLIP_ENTRY_BPS / 1e4), 6) if SLIPPAGE else entry
+        shares = per / ef
+        half = shares / 2
+        pos = {"symbol": c["symbol"], "entry_date": asof_s, "entry_ts": now_ts,
+               "entry": entry, "entry_fill": ef, "shares": shares,
+               "margin": shares * ef, "funding": 0.0, "rs": c.get("rs"),
+               "alloc": round(per, 2), "last_date": asof_s,
+               "legs": [{"rule": "ema8", "shares": half},
+                        {"rule": "ema21", "shares": shares - half}]}
+        st["cash"] -= shares * ef                         # teminat = notyonel (kaldıraçsız)
+        st.setdefault("short_positions", []).append(pos)
+        opened.append(pos)
+    st["cash"] = round(st["cash"], 2) or 0.0
+    return opened
+
+
+def manage_short_hybrid(st, market, asof):
+    """KISA hibrit kapatma — backtest aynası: bacak KAPANIŞ>EMA'sında market AL ile kapanır
+    (+SLIP_EXIT_BPS aleyhte). Günlük funding pozisyon açıkken tahakkuk eder.
+    Anti-contamination: giriş barı yönetilmez; yalnız last_date SONRASI barlar."""
+    data = market.get("data", {})
+    asof_ts = pd.Timestamp(asof).normalize()
+    now_ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    exited, still = [], []
+    for pos in st.get("short_positions", []):
+        df = data.get(pos["symbol"])
+        last = pd.Timestamp(pos.get("last_date", pos["entry_date"])).normalize()
+        if df is None or not len(df):
+            still.append(pos)
+            continue
+        e8, e21 = _ema_series(df)
+        ef = pos["entry_fill"]
+        for ts, row in df[(df.index > last) & (df.index <= asof_ts)].iterrows():
+            pos["last_date"] = ts.strftime("%Y-%m-%d")
+            close = row.get("Close")
+            if _isna(close):
+                continue
+            pos["funding"] += pos["shares"] * ef * SHORT_FUNDING_BPS_DAILY / 1e4
+            for leg in pos["legs"]:
+                if leg["shares"] <= 0:
+                    continue
+                ma = (e8 if leg["rule"] == "ema8" else e21).get(ts)
+                if ma is None or _isna(ma) or close <= ma:          # kapanış EMA ÜSTÜNDE değil → kal
+                    continue
+                fill = close * (1 + SLIP_EXIT_BPS / 1e4) if SLIPPAGE else close
+                sh = leg["shares"]
+                frac = sh / pos["shares"]
+                fpart = pos["funding"] * frac
+                pnl = sh * (ef - fill) - fpart
+                st["cash"] += sh * ef + sh * (ef - fill) - fpart    # teminat payı + K/Z − funding
+                rec = {"symbol": pos["symbol"], "side": "short",
+                       "entry_date": pos["entry_date"], "entry_ts": pos.get("entry_ts"),
+                       "exit_date": ts.strftime("%Y-%m-%d"), "exit_ts": now_ts,
+                       "entry": _px(pos["entry"]), "entry_fill": _px(ef),
+                       "exit": _px(fill), "shares": round(sh, 4),
+                       "pnl": round(pnl, 2), "pnl_pct": round((ef / fill - 1) * 100, 2),
+                       "outcome": "EMA8↑" if leg["rule"] == "ema8" else "EMA21↑"}
+                st["closed"].append(rec); exited.append(rec)
+                pos["shares"] -= sh; pos["margin"] -= sh * ef
+                pos["funding"] -= fpart; leg["shares"] = 0.0
+            if all(l["shares"] <= 0 for l in pos["legs"]):
+                break
+        if any(l["shares"] > 0 for l in pos["legs"]):
+            still.append(pos)
+    st["short_positions"] = still
+    st["cash"] = round(st["cash"], 2) or 0.0
+    return exited
+
+
+def _ls_equity(st, prices=None):
+    """Birleşik defter özsermayesi: nakit + uzun değer + kısa (teminat + unrealize − funding)."""
+    val = st["cash"]
+    for p in st.get("positions", []):
+        px = (prices or {}).get(p["symbol"], p.get("entry_fill", p["entry"]))
+        val += p["shares"] * px
+    for p in st.get("short_positions", []):
+        ef = p["entry_fill"]
+        px = (prices or {}).get(p["symbol"], ef)
+        val += p["margin"] + p["shares"] * (ef - px) - p["funding"]
+    return val
+
+
+def ls_eod_message(op_l, op_s, exited, st, asof):
+    """⚖️ Birleşik U/K gün sonu mesajı (HTML)."""
+    L = [f"<b>⚖️ Kağıt Portföy — Kripto U/K Birleşik — Gün Sonu ({asof})</b>"]
+    if op_l:
+        L.append(f"\n<b>🟢 UZUN AÇILAN ({len(op_l)})</b>")
+        for p in op_l:
+            L.append(f"• <b>{p['symbol']}</b> @ <code>${_fmt(p.get('entry_fill', p['entry']))}</code> · "
+                     f"${p.get('alloc', 0):.0f} · çıkış: kapanış &lt; 8/21-EMA")
+    if op_s:
+        L.append(f"\n<b>🔻 KISA AÇILAN ({len(op_s)})</b> — ½ boy")
+        for p in op_s:
+            L.append(f"• <b>{p['symbol']}</b> @ <code>${_fmt(p['entry_fill'])}</code> · "
+                     f"${p['alloc']:.0f} · kapatma: kapanış &gt; 8/21-EMA · RS {p.get('rs')}")
+    if exited:
+        tot = sum(r["pnl"] for r in exited)
+        L.append(f"\n<b>🔁 KAPANAN ({len(exited)})</b> · realize <b>{'+' if tot>=0 else ''}{tot:.2f}$</b>")
+        for r in exited:
+            em = "✅" if r["pnl"] >= 0 else "❌"
+            yon = "🔻K" if r.get("side") == "short" else "🟢U"
+            L.append(f"{em} {yon} <b>{r['symbol']}</b> {r['outcome']} @ <code>${_fmt(r['exit'])}</code> · "
+                     f"giriş <code>${_fmt(r.get('entry_fill', r['entry']))}</code> · "
+                     f"<b>{'+' if r['pnl']>=0 else ''}{r['pnl']:.2f}$ ({r['pnl_pct']:+.1f}%)</b>")
+    if not op_l and not op_s and not exited:
+        L.append("\n<i>Bugün açılan/kapanan pozisyon yok.</i>")
+    realized = sum(r["pnl"] for r in st["closed"])
+    L.append(f"\n<b>📊 Durum:</b> {len(st.get('positions', []))} uzun · "
+             f"{len(st.get('short_positions', []))} kısa · nakit <code>${st['cash']:.0f}</code> · "
+             f"özsermaye (maliyet) <code>${_ls_equity(st):.0f}</code> · "
+             f"realize <b>{'+' if realized>=0 else ''}{realized:.0f}$</b>")
+    L.append(f"<i>Rejim anahtarı: BTC&gt;SMA200→uzun (kilit 2.5) · BTC&lt;SMA200→kısa (½ boy, "
+             f"{SHORT_FUNDING_BPS_DAILY:.0f}bps/gün funding). Eğitim amaçlı kağıt-trade.{_slip_note()}</i>")
+    return "\n".join(L)
+
+
+def ls_portfolio_message(st, prices, now_str):
+    """⚖️ /kripto yanıtı: birleşik defterin anlık K/Z'si (HTML)."""
+    head = f"<b>⚖️ Kağıt Portföy — Kripto U/K Birleşik ({now_str})</b>"
+    longs, shorts = st.get("positions", []), st.get("short_positions", [])
+    if not longs and not shorts:
+        realized = sum(r["pnl"] for r in st["closed"])
+        return (head + f"\nAçık pozisyon yok · nakit <code>${st['cash']:.2f}</code> · "
+                f"realize <b>{'+' if realized>=0 else ''}{realized:.2f}$</b>\n<i>Eğitim amaçlı.</i>")
+    L = [head]
+    unreal = 0.0
+    for p in sorted(longs, key=lambda x: x["symbol"]):
+        ef = p.get("entry_fill", p["entry"])
+        px = prices.get(p["symbol"])
+        if px is None:
+            L.append(f"🟢 <b>{p['symbol']}</b> giriş <code>${_fmt(ef)}</code> · <i>fiyat alınamadı</i>")
+            continue
+        pnl = p["shares"] * (px - ef); unreal += pnl
+        L.append(f"{'🟢' if pnl >= 0 else '🔴'} U <b>{p['symbol']}</b> <code>${_fmt(px)}</code> "
+                 f"(giriş <code>${_fmt(ef)}</code>) · <b>{'+' if pnl>=0 else ''}{pnl:.2f}$ "
+                 f"({(px/ef-1)*100:+.1f}%)</b> · {_exit_plan_txt(p)}")
+    for p in sorted(shorts, key=lambda x: x["symbol"]):
+        ef = p["entry_fill"]
+        px = prices.get(p["symbol"])
+        if px is None:
+            L.append(f"🔻 <b>{p['symbol']}</b> giriş <code>${_fmt(ef)}</code> · <i>fiyat alınamadı</i>")
+            continue
+        pnl = p["shares"] * (ef - px) - p["funding"]; unreal += pnl
+        rem = [("8-EMA" if l["rule"] == "ema8" else "21-EMA") for l in p["legs"] if l["shares"] > 0]
+        L.append(f"{'🟢' if pnl >= 0 else '🔴'} K <b>{p['symbol']}</b> <code>${_fmt(px)}</code> "
+                 f"(satış <code>${_fmt(ef)}</code>) · <b>{'+' if pnl>=0 else ''}{pnl:.2f}$ "
+                 f"({(ef/px-1)*100:+.1f}%)</b> · kapatma: kapanış &gt; {' / '.join(rem)}")
+    eq = _ls_equity(st, prices)
+    realized = sum(r["pnl"] for r in st["closed"])
+    total_pl = eq - st["start_capital"]
+    L.append(f"\n<b>📊 Toplam:</b> özsermaye <code>${eq:.2f}</code> · unrealize "
+             f"<b>{'+' if unreal>=0 else ''}{unreal:.2f}$</b> · realize <b>{'+' if realized>=0 else ''}{realized:.2f}$</b>")
+    L.append(f"<b>Genel K/Z: {'+' if total_pl>=0 else ''}{total_pl:.2f}$ "
+             f"({total_pl/st['start_capital']*100:+.2f}%)</b> · nakit <code>${st['cash']:.2f}</code>")
+    L.append("<i>Anlık fiyatlar Binance spot · eğitim amaçlı kağıt-trade.</i>")
+    return "\n".join(L)
+
+
 # ----------------------------- canlı quote -------------------------------
 def quote_fmp(symbols, key):
     """FMP /stable/quote ile anlık fiyat: {sym: price}. Başarısızsa sembol atlanır."""
@@ -569,7 +751,9 @@ def _cli():
     ema = "--ema" in sys.argv
     chand = "--chand" in sys.argv
     crypto = "--crypto" in sys.argv
-    path, variant = ((PAPER_CRYPTO, "ema") if crypto else      # 🪙 kripto = HYBRID_TREND (ema bacakları)
+    crypto_ls = "--crypto-ls" in sys.argv
+    path, variant = ((PAPER_CRYPTO_LS, "ema") if crypto_ls else  # ⚖️ birleşik U/K (uzunlar ema bacaklı)
+                     (PAPER_CRYPTO, "ema") if crypto else        # 🪙 kripto = HYBRID_TREND (ema bacakları)
                      (PAPER_CHAND, "chand") if chand else
                      (PAPER_EMA, "ema") if ema else (PAPER, "champion"))
     if "--reset" in sys.argv:

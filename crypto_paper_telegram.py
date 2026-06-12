@@ -27,6 +27,7 @@ import swing2_backtest as s
 import paper_trader as pt
 import live_scan_telegram as lst          # _secret, send_message, send_photo, draw_chart (yeniden kullanım)
 from crypto_data import load_pinned_universe, quote_binance
+from short_backtest import live_short_candidates
 
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "swing2_out")
 REGIME_ATR_MAX = 2.5      # BTC ATR20% kilidi — crypto_regime_grid.csv şampiyonu
@@ -123,6 +124,28 @@ def main():
     paper_st = pt.load_state(pt.PAPER_CRYPTO, variant="ema")
     res = s.run_live_qswing_scan(market, cfg, asof=asof, held=sorted(pt.held_symbols(paper_st)))
 
+    # ⚖️ Birleşik U/K defteri için kısa tarama (yalnız ayı rejiminde aday döner; kilitsiz;
+    # tutulan-sembol filtresi open_new_short içinde — bugünkü çıkışlardan SONRAKİ duruma göre)
+    ls_st = pt.load_state(pt.PAPER_CRYPTO_LS, variant="ema")
+    _sdate, _bear, short_cands = live_short_candidates(market, asof=asof)
+
+    def _ls_step(st):
+        """Birleşik defteri bir gün ilerlet: önce çıkışlar (iki yön), sonra rejime göre giriş."""
+        n0 = len(st["closed"])
+        pt.manage_ema(st, market, res["asof"])
+        for r in st["closed"][n0:]:
+            r.setdefault("side", "long")
+        pt.manage_short_hybrid(st, market, res["asof"])
+        exited = st["closed"][n0:]
+        op_l, op_s = [], []
+        if res["regime_open"]:
+            shorted = {p["symbol"] for p in st.get("short_positions", [])}
+            op_l = pt.open_new(st, [c for c in res["buyable"] if c["symbol"] not in shorted],
+                               res["asof"])           # kilitliyken buyable zaten boş
+        else:
+            op_s = pt.open_new_short(st, short_cands, res["asof"])
+        return op_l, op_s, exited
+
     cands = res["buyable"]
     for i, c in enumerate(cands, 1):
         c["_rank"] = i
@@ -145,7 +168,11 @@ def main():
         op = pt.open_new(sim, res["buyable"], res["asof"])
         print("=== 🪙 KRİPTO KAĞIT-TRADE (simülasyon, kaydedilmedi) ===")
         print(_plain(pt.eod_message(op, ex, sim, res["asof"], tag=TAG)))
-        print(f"\n[--test: {len(cands)} aday · {len(op)} açılan · {len(ex)} çıkan · gönderilmedi]")
+        sim_ls = copy.deepcopy(ls_st)
+        op_l, op_s, ex_ls = _ls_step(sim_ls)
+        print(f"=== ⚖️ U/K BİRLEŞİK (simülasyon, kaydedilmedi) · kısa aday: {len(short_cands)} ===")
+        print(_plain(pt.ls_eod_message(op_l, op_s, ex_ls, sim_ls, res["asof"])))
+        print(f"\n[--test: {len(cands)} uzun aday · {len(short_cands)} kısa aday · gönderilmedi]")
         return
 
     token, chat = lst._secret("TELEGRAM_BOT_TOKEN"), lst._secret("TELEGRAM_CHAT_ID")
@@ -183,14 +210,21 @@ def main():
     pt.save_state(paper_st, pt.PAPER_CRYPTO)
     _send_text(pt.eod_message(opened, exited, paper_st, res["asof"], tag=TAG))
 
+    # --- ⚖️ Birleşik U/K defteri: rejim anahtarlı (uzun: kırılım+kilit · kısa: ½ boy, kilitsiz) ---
+    op_l, op_s, ex_ls = _ls_step(ls_st)
+    pt.save_state(ls_st, pt.PAPER_CRYPTO_LS)
+    _send_text(pt.ls_eod_message(op_l, op_s, ex_ls, ls_st, res["asof"]))
+
     pt.save_last_scan("\n\n".join([summ] + [candidate_caption(c, rank=i)
                                             for i, c in enumerate(cands, 1)]),
                       res["asof"], path=pt.LASTSCAN_CRYPTO)
 
     print(f"Gönderildi · asof {res['asof']} · rejim={'AÇIK' if res['regime_open'] else 'KAPALI'} · "
           f"kilit={'EVET' if res.get('vol_locked') else 'hayır'} (BTC ATR20% {res.get('spy_atr_pct')}) · "
-          f"KIRILIM={len(res['buyable'])} · "
-          f"kağıt: +{len(opened)} açıldı / -{len(exited)} çıktı / {len(paper_st['positions'])} açık")
+          f"KIRILIM={len(res['buyable'])} · kısa aday={len(short_cands)} · "
+          f"kağıt: +{len(opened)}/-{len(exited)}/{len(paper_st['positions'])} açık · "
+          f"U/K: +{len(op_l)}U+{len(op_s)}K/-{len(ex_ls)}/"
+          f"{len(ls_st['positions'])}U+{len(ls_st.get('short_positions', []))}K açık")
 
 
 if __name__ == "__main__":

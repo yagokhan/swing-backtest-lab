@@ -97,14 +97,18 @@ def handle(cmd, token, chat, fmp_key, chat_name=""):
         _send(token, chat, pt.portfolio_message(ch_st, prices, now, tag="💡 63G-Şamdan"))
     elif cmd in ("/kripto", "/cp"):
         cr_st = pt.load_state(pt.PAPER_CRYPTO, variant="ema")
+        ls_st = pt.load_state(pt.PAPER_CRYPTO_LS, variant="ema")
+        syms = (pt.held_symbols(cr_st) | pt.held_symbols(ls_st)
+                | {p["symbol"] for p in ls_st.get("short_positions", [])})
         try:
             from crypto_data import quote_binance
-            prices = quote_binance(sorted(pt.held_symbols(cr_st)))
+            prices = quote_binance(sorted(syms))
         except Exception:
             prices = {}
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         _send(token, chat, pt.portfolio_message(cr_st, prices, now, tag="🪙 Kripto-HYBRID",
                                                 price_src="Binance spot"))
+        _send(token, chat, pt.ls_portfolio_message(ls_st, prices, now))
         ls = pt.load_last_scan(pt.LASTSCAN_CRYPTO)
         if ls:
             _send(token, chat, f"<i>🕒 Son kripto tarama: {ls.get('ts','?')} (asof {ls.get('asof','?')})</i>\n\n"

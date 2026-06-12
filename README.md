@@ -111,10 +111,15 @@ Telegram raporu. Strateji = backtest & rejim ızgarası şampiyonu: **qswing 40g
 girişi (BTC rejim kapısı + **BTC ATR20% > 2.5 oynaklık kilidi**) · **HYBRID_TREND**
 çıkışı (%50 kapanış&lt;EMA8 · %50 kapanış&lt;EMA21). Durum: `~/.swing_paper_crypto.json`.
 
+Aynı cron koşusu **⚖️ U/K Birleşik** kağıt portföyünü de yürütür (`~/.swing_paper_crypto_ls.json`):
+rejim anahtarlı — boğada uzun (kırılım+kilit), ayıda kısa **½ boy** (kilitsiz, 3bps/gün funding),
+tek nakit havuzu. Dashboard'da 5. defter, `/kripto` çıktısında ikinci mesaj.
+
 ```bash
 python3 crypto_paper_telegram.py --test            # kuru koşu (Telegram'a göndermez, state yazmaz)
 python3 paper_trader.py --crypto                   # kripto kağıt portföyü göster
 python3 paper_trader.py --crypto --reset           # sıfırla (10.000 $)
+python3 paper_trader.py --crypto-ls [--reset]      # ⚖️ U/K birleşik kağıt portföyü göster/sıfırla
 # cron (sunucu UTC):       15 0 * * *  cd /path/to/repo && python3 crypto_paper_telegram.py --utc-window >> cron_crypto.log 2>&1
 # cron (sunucu TR saati):  15 3 * * *  cd /path/to/repo && python3 crypto_paper_telegram.py --utc-window >> cron_crypto.log 2>&1
 ```

@@ -267,3 +267,26 @@ class ShortBacktester:
                 "win_rate": (len(wins) / len(self.trades) * 100) if self.trades else 0.0,
                 "trades": len(self.trades),
                 "profit_factor": (gp / gl) if gl else float("inf"), "equity": eq}
+
+
+def live_short_candidates(market: dict, asof=None, held=(), p: ShortParams | None = None):
+    """CANLI kısa tarama (kağıt-trade için): son kapalı bardaki kısa kırılım adayları.
+    Dönüş: (tarih, ayı_rejimi_mi, [{'symbol','entry','rs','ema8','ema21'}]) — en zayıf RS önce."""
+    p = p or ShortParams()
+    sb = ShortBacktester(market, p)
+    cal = sb.calendar
+    if asof is None:
+        date = cal[-1]
+    else:
+        date = cal[max(0, int(cal.searchsorted(pd.Timestamp(asof), side="right")) - 1)]
+    if not sb._regime_bear(date):
+        return date, False, []
+    out = []
+    for sym, close, rs in sb._scan_entries(date):
+        if sym in set(held):
+            continue
+        row = sb.data[sym].loc[date]
+        out.append({"symbol": sym, "entry": float(close), "rs": round(rs, 1),
+                    "ema8": (float(row["EMA8"]) if not pd.isna(row["EMA8"]) else None),
+                    "ema21": (float(row["EMA21"]) if not pd.isna(row["EMA21"]) else None)})
+    return date, True, out
