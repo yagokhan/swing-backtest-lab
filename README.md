@@ -87,6 +87,24 @@ Evren: hacme göre top-75 USDT çifti (stablecoin/kaldıraçlı/wrapped hariç,
 > Sonuçlar `backtests/crypto_qswing_3exit_5period_SUMMARY.csv` ↔
 > `sp500_qswing_3exit_5period_SUMMARY.csv` ile satır-satır karşılaştırılabilir.
 
+### Kripto kağıt-trade (paper) — şampiyon konfig, günlük cron
+
+`crypto_paper_telegram.py`: 00:00 UTC kapanışı sonrası tarama + 🪙 kağıt portföy +
+Telegram raporu. Strateji = backtest & rejim ızgarası şampiyonu: **qswing 40g kırılım**
+girişi (BTC rejim kapısı + **BTC ATR20% > 2.5 oynaklık kilidi**) · **HYBRID_TREND**
+çıkışı (%50 kapanış&lt;EMA8 · %50 kapanış&lt;EMA21). Durum: `~/.swing_paper_crypto.json`.
+
+```bash
+python3 crypto_paper_telegram.py --test            # kuru koşu (Telegram'a göndermez, state yazmaz)
+python3 paper_trader.py --crypto                   # kripto kağıt portföyü göster
+python3 paper_trader.py --crypto --reset           # sıfırla (10.000 $)
+# cron (sunucu UTC):       15 0 * * *  cd /path/to/repo && python3 crypto_paper_telegram.py --utc-window >> cron_crypto.log 2>&1
+# cron (sunucu TR saati):  15 3 * * *  cd /path/to/repo && python3 crypto_paper_telegram.py --utc-window >> cron_crypto.log 2>&1
+```
+
+Komut botunda **`/kripto`** (veya `/cp`): anlık K/Z (Binance spot fiyatlarıyla) + son
+kripto taraması. Kripto yayını yalnız `TELEGRAM_CHAT_ID`'ye gider (hisse abone listesi ayrı).
+
 ## Backtest parametreleri (özet)
 
 | Alan | Açıklama |

@@ -215,6 +215,19 @@ def fetch_daily_binance(symbols: List[str], dl_start: Optional[str],
     return frames
 
 
+def quote_binance(symbols: List[str]) -> Dict[str, float]:
+    """Anlık fiyat: {sym: price}. Tek istek (/ticker/price, symbols=[...]).
+    Başarısızsa sembol atlanır (paper_trader.quote_fmp sözleşmesi)."""
+    if not symbols:
+        return {}
+    try:
+        syms = json.dumps([s.upper() for s in symbols], separators=(",", ":"))
+        data = _get_json("/ticker/price", {"symbols": syms})
+        return {d["symbol"]: float(d["price"]) for d in data if d.get("price")}
+    except Exception:
+        return {}
+
+
 # =========================================================================
 # EVREN SEÇİMİ (top-N USDT; 30g medyan quote-hacim sıralı)
 # =========================================================================

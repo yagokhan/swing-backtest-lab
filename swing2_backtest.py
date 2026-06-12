@@ -1909,6 +1909,17 @@ def _crypto_universe_preset() -> tuple:
 UNIVERSE_PRESETS["crypto_topN"] = _crypto_universe_preset()
 
 
+def _px_round(x, decimals=2):
+    """Fiyat yuvarlama: ≥1$ eski davranış (sabit hane); <1$ (kripto kuruş-altı, ör. PEPE
+    0.0000012) → 6 anlamlı hane. round(x,2)=0.0 ile sinyalin yutulmasını önler."""
+    if x is None:
+        return None
+    x = float(x)
+    if x == 0 or not math.isfinite(x) or abs(x) >= 1.0:
+        return round(x, decimals)
+    return round(x, max(decimals, 5 - int(math.floor(math.log10(abs(x))))))
+
+
 def _jsafe(x):
     """NaN/Inf → None, numpy skaler → python."""
     if x is None:
@@ -2307,18 +2318,18 @@ def run_live_qswing_scan(current_market_data, cfg=None, asof=None,
         risk = plan["entry"] - plan["stop"]
         rec = {
             "symbol": sym, "sector_etf": SECTOR_MAP.get(sym, "—"),
-            "close": round(float(c), 2),
-            "entry": round(float(plan["entry"]), 2), "stop": round(float(plan["stop"]), 2),
-            "partial_target": round(float(plan["entry"] + 2 * risk), 2),   # referans (+2R) — hibride zorunlu değil
-            "ma10": (round(float(ma10), 2) if ma10 is not None and not pd.isna(ma10) else None),
-            "ema8": (round(float(ema8), 2) if ema8 is not None and not pd.isna(ema8) else None),    # %50 çıkış (hibrit)
-            "ema21": (round(float(ema21), 2) if ema21 is not None and not pd.isna(ema21) else None),  # runner çıkışı (hibrit)
+            "close": _px_round(c),
+            "entry": _px_round(plan["entry"]), "stop": _px_round(plan["stop"]),
+            "partial_target": _px_round(plan["entry"] + 2 * risk),   # referans (+2R) — hibride zorunlu değil
+            "ma10": (_px_round(ma10) if ma10 is not None and not pd.isna(ma10) else None),
+            "ema8": (_px_round(ema8) if ema8 is not None and not pd.isna(ema8) else None),    # %50 çıkış (hibrit)
+            "ema21": (_px_round(ema21) if ema21 is not None and not pd.isna(ema21) else None),  # runner çıkışı (hibrit)
             # şampiyon (optimized) çıkış metni için: ATR0 + trailing çarpanı (+1R sonrası KAPANIŞ−mult×ATR)
-            "atr": (round(float(row["ATR"]), 2) if not pd.isna(row["ATR"]) else None),
+            "atr": (_px_round(row["ATR"]) if not pd.isna(row["ATR"]) else None),
             "atr_trail_mult": cfg.atr_trail_mult,
             "risk_pct": (round(risk / plan["entry"] * 100, 2) if plan["entry"] else None),
             "rs": round(float(rs), 1), "ret_3m": round(float(r60), 1),
-            "high40": round(float(h), 2),
+            "high40": _px_round(h),
             "dist_52h_pct": round((c / hi52 - 1) * 100, 1),
             "dist_sma20_pct": (round(dist20 * 100, 1) if dist20 is not None else None),
             "dist_to_breakout_pct": round((h - c) / c * 100, 2),

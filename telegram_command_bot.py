@@ -77,6 +77,7 @@ def _save_offset(off):
 
 HELP = ("<b>📓 Kağıt Portföy Botu</b>\n"
         "/portfolio — anlık K/Z + açık pozisyon detayı (üç portföy)\n"
+        "/kripto — 🪙 kripto kağıt portföy (anlık K/Z, Binance) + son kripto taraması\n"
         "/lastscan — son 22:45 tarama mesajı\n"
         "/abone — her akşam 22:45 tarama + portföy yayınına abone ol\n"
         "/iptal — yayın aboneliğini bitir\n"
@@ -94,6 +95,20 @@ def handle(cmd, token, chat, fmp_key, chat_name=""):
         _send(token, chat, pt.portfolio_message(st, prices, now, tag="🏆 ATR-trail"))
         _send(token, chat, pt.portfolio_message(ema_st, prices, now, tag="📐 8/21-EMA"))
         _send(token, chat, pt.portfolio_message(ch_st, prices, now, tag="💡 63G-Şamdan"))
+    elif cmd in ("/kripto", "/cp"):
+        cr_st = pt.load_state(pt.PAPER_CRYPTO, variant="ema")
+        try:
+            from crypto_data import quote_binance
+            prices = quote_binance(sorted(pt.held_symbols(cr_st)))
+        except Exception:
+            prices = {}
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        _send(token, chat, pt.portfolio_message(cr_st, prices, now, tag="🪙 Kripto-HYBRID",
+                                                price_src="Binance spot"))
+        ls = pt.load_last_scan(pt.LASTSCAN_CRYPTO)
+        if ls:
+            _send(token, chat, f"<i>🕒 Son kripto tarama: {ls.get('ts','?')} (asof {ls.get('asof','?')})</i>\n\n"
+                               + ls.get("text", ""))
     elif cmd in ("/lastscan", "/ls"):
         ls = pt.load_last_scan()
         if not ls:
@@ -149,8 +164,8 @@ def main():
             if not text or chat is None:
                 continue
             cmd = text.split()[0].split("@")[0].lower()   # '/portfolio@Bot params' → '/portfolio'
-            known = cmd in ("/portfolio", "/p", "/lastscan", "/ls", "/help", "/start",
-                            "/subscribe", "/abone", "/unsubscribe", "/iptal")
+            known = cmd in ("/portfolio", "/p", "/kripto", "/cp", "/lastscan", "/ls",
+                            "/help", "/start", "/subscribe", "/abone", "/unsubscribe", "/iptal")
             print(f"[update] chat={chat} type={chat_obj.get('type')} "
                   f"text={text[:40]!r} cmd={cmd} known={known}", flush=True)
             name = chat_obj.get("title") or chat_obj.get("username") or chat_obj.get("first_name") or ""

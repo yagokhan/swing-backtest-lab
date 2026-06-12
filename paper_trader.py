@@ -32,7 +32,9 @@ import pandas as pd
 PAPER = os.path.expanduser("~/.swing_paper.json")
 PAPER_EMA = os.path.expanduser("~/.swing_paper_ema.json")      # 8/21-EMA çıkış varyantı (karşılaştırma)
 PAPER_CHAND = os.path.expanduser("~/.swing_paper_chand.json")  # 💡 63g kırılım + şamdan trail varyantı
+PAPER_CRYPTO = os.path.expanduser("~/.swing_paper_crypto.json")  # 🪙 kripto (Binance) HYBRID_TREND portföyü
 LASTSCAN = os.path.expanduser("~/.swing_lastscan.json")
+LASTSCAN_CRYPTO = os.path.expanduser("~/.swing_lastscan_crypto.json")
 SCANDATA = os.path.expanduser("~/.swing_lastscan_data.json")   # yapısal tarama (dashboard için)
 
 START_CAPITAL = 10_000.0
@@ -92,6 +94,27 @@ def _isna(x):
     return x is None or (isinstance(x, float) and math.isnan(x))
 
 
+def _px(x, decimals=2):
+    """Fiyat yuvarlama: ≥1$ eski davranış (sabit hane); <1$ (kripto kuruş-altı, ör. PEPE
+    0.0000012) → 6 anlamlı hane. round(x,2)=0.0 yüzünden state bozulmasını önler."""
+    if x is None:
+        return None
+    x = float(x)
+    if x == 0 or not math.isfinite(x) or abs(x) >= 1.0:
+        return round(x, decimals)
+    return round(x, max(decimals, 5 - int(math.floor(math.log10(abs(x))))))
+
+
+def _fmt(x, decimals=2):
+    """Mesajlarda fiyat metni: ≥1$ klasik 2 hane; <1$ 6 anlamlı hane (kripto)."""
+    if x is None:
+        return "—"
+    x = float(x)
+    if x == 0 or not math.isfinite(x) or abs(x) >= 1.0:
+        return f"{x:.{decimals}f}"
+    return f"{x:.{max(decimals, 5 - int(math.floor(math.log10(abs(x)))))}f}"
+
+
 # ----------------------------- yönetim (exit) ----------------------------
 def _manage_bar(pos, open_, high, low, close, atr):
     """Bir günlük barı şampiyon kurallarıyla değerlendir.
@@ -144,8 +167,8 @@ def manage(st, market, asof):
                     rec = {"symbol": pos["symbol"], "entry_date": pos["entry_date"],
                            "entry_ts": pos.get("entry_ts"),
                            "exit_date": ts.strftime("%Y-%m-%d"), "exit_ts": now_ts,
-                           "entry": round(pos["entry"], 2), "entry_fill": round(ef, 2),
-                           "exit": round(fill, 2), "shares": round(pos["shares"], 4),
+                           "entry": _px(pos["entry"]), "entry_fill": _px(ef),
+                           "exit": _px(fill), "shares": round(pos["shares"], 4),
                            "pnl": round(proceeds - cost, 2),
                            "pnl_pct": round((fill / ef - 1) * 100, 2), "outcome": tag}
                     st["closed"].append(rec); exited.append(rec); done = True
@@ -200,8 +223,8 @@ def manage_ema(st, market, asof):
                 rec = {"symbol": pos["symbol"], "entry_date": pos["entry_date"],
                        "entry_ts": pos.get("entry_ts"),
                        "exit_date": ts.strftime("%Y-%m-%d"), "exit_ts": now_ts,
-                       "entry": round(pos["entry"], 2), "entry_fill": round(ef, 2),
-                       "exit": round(fill, 2), "shares": round(leg["shares"], 4),
+                       "entry": _px(pos["entry"]), "entry_fill": _px(ef),
+                       "exit": _px(fill), "shares": round(leg["shares"], 4),
                        "pnl": round(proceeds - leg["cost"], 2),
                        "pnl_pct": round((fill / ef - 1) * 100, 2),
                        "outcome": "EMA8" if leg["rule"] == "ema8" else "EMA21"}
@@ -241,7 +264,7 @@ def manage_chand(st, market, asof):
                 if _isna(close) or _isna(atr):
                     continue
                 level = pos.get("peak", pos["entry"]) - CHAND_MULT * float(atr)
-                pos["chand_stop"] = round(level, 4)        # bilgi amaçlı (mesaj/dashboard)
+                pos["chand_stop"] = _px(level, 4)          # bilgi amaçlı (mesaj/dashboard)
                 if close < level:                          # kapanış teyidi → market çıkış
                     fill = close * (1 - SLIP_EXIT_BPS / 1e4) if SLIPPAGE else close
                     proceeds = pos["shares"] * fill
@@ -249,8 +272,8 @@ def manage_chand(st, market, asof):
                     rec = {"symbol": pos["symbol"], "entry_date": pos["entry_date"],
                            "entry_ts": pos.get("entry_ts"),
                            "exit_date": ts.strftime("%Y-%m-%d"), "exit_ts": now_ts,
-                           "entry": round(pos["entry"], 2), "entry_fill": round(ef, 2),
-                           "exit": round(fill, 2), "shares": round(pos["shares"], 4),
+                           "entry": _px(pos["entry"]), "entry_fill": _px(ef),
+                           "exit": _px(fill), "shares": round(pos["shares"], 4),
                            "pnl": round(proceeds - pos["shares"] * ef, 2),
                            "pnl_pct": round((fill / ef - 1) * 100, 2), "outcome": "ŞAMDAN"}
                     st["closed"].append(rec); exited.append(rec); done = True
@@ -290,7 +313,7 @@ def open_new(st, buyable, asof):
         shares = per / entry_fill                     # gerçek ödenen fiyattan adet (nakit tamamı kullanılır)
         target = float(c.get("partial_target") or (entry + 2 * (entry - stop)))
         pos = {"symbol": c["symbol"], "entry_date": asof_s, "entry_ts": now_ts,
-               "entry": entry, "entry_fill": round(entry_fill, 4), "shares": shares,
+               "entry": entry, "entry_fill": _px(entry_fill, 4), "shares": shares,
                "stop": stop, "target": target, "atr0": float(c.get("atr") or 0.0),
                "risk0": entry - stop, "alloc": round(per, 2),
                "last_date": asof_s, "score": c.get("score")}
@@ -301,7 +324,7 @@ def open_new(st, buyable, asof):
         elif st.get("variant") == "chand":            # 💡 şamdan: tepe takibi + başlangıç trail seviyesi
             pos["peak"] = entry
             atr0 = pos["atr0"]
-            pos["chand_stop"] = round(entry - CHAND_MULT * atr0, 4) if atr0 > 0 else stop
+            pos["chand_stop"] = _px(entry - CHAND_MULT * atr0, 4) if atr0 > 0 else stop
             pos["stop"] = pos["chand_stop"]           # bilgi amaçlı (gün-içi tetik YOK, kapanış teyidi)
             pos["target"] = None                      # sabit hedef yok — trend ne verirse
         st["cash"] -= shares * entry_fill             # = per (eşit-ağırlık korunur)
@@ -353,9 +376,9 @@ def _exit_plan_txt(p):
         return "çıkış: kapanış < " + " / ".join(rem) if rem else "çıkış: tamamlandı"
     if p.get("peak") is not None:
         lvl = p.get("chand_stop")
-        return (f"çıkış: kapanış < <code>${lvl:.2f}</code> (tepe−{CHAND_MULT}×ATR)"
+        return (f"çıkış: kapanış < <code>${_fmt(lvl)}</code> (tepe−{CHAND_MULT}×ATR)"
                 if lvl is not None else f"çıkış: kapanış < tepe−{CHAND_MULT}×ATR")
-    return f"stop <code>${p['stop']:.2f}</code> · hedef <code>${p['target']:.2f}</code>"
+    return f"stop <code>${_fmt(p['stop'])}</code> · hedef <code>${_fmt(p['target'])}</code>"
 
 
 def eod_message(opened, exited, st, asof, tag=None):
@@ -367,7 +390,7 @@ def eod_message(opened, exited, st, asof, tag=None):
         for p in opened:
             alloc = p.get("alloc", p["shares"] * p["entry"])
             ef = p.get("entry_fill", p["entry"])
-            L.append(f"• <b>{p['symbol']}</b> @ <code>${ef:.2f}</code> · ${alloc:.0f} · "
+            L.append(f"• <b>{p['symbol']}</b> @ <code>${_fmt(ef)}</code> · ${alloc:.0f} · "
                      f"{p['shares']:.3f} adet · {_exit_plan_txt(p)}\n"
                      f"   🕒 giriş {p.get('entry_ts', p['entry_date'])}")
     if exited:
@@ -376,8 +399,8 @@ def eod_message(opened, exited, st, asof, tag=None):
                  f"<b>{'+' if tot>=0 else ''}{tot:.2f}$</b>")
         for r in exited:
             em = "✅" if r["pnl"] >= 0 else "❌"
-            L.append(f"{em} <b>{r['symbol']}</b> {r['outcome']} @ <code>${r['exit']:.2f}</code> · "
-                     f"giriş <code>${r.get('entry_fill', r['entry']):.2f}</code> · "
+            L.append(f"{em} <b>{r['symbol']}</b> {r['outcome']} @ <code>${_fmt(r['exit'])}</code> · "
+                     f"giriş <code>${_fmt(r.get('entry_fill', r['entry']))}</code> · "
                      f"<b>{'+' if r['pnl']>=0 else ''}{r['pnl']:.2f}$ ({r['pnl_pct']:+.1f}%)</b>\n"
                      f"   🕒 giriş {r.get('entry_ts', r['entry_date'])} → çıkış "
                      f"{r.get('exit_ts', r['exit_date'])} (bar {r['exit_date']})")
@@ -392,7 +415,7 @@ def eod_message(opened, exited, st, asof, tag=None):
     return "\n".join(L)
 
 
-def portfolio_message(st, prices, now_str, tag=None):
+def portfolio_message(st, prices, now_str, tag=None, price_src="FMP /stable"):
     """/portfolio yanıtı: mesajın gönderildiği an için anlık K/Z + detay (HTML)."""
     head = f"<b>📓 Kağıt Portföy{' — ' + tag if tag else ''} ({now_str})</b>"
     if not st["positions"]:
@@ -408,15 +431,15 @@ def portfolio_message(st, prices, now_str, tag=None):
         ef = p.get("entry_fill", p["entry"])             # gerçek ödenen giriş
         px = prices.get(p["symbol"])
         if px is None:
-            L.append(f"• <b>{p['symbol']}</b> giriş <code>${ef:.2f}</code> · "
+            L.append(f"• <b>{p['symbol']}</b> giriş <code>${_fmt(ef)}</code> · "
                      f"{p['shares']:.3f} adet · <i>fiyat alınamadı</i>")
             continue
         pnl = p["shares"] * (px - ef)
         pct = (px / ef - 1) * 100
         unreal += pnl
         em = "🟢" if pnl >= 0 else "🔴"
-        L.append(f"{em} <b>{p['symbol']}</b> <code>${px:.2f}</code> "
-                 f"(giriş <code>${ef:.2f}</code>) · {p['shares']:.3f} adet · "
+        L.append(f"{em} <b>{p['symbol']}</b> <code>${_fmt(px)}</code> "
+                 f"(giriş <code>${_fmt(ef)}</code>) · {p['shares']:.3f} adet · "
                  f"<b>{'+' if pnl>=0 else ''}{pnl:.2f}$ ({pct:+.1f}%)</b> · "
                  f"{_exit_plan_txt(p)} · "
                  f"🕒 {p.get('entry_ts', p['entry_date'])}")
@@ -430,7 +453,7 @@ def portfolio_message(st, prices, now_str, tag=None):
              f"realize <b>{'+' if realized>=0 else ''}{realized:.2f}$</b>")
     L.append(f"<b>Genel K/Z: {'+' if total_pl>=0 else ''}{total_pl:.2f}$ "
              f"({total_pl/st['start_capital']*100:+.2f}%)</b> · nakit <code>${st['cash']:.2f}</code>")
-    L.append(f"<i>Anlık fiyatlar FMP /stable · eğitim amaçlı kağıt-trade.{_slip_note()}</i>")
+    L.append(f"<i>Anlık fiyatlar {price_src} · eğitim amaçlı kağıt-trade.{_slip_note()}</i>")
     return "\n".join(L)
 
 
@@ -476,18 +499,18 @@ def remove_subscriber(chat_id):
 
 
 # ----------------------------- son scan kaydı ----------------------------
-def save_last_scan(text, asof):
-    tmp = LASTSCAN + ".tmp"
+def save_last_scan(text, asof, path=LASTSCAN):
+    tmp = path + ".tmp"
     payload = {"asof": asof, "ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "text": text}
     with open(tmp, "w") as fh:
         json.dump(payload, fh, ensure_ascii=False)
-    os.replace(tmp, LASTSCAN)
+    os.replace(tmp, path)
 
 
-def load_last_scan():
-    if os.path.exists(LASTSCAN):
+def load_last_scan(path=LASTSCAN):
+    if os.path.exists(path):
         try:
-            return json.load(open(LASTSCAN))
+            return json.load(open(path))
         except Exception:
             return None
     return None
@@ -545,7 +568,9 @@ def _cli():
     import sys
     ema = "--ema" in sys.argv
     chand = "--chand" in sys.argv
-    path, variant = ((PAPER_CHAND, "chand") if chand else
+    crypto = "--crypto" in sys.argv
+    path, variant = ((PAPER_CRYPTO, "ema") if crypto else      # 🪙 kripto = HYBRID_TREND (ema bacakları)
+                     (PAPER_CHAND, "chand") if chand else
                      (PAPER_EMA, "ema") if ema else (PAPER, "champion"))
     if "--reset" in sys.argv:
         save_state(_default_state(variant), path)
