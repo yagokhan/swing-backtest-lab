@@ -533,6 +533,7 @@ PAGE = """<!doctype html><html lang="tr"><head><meta charset="utf-8">
   <div class="refresh">
     <span class="muted" id="upd"></span>
     <button onclick="window.open('/rapor','_blank')" title="Deney iterasyonu: canlı baz vs önerilen varyant — ekonomist gözüyle detaylı karşılaştırma">📊 Rapor</button>
+    <button onclick="window.open('/kripto-rapor','_blank')" title="Kripto adaptasyonu genel bakış: 15 backtest + BTC oynaklık kilidi ızgarası + hisse karşılaştırması">🪙 Kripto Rapor</button>
     <button onclick="loadAll()">↻ Yenile</button>
   </div>
 </header>
@@ -776,6 +777,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         self._send(200, fh.read(), "text/html; charset=utf-8")
                 else:
                     self._send(404, "Rapor henüz üretilmedi (python3 gen_exp_report.py)", "text/plain; charset=utf-8")
+            elif path == "/kripto-rapor":
+                # 🪙 Kripto adaptasyonu genel bakış raporu (statik, gen_crypto_report.py üretir)
+                rp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dashboard_static", "crypto_report.html")
+                if os.path.exists(rp):
+                    with open(rp, "rb") as fh:
+                        self._send(200, fh.read(), "text/html; charset=utf-8")
+                else:
+                    self._send(404, "Rapor henüz üretilmedi (python3 gen_crypto_report.py)", "text/plain; charset=utf-8")
             elif path.startswith("/api/candles/"):
                 sym = path[len("/api/candles/"):].upper()
                 q = urllib.parse.parse_qs(self.path.split("?", 1)[1]) if "?" in self.path else {}
