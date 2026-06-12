@@ -112,12 +112,15 @@ class Config:
     atr_stop_mult: float = 1.5    # 2y+5y grid şampiyonu (dar stop kazandı)
     pivot_lookback: int = 10
     slope_window: int = 20
+    high52_bars: int = 252        # 52-hafta zirve penceresi (bar); kripto 7g/hafta → 365
 
     min_score: int = 16           # 2y+5y grid şampiyonu (tatlı nokta)
     require_not_killswitch: bool = True
     max_dist_sma20: float = 0.0   # SMA20'ye max uzaklık (chase kapısı); 0 = kapalı, ör. 0.25 = %25
+    score_bench_atr_calm: float = 1.5  # 4.katman 'benchmark sakin' ATR% tavanı (kripto/BTC için ~3+)
 
     commission_per_trade: float = 1.0
+    commission_bps: float = 0.0        # >0 ise YÜZDE komisyon (bps/bacak) — sabit USD yerine; kripto spot ~10
     slippage_bps: float = 5.0          # limit-benzeri (hedef/kısmi) fill kayması
     entry_slippage_bps: float = 8.0    # GİRİŞ: kapanışa 5dk kala (15:55 ET) hacim/spread oynaklığı
     stop_slippage_bps: float = 15.0    # market emri (stop/trail) — daha çok kayar
@@ -131,7 +134,7 @@ class Config:
     debug_download: bool = False       # her sembol için ilk Close'u DEBUG bas
     disk_cache: bool = False           # indirilen veriyi diske yaz/oku (yfinance throttle'a karşı)
     cache_dir: str = "swing2_cache"
-    price_source: str = "fmp"          # günlük fiyat kaynağı: 'fmp' (ücretli, varsayılan) | 'yfinance'
+    price_source: str = "fmp"          # günlük fiyat kaynağı: 'fmp' (ücretli, varsayılan) | 'yfinance' | 'binance' (kripto)
 
     # --- v3: Kısmi kâr alma + trailing stop ---
     partial_tp: bool = True
@@ -254,7 +257,7 @@ def add_indicators(df, cfg):
     out["POCKET_PIVOT"] = (c > out["Open"]) & (out["MAX_DOWN_VOL10"] > 0) & (out["Volume"] > out["MAX_DOWN_VOL10"])
     out["TIGHT5"] = (((out["High"] - out["Low"]) / c) < 0.012).rolling(5).sum()
     out["LOW10"] = out["Low"].rolling(cfg.pivot_lookback).min()
-    out["HIGH52"] = out["High"].rolling(252).max()
+    out["HIGH52"] = out["High"].rolling(getattr(cfg, "high52_bars", 252)).max()
     for _lb in (10, 20, 40, 63):                                  # qswing kırılım: önceki N-gün tepe (nedensel)
         out[f"HIGH_PRIOR_{_lb}"] = out["High"].rolling(_lb).max().shift(1)
     out["HIGH_PRIOR"] = out[f"HIGH_PRIOR_{getattr(cfg, 'qswing_breakout_lb', 20)}"]
@@ -338,7 +341,7 @@ def score_layers(row, stage, vcp, plan, m):
     L.append({"id": 3, "pts": min(l3, 3)})
     l4 = 0
     if m["spy_above_sma200"]: l4 += 1
-    if m["spy_atr_pct"] is not None and m["spy_atr_pct"] < 1.5: l4 += 1
+    if m["spy_atr_pct"] is not None and m["spy_atr_pct"] < m.get("spy_atr_calm_max", 1.5): l4 += 1
     sec = m["sector"]
     if sec and sec.get("ok"):
         if sec["above50"] and sec["above200"]: l4 += 1
@@ -619,7 +622,7 @@ def download_and_align_data(cfg: Config) -> dict:
     # ---- Disk cache (yfinance throttle'a karşı: bir kez indir, tekrar tekrar oku) ----
     cache_file = None
     if cfg.disk_cache:
-        sig = hashlib.md5(("|".join(sorted(tickers)) + f"|{win_tag}|{cfg.interval}|{cfg.price_source}|ma{cfg.ma_trail_len}|{today.date()}").encode()).hexdigest()[:12]
+        sig = hashlib.md5(("|".join(sorted(tickers)) + f"|{win_tag}|{cfg.interval}|{cfg.price_source}|ma{cfg.ma_trail_len}|h52{cfg.high52_bars}|{today.date()}").encode()).hexdigest()[:12]
         cache_file = os.path.join(cfg.cache_dir, f"market_{win_tag}_{sig}.pkl")
         if os.path.exists(cache_file):
             try:
@@ -648,6 +651,15 @@ def download_and_align_data(cfg: Config) -> dict:
         got = sum(1 for v in frames.values() if v is not None and len(v))
         if got == 0:
             raise SystemExit("FMP indirme başarısız (anahtar/plan/ağ).")
+    elif cfg.price_source == "binance":
+        from crypto_data import fetch_daily_binance
+        bn_start = dl_start or _period_to_start(cfg.period, cfg.warmup_calendar_buffer)
+        bn_end = cfg.end_date or today.strftime("%Y-%m-%d")
+        print(f"Veri indiriliyor (Binance klines): {len(tickers)} sembol · {bn_start}→{bn_end} ...", flush=True)
+        frames = fetch_daily_binance(tickers, bn_start, bn_end, workers=6,
+                                     cache_dir=os.path.join(cfg.cache_dir, "binance"))
+        if sum(1 for v in frames.values() if v is not None and len(v)) == 0:
+            raise SystemExit("Binance indirme başarısız (ağ/geo).")
     elif cfg.per_ticker_download:
         print(f"Veri indiriliyor (TEK TEK, izole): {len(tickers)} sembol · {win_tag} · {cfg.download_workers} işçi ...", flush=True)
         ex = _cf.ThreadPoolExecutor(max_workers=cfg.download_workers)
@@ -700,7 +712,7 @@ def download_and_align_data(cfg: Config) -> dict:
     # ---- Temizle + hizala ----
     spy_raw = _clean_frame(frames.get(cfg.benchmark), today)
     if spy_raw is None or len(spy_raw) < cfg.warmup_bars:
-        raise SystemExit("SPY verisi yetersiz/geçersiz.")
+        raise SystemExit(f"{cfg.benchmark} verisi yetersiz/geçersiz.")
     cal = spy_raw.index
 
     data, skipped, anomalies = {}, [], []
@@ -723,7 +735,7 @@ def download_and_align_data(cfg: Config) -> dict:
             sectors[e] = pd.DataFrame({"Close": cl, "SMA50": sma(cl, 50), "SMA200": sma(cl, 200)}).reindex(cal)
 
     earnings = {}
-    if cfg.use_earnings:
+    if cfg.use_earnings and cfg.price_source != "binance":   # kripto: earnings yok (yfinance'e SOLUSDT sorma)
         print("Earnings takvimleri çekiliyor...")
         for s in data: earnings[s] = _fetch_earnings(s)
 
@@ -1088,7 +1100,19 @@ class Swing2Backtester:
         self._slip = cfg.slippage_bps / 10_000.0
         self._entry_slip = cfg.entry_slippage_bps / 10_000.0   # girişe özel (kapanış oynaklığı)
         self._stop_slip = cfg.stop_slippage_bps / 10_000.0
+        self._comm_bps = cfg.commission_bps / 10_000.0
         self.px1545 = self.market.get("px1545", {})            # {sym: Series(date→gerçek 15:45 fiyatı)}
+
+    # ---- komisyon: sabit USD (hisse) veya yüzde/bps (kripto spot) ---------
+    def _commission(self, notional: float) -> float:
+        """Bacak komisyonu: commission_bps>0 → notyonelin yüzdesi; değilse sabit USD."""
+        return abs(notional) * self._comm_bps if self.cfg.commission_bps > 0 else self.cfg.commission_per_trade
+
+    def _shares_for_budget(self, budget: float, fill: float) -> float:
+        """budget = lot×fiyat + komisyon denklemini çözen lot."""
+        if self.cfg.commission_bps > 0:
+            return budget / (fill * (1.0 + self._comm_bps))
+        return (budget - self.cfg.commission_per_trade) / fill
 
     # ---- piyasa bağlamı --------------------------------------------------
     def _common(self, date):
@@ -1096,6 +1120,7 @@ class Swing2Backtester:
         _ratr = s.get("ATR20_PCT")   # eski disk-cache'lerde olmayabilir → güvenli erişim
         return {"spy_above_sma200": bool((not pd.isna(s["SMA200"])) and s["Close"] > s["SMA200"]),
                 "spy_atr_pct": None if pd.isna(s["ATR_PCT"]) else float(s["ATR_PCT"]),
+                "spy_atr_calm_max": float(self.cfg.score_bench_atr_calm),
                 "spy_regime_atr_pct": None if (_ratr is None or pd.isna(_ratr)) else float(_ratr),
                 "spy_ret60": None if pd.isna(s["RET60"]) else float(s["RET60"])}
 
@@ -1303,7 +1328,7 @@ class Swing2Backtester:
         cfg = self.cfg; pos = self.positions[sym]
         sell_sh = pos.shares * frac
         fill = price * (1 - (self._slip if slip is None else slip))
-        proceeds = sell_sh * fill - cfg.commission_per_trade
+        proceeds = sell_sh * fill - self._commission(sell_sh * fill)
         cost_part = pos.cost * frac
         self.cash += proceeds
         self.trades.append(Trade(sym, pos.entry_date, date, pos.entry, fill, sell_sh,
@@ -1314,7 +1339,7 @@ class Swing2Backtester:
     def _close(self, sym, date, price, outcome, slip=None):
         cfg = self.cfg; pos = self.positions.pop(sym)
         fill = price * (1 - (self._slip if slip is None else slip))
-        proceeds = pos.shares * fill - cfg.commission_per_trade
+        proceeds = pos.shares * fill - self._commission(pos.shares * fill)
         self.cash += proceeds
         self.trades.append(Trade(sym, pos.entry_date, date, pos.entry, fill, pos.shares,
                                  proceeds - pos.cost, (fill / pos.entry - 1) * 100,
@@ -1336,7 +1361,7 @@ class Swing2Backtester:
         İki bacak da bittiğinde pozisyon silinir."""
         cfg = self.cfg
         fill = price * (1 - (self._slip if slip is None else slip))
-        proceeds = leg["shares"] * fill - cfg.commission_per_trade
+        proceeds = leg["shares"] * fill - self._commission(leg["shares"] * fill)
         self.cash += proceeds
         self.trades.append(Trade(sym, pos.entry_date, date, pos.entry, fill, leg["shares"],
                                  proceeds - leg["cost"], (fill / pos.entry - 1) * 100,
@@ -1439,9 +1464,9 @@ class Swing2Backtester:
             rps = fill - a_stop
             if rps <= 0: return False
             shares = cfg.risk_per_trade_usd / rps
-            size = shares * fill + cfg.commission_per_trade
+            size = shares * fill + self._commission(shares * fill)
             if size > cap:                                # poz tavanını aşarsa kırp (aşırı kaldıraç koruması)
-                size = cap; shares = (size - cfg.commission_per_trade) / fill
+                size = cap; shares = self._shares_for_budget(cap, fill)
         elif cfg.sizing_mode == "risk":
             # ilk stop referansı: 8-EMA modlarında 8-EMA, diğerlerinde plan stop (LOW10/ATR)
             sref = row["EMA8"] if cfg.exit_mode == "tp_grid" else plan["stop"]
@@ -1449,12 +1474,12 @@ class Swing2Backtester:
             rps = fill - sref                             # lot başına dolar risk
             if rps <= 0: return False
             shares = (eq * cfg.risk_per_trade_pct / 100.0) / rps
-            size = shares * fill + cfg.commission_per_trade
+            size = shares * fill + self._commission(shares * fill)
             if size > cap:                                # poz tavanını aşarsa kırp
-                size = cap; shares = (size - cfg.commission_per_trade) / fill
+                size = cap; shares = self._shares_for_budget(cap, fill)
         else:
             size = cap                                    # sabit: sermaye × poz%
-            shares = (size - cfg.commission_per_trade) / fill
+            shares = self._shares_for_budget(size, fill)
         if self.cash < size or shares <= 0: return False
         self.cash -= size
         pos = Position(sym, date, fill, plan["stop"], plan["target"],
@@ -1834,7 +1859,8 @@ def full_report(bt: Swing2Backtester):
     print(f"  Havuz/Risk       : {len(bt.data)} hisse · max {cfg.max_positions} poz · {smode}")
     print(f"  Giriş            : skor≥{cfg.min_score}/24 · kill-switch={'hariç' if cfg.require_not_killswitch else 'dahil'}")
     print(f"  Çıkış            : kısmi {int(cfg.partial_pct*100)}%@1:{cfg.partial_rr} (BE'ye çek) · trailing {cfg.atr_trail_mult}×ATR (+{cfg.trail_after_r}R sonrası)")
-    print(f"  Maliyet          : ${cfg.commission_per_trade}/bacak · giriş {cfg.entry_slippage_bps:.0f}bps · çıkış {cfg.slippage_bps:.0f}bps · stop {cfg.stop_slippage_bps:.0f}bps slippage")
+    comm_txt = f"{cfg.commission_bps:.0f}bps/bacak" if cfg.commission_bps > 0 else f"${cfg.commission_per_trade}/bacak"
+    print(f"  Maliyet          : {comm_txt} · giriş {cfg.entry_slippage_bps:.0f}bps · çıkış {cfg.slippage_bps:.0f}bps · stop {cfg.stop_slippage_bps:.0f}bps slippage")
     print("-" * 70)
     print(f"  Başlangıç → Net  : ${cfg.initial_capital:,.0f} → ${bt.cash:,.2f}")
     print(f"  Toplam ROI       : {mt['roi']:+.2f}%   (alpha vs SPY: {mt['alpha']:+.2f} puan)")
@@ -1867,7 +1893,20 @@ UNIVERSE_PRESETS = {
     # bir kısmını kapsamaz → swing2 4.katman (sektör) puanı düşer; qswing girişinde etkisiz.
     "sp500": tuple("AAPL MSFT NVDA GOOGL GOOG AMZN META TSLA BRK-B LLY JPM V WMT XOM MA JNJ ORCL COST PG AVGO HD NFLX UNH BAC ABBV KO CRM CVX PFE AMD TMO ADBE ACN PEP LIN MRK MCD ABT CSCO WFC NOW IBM GS ISRG INTC INTU BX AMGN AXP DIS T RTX PM MS TXN QCOM BKNG CAT SCHW GE NEE BLK AMAT SPGI UBER BA PGR GILD LMT MO ELV HON NKE COP TJX SYK PLD ETN VRTX ADI ADP AFL AIG AJG ALL AMT ANET AON APD APH ARM AZO BDX BIIB BKR BMY BSX C CB CDNS CDW CHTR CI CL CME CMG CMI CNC COF COIN CSGP CTAS CTSH CTVA D DAL DASH DD DELL DG DHR DLR DLTR DOV DOW DUK EA EBAY ECL EFX EIX EL EMR ENPH EOG EQIX EQR EQT ESS EW EXC EXR F FANG FCX FDX FERG FI FIS FITB FSLR FTNT GD GEV GIS GLW GM GPN HAL HCA HES HIG HLT HOOD HSY HUBB HUM ICE ICLR IDXX IEX ILMN INFY IP IRM IT ITW JCI K KDP KEY KHC KKR KLAC KMB KMI KR L LDOS LEN LH LNT LRCX LULU LUV LVS LYB MAR MCHP MCK MDLZ MDT MELI MET MFC MMC MMM MNST MOH MOS MPC MPWR MRO MRVL MSCI MSI MTB MU NDAQ NEM NOC NSC NTAP NTRS NUE NVO NWS O OKE OMC ON ORLY OTIS OXY PANW PARA PAYC PAYX PCAR PCG PEG PFG PH PHM PKG PLTR PNC PNR PNW POOL PPG PPL PRU PSA PSX PTC PWR PYPL QRVO QSR RCL REGN RF RL RMD ROK ROL ROP ROST SBAC SBUX SHW SLB SMCI SNA SNOW SO SPG SQ STE STLD STM STT STX STZ SUI SWK SWKS SYF SYY TDG TDY TECH TEL TER TFC TFX TGT TKO TMUS TPR TRGP TRMB TROW TRV TSCO TSN TT TTD TTWO TXT TYL UAL UDR UHS ULTA UNM UNP UPS URI USB VFC VICI VLO VLTO VMC VRSK VRSN VTR VTRS VZ WAB WAT WBA WBD WDC WEC WELL WM WMB WRB WST WTW WY WYNN XEL XYL YUM ZBH ZBRA ZS ZTS".split()),
     "nasdaq100": tuple("AAPL MSFT NVDA GOOGL GOOG AMZN META TSLA AVGO COST NFLX AMD INTC INTU AMAT ADBE ORCL CSCO TMUS ISRG QCOM TXN BKNG PEP HON MU SBUX LRCX KLAC ADI MELI ADSK PANW ABNB CTAS ASML SNPS CDNS REGN ROP CHTR FTNT MAR PYPL PCAR ORLY AEP CRWD MNST MRVL ROST MCHP CPRT ADP DASH KDP AZN FAST EXC ODFL XEL CSGP CCEP NXPI BIIB FANG IDXX KHC CTSH WBD ANSS GEHC ON TTWO LULU GFS ZS DDOG WDAY TEAM CDW SMCI ARM PDD MDB OKTA".split()),
+    "crypto_topN": (),   # aşağıda crypto_universe_pinned.json'dan doldurulur (ağ erişimi YOK)
 }
+
+
+def _crypto_universe_preset() -> tuple:
+    """Commit edilmiş sabit listeyi oku; dosya yoksa boş tuple (preset pasif)."""
+    try:
+        from crypto_data import load_pinned_universe
+        return load_pinned_universe()
+    except Exception:
+        return ()
+
+
+UNIVERSE_PRESETS["crypto_topN"] = _crypto_universe_preset()
 
 
 def _jsafe(x):
@@ -1884,7 +1923,8 @@ def _jsafe(x):
 def _get_market(cfg: Config) -> dict:
     key = (tuple(cfg.universe), cfg.period, cfg.start_date, cfg.end_date,
            cfg.interval, cfg.atr_period,
-           cfg.slope_window, cfg.pivot_lookback, cfg.warmup_bars, cfg.use_earnings)
+           cfg.slope_window, cfg.pivot_lookback, cfg.warmup_bars, cfg.use_earnings,
+           cfg.price_source, cfg.benchmark, cfg.high52_bars)
     if key not in _MARKET_CACHE:
         _MARKET_CACHE[key] = load_market(cfg)
     else:

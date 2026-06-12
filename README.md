@@ -62,6 +62,31 @@ python3 qswing_grid.py                   # qswing eşik ızgarası
 python3 -c "import swing2_backtest as s; print(s.run_backtest_api({'preset':'mega','period':'2y','entry_mode':'qswing'})['metrics'])"
 ```
 
+## Kripto (Binance) — aynı motor, USDT spot evreni
+
+Aynı stratejiler kripto için: veri kaynağı Binance public klines (**anahtar gerekmez**,
+coğrafi-kısıtsız `data-api.binance.vision`), günlük bar UTC 00:00, takvim 7 gün/hafta.
+SPY'ın yerini **BTCUSDT** alır (rejim kapısı + görece güç); sektör/earnings katmanları
+kripto evreninde otomatik devre dışıdır.
+
+```bash
+python3 crypto_data.py refresh-universe --top 75      # top-N USDT evrenini yenile → crypto_universe_pinned.json
+python3 crypto_data.py check BTCUSDT --date 2024-01-01 # veri doğrulama (bar + invaryantlar)
+python3 backtests/run_crypto_backtests.py             # 15 hücre: qswing × 3 çıkış × 5 dönem
+python3 backtests/run_crypto_backtests.py --regime-grid  # BTC ATR-rejim eşik ızgarası (2y)
+```
+
+Kripto koşu ayarları: `price_source="binance"` · `benchmark="BTCUSDT"` ·
+`commission_bps=10` (%0.10/bacak spot taker; sabit $ yerine yüzde komisyon) ·
+`high52_bars=365` (kripto yılı) · `warmup_bars=380` · `use_earnings=False`.
+Evren: hacme göre top-75 USDT çifti (stablecoin/kaldıraçlı/wrapped hariç,
+≥400 bar geçmiş), `crypto_universe_pinned.json`'a sabitlenir (tekrarlanabilirlik).
+
+> ⚠️ **Sağ-kalan yanlılığı**: evren bugünün listesi — delist olmuş coinler yok.
+> Mutlak ROI iyimser tavandır; birincil metrik **BTCUSDT al-tuta karşı alpha**.
+> Sonuçlar `backtests/crypto_qswing_3exit_5period_SUMMARY.csv` ↔
+> `sp500_qswing_3exit_5period_SUMMARY.csv` ile satır-satır karşılaştırılabilir.
+
 ## Backtest parametreleri (özet)
 
 | Alan | Açıklama |
