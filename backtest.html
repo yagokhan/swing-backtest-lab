@@ -351,8 +351,8 @@ function buildPayload(){
   if(es==='atr_trail'){ p.atr_trail_mult = 3.25;                       // SABİT (deney kazananı)
     if(p.entry_mode==='qswing') p.qswing_breakout_lb = 63; }            // 63G-Şamdan paketi
   if(es==='champion'){ p.rr_target = 2.0; p.atr_stop_mult = 1.5; }      // canlı 🏆 sabitleri
-  if(es==='hybrid') p.ma_confirm_close = true;                          // canlı 📐: kapanış teyidi daima
   if(es!=='champion') p.ma_confirm_close = $('confirm').checked;
+  if(es==='hybrid') p.ma_confirm_close = true;                          // canlı 📐: kapanış teyidi daima (genel satırı ezer)
   if(es==='ma_trail') p.ma_trail_len = parseInt($('ma_trail_len').value)||10;
   if(es==='rr_based'){ p.partial_pct=parseFloat($('partial_pct').value)||0.3; p.partial_rr=parseFloat($('partial_rr').value)||1.5; p.rr_target=parseFloat($('rr_tp').value)||3.0; }
   if(es==='momentum') p.rsi_overbought_limit=parseFloat($('rsi_ob').value)||70;
