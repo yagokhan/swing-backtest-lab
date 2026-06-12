@@ -1952,6 +1952,17 @@ def run_backtest_api(params: dict) -> dict:
         cfg.universe = tuple(s.strip().upper() for s in syms if s and s.strip())[:120]
     else:
         cfg.universe = UNIVERSE_PRESETS.get(params.get("preset", "default"), DEFAULT_UNIVERSE)
+    # 🪙 Kripto: preset crypto_topN VEYA tüm semboller USDT çifti → Binance modu
+    if (params.get("preset") == "crypto_topN"
+            or (cfg.universe and all(str(u).upper().endswith("USDT") for u in cfg.universe))):
+        cfg.price_source = "binance"; cfg.benchmark = "BTCUSDT"
+        cfg.use_earnings = False
+        cfg.high52_bars = 365                       # kripto yılı (7g/hafta)
+        cfg.warmup_bars = max(cfg.warmup_bars, 380)  # HIGH52(365) işlem başında dolu olsun
+        try:
+            cfg.commission_bps = float(max(0.0, min(100.0, params.get("commission_bps", 10.0))))
+        except (TypeError, ValueError):
+            cfg.commission_bps = 10.0               # Binance spot taker ~%0.10/bacak
     # Parametreler (clamp'li)
     cfg.min_score = int(max(0, min(24, params.get("min_score", cfg.min_score))))
     cfg.rr_target = float(max(1.0, min(6.0, params.get("rr_target", cfg.rr_target))))

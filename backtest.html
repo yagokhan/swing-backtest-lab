@@ -81,6 +81,7 @@ th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:
             <option value="tech">Teknoloji (18)</option>
             <option value="nasdaq100">NASDAQ-100 (~86)</option>
             <option value="sp500">Mega+Large (~350)</option>
+            <option value="crypto_topN">🪙 Kripto Top-75 (USDT)</option>
           </select></label>
         <label class="fld" title="Virgülle ayrılmış özel sembol listesi. Doluysa preset'i yok sayar (en çok 120 sembol)."><span class="kicker">Özel semboller (ops.)</span>
           <input type="text" id="symbols" placeholder="AAPL,MSFT,... (preset'i ezer)"></label>
@@ -366,7 +367,7 @@ function renderEqChart(){
   const yfmt = v => '$'+(v>=1000? (v/1000).toFixed(0)+'k' : v.toFixed(0));
   eqChart=new Chart($('eqchart'),{type:'line',data:{labels:eqLabels,datasets:[
     {label:'Strateji',data:eqStrat,borderColor:'#27c281',borderWidth:1.6,pointRadius:0,tension:.1,spanGaps:true},
-    {label:'SPY',data:eqSpy,borderColor:'#5aa2ff',borderWidth:1.2,pointRadius:0,tension:.1,borderDash:[4,3],spanGaps:true}]},
+    {label:'Kıyas (SPY/BTC)',data:eqSpy,borderColor:'#5aa2ff',borderWidth:1.2,pointRadius:0,tension:.1,borderDash:[4,3],spanGaps:true}]},
     options:{responsive:true,maintainAspectRatio:false,interaction:{intersect:false,mode:'index'},
       plugins:{legend:{labels:{color:'#8a95ad'}},
         tooltip:{callbacks:{label:c=>c.dataset.label+': $'+Math.round(c.parsed.y).toLocaleString('en-US')}}},
@@ -513,8 +514,8 @@ function renderBacktest(d){
   const cls=x=>x>=0?'pos':'neg';
   $('bt-metrics').innerHTML = [
     ['ROI', Fp(m.roi), cls(m.roi), 'Toplam getiri: dönem sonu sermaye / başlangıç − 1.'],
-    ['SPY ROI', Fp(m.spy_roi), cls(m.spy_roi), 'Aynı dönemde SPY (S&P 500 ETF) getirisi — kıyas.'],
-    ['Alpha', Fp(m.alpha), cls(m.alpha), 'ROI − SPY ROI: piyasayı ne kadar geçtin (+ iyi).'],
+    ['Kıyas ROI', Fp(m.spy_roi), cls(m.spy_roi), 'Aynı dönemde kıyas (hisse: SPY · kripto: BTCUSDT) al-tut getirisi.'],
+    ['Alpha', Fp(m.alpha), cls(m.alpha), 'ROI − kıyas ROI: piyasayı ne kadar geçtin (+ iyi).'],
     ['Max DD', Fp(m.max_dd), 'neg', 'En büyük tepe→dip sermaye düşüşü (risk göstergesi).'],
     ['Win', (m.win_rate==null?'—':m.win_rate+'%'), '', 'Kazanan işlem oranı (%). Momentumda ~%50 normaldir.'],
     ['Profit Factor', F(m.profit_factor), cls((m.profit_factor||0)-1), 'Toplam kâr / toplam zarar. >1 kârlı, >1.5 iyi.'],
@@ -594,7 +595,7 @@ function renderCompare(out){
   $('bt-results').classList.add('hide'); $('cmp-results').classList.remove('hide');
   out.sort((a,b)=>(b.m.roi==null?-1e9:b.m.roi)-(a.m.roi==null?-1e9:a.m.roi));
   const best=out[0];
-  $('cmp-table').innerHTML='<thead><tr><th title="Giriş yöntemi">Giriş</th><th title="Çıkış yöntemi">Çıkış</th><th title="Toplam getiri">ROI</th><th title="SPY getirisi (kıyas)">SPY</th><th title="ROI − SPY">Alpha</th><th title="En büyük düşüş">MaxDD</th><th title="Kazanma oranı">Win</th><th title="Profit Factor (kâr/zarar)">PF</th><th title="İşlem sayısı">İşlem</th></tr></thead><tbody>'+
+  $('cmp-table').innerHTML='<thead><tr><th title="Giriş yöntemi">Giriş</th><th title="Çıkış yöntemi">Çıkış</th><th title="Toplam getiri">ROI</th><th title="Kıyas getirisi (hisse: SPY · kripto: BTC)">Kıyas</th><th title="ROI − kıyas">Alpha</th><th title="En büyük düşüş">MaxDD</th><th title="Kazanma oranı">Win</th><th title="Profit Factor (kâr/zarar)">PF</th><th title="İşlem sayısı">İşlem</th></tr></thead><tbody>'+
     out.map(r=>{const m=r.m;const hl=(r===best)?' style="background:rgba(39,194,129,.10)"':'';
       return `<tr${hl}><td><b>${r.en}</b></td><td>${EXLBL[r.ex]}</td>`+
       `<td class="${m.roi>=0?'pos':'neg'}"><b>${Fp(m.roi)}</b></td><td class="${m.spy_roi>=0?'pos':'neg'}">${Fp(m.spy_roi)}</td>`+
@@ -602,7 +603,7 @@ function renderCompare(out){
       `<td>${m.win_rate==null?'—':m.win_rate+'%'}</td><td>${F(m.profit_factor)}</td><td>${m.trades}</td></tr>`;}).join('')+'</tbody>';
   cmpLabels=best.eq.map(e=>e.date);
   cmpDs=out.map((r,i)=>({label:r.en+' · '+EXLBL[r.ex],data:r.eq.map(e=>e.equity),borderColor:CMPCOL[i%CMPCOL.length],borderWidth:1.5,pointRadius:0,tension:.1,spanGaps:true}));
-  cmpDs.push({label:'SPY',data:best.eq.map(e=>e.spy),borderColor:'#8a95ad',borderWidth:1,pointRadius:0,borderDash:[4,3],tension:.1,spanGaps:true});
+  cmpDs.push({label:'Kıyas (SPY/BTC)',data:best.eq.map(e=>e.spy),borderColor:'#8a95ad',borderWidth:1,pointRadius:0,borderDash:[4,3],tension:.1,spanGaps:true});
   drawCmpChart();
   $('cmp-results').scrollIntoView({behavior:'smooth',block:'nearest'});
 }

@@ -105,6 +105,10 @@ python3 paper_trader.py --crypto --reset           # sıfırla (10.000 $)
 Komut botunda **`/kripto`** (veya `/cp`): anlık K/Z (Binance spot fiyatlarıyla) + son
 kripto taraması. Kripto yayını yalnız `TELEGRAM_CHAT_ID`'ye gider (hisse abone listesi ayrı).
 
+Web arayüzleri: **Backtest Lab**'da evren preset'i `🪙 Kripto Top-75 (USDT)` (otomatik
+Binance modu: BTCUSDT kıyas, %0.10 bps komisyon, 365g 52H) · **kağıt-trade dashboard**'da
+4. defter `🪙 Kripto` (Binance canlı fiyat + 7/24 mum grafikleri, 15m–4h doğal Binance dilimleri).
+
 ## Backtest parametreleri (özet)
 
 | Alan | Açıklama |

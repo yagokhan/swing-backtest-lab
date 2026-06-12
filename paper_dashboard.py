@@ -30,6 +30,7 @@ import pandas as pd
 
 import paper_trader as pt
 import swing2_backtest as s2
+import crypto_data as cd
 
 PORT = 8061
 _BG, _CARD, _FG, _MUT = "#0d1218", "#161d27", "#e6edf3", "#8a95ad"
@@ -56,19 +57,27 @@ def _fmp_key():
     return s2._fmp_key()
 
 
+def _is_crypto(symbol):
+    """USDT çifti = Binance kripto sembolü (kağıt-kripto evreni tamamen USDT-quote)."""
+    return str(symbol).upper().endswith("USDT")
+
+
 def _history(symbol):
-    """Sembol için günlük OHLC (FMP EOD), 8 ay; 15 dk cache."""
+    """Sembol için günlük OHLC (hisse: FMP EOD · kripto: Binance), 8 ay; 15 dk cache."""
     now = time.time()
     with _lock:
         c = _hist_cache.get(symbol)
         if c and now - c[0] < HIST_TTL:
             return c[1]
-    key = _fmp_key()
-    if not key:
-        return None
-    start = (pd.Timestamp.now().normalize() - pd.Timedelta(days=250)).strftime("%Y-%m-%d")
-    frames = s2.fetch_daily_fmp([symbol], key, start, None, workers=1)
-    df = frames.get(symbol)
+    if _is_crypto(symbol):
+        df = cd.fetch_klines_binance(symbol, limit=260)
+    else:
+        key = _fmp_key()
+        if not key:
+            return None
+        start = (pd.Timestamp.now().normalize() - pd.Timedelta(days=250)).strftime("%Y-%m-%d")
+        frames = s2.fetch_daily_fmp([symbol], key, start, None, workers=1)
+        df = frames.get(symbol)
     if df is not None and len(df):
         with _lock:
             _hist_cache[symbol] = (now, df)
@@ -131,9 +140,13 @@ def _agg_bars(df, n):
     return a.set_index("date").sort_index()
 
 
+# kripto: Binance klines doğal aralıkları (UTC; 2h dahil — toplama gerekmez)
+_BN_TF = {"15m": "15m", "30m": "30m", "1h": "1h", "2h": "2h", "4h": "4h"}
+
+
 def _history_tf(symbol, tf):
     """Seçilen zaman dilimi için OHLCV df. tf='1d' → günlük EOD (mevcut cache);
-    aksi halde FMP intraday (5 dk cache), 2h ise 1h'ten toplanır."""
+    aksi halde hisse: FMP intraday (2h=1h'ten toplama) · kripto: Binance klines (doğal)."""
     spec = TF_SPEC.get(tf)
     if not spec or not spec["intraday"]:
         return _history(symbol)            # günlük (15 dk cache)
@@ -143,9 +156,12 @@ def _history_tf(symbol, tf):
         c = _tf_cache.get(ck)
         if c and now - c[0] < TF_TTL:
             return c[1]
-    df = _fetch_intraday(symbol, spec["interval"], spec["days"])
-    if df is not None and spec.get("agg"):
-        df = _agg_bars(df, spec["agg"])
+    if _is_crypto(symbol):
+        df = cd.fetch_klines_binance(symbol, interval=_BN_TF.get(tf, "1h"), limit=700)
+    else:
+        df = _fetch_intraday(symbol, spec["interval"], spec["days"])
+        if df is not None and spec.get("agg"):
+            df = _agg_bars(df, spec["agg"])
     if df is not None and len(df):
         with _lock:
             _tf_cache[ck] = (now, df)
@@ -169,10 +185,10 @@ def candles_json(symbol, tf):
             return int(ts.tz_localize("UTC").timestamp())
         return ts.strftime("%Y-%m-%d")
 
-    candles = [{"time": tm(ts), "open": round(r.Open, 2), "high": round(r.High, 2),
-                "low": round(r.Low, 2), "close": round(r.Close, 2)}
+    candles = [{"time": tm(ts), "open": pt._px(r.Open), "high": pt._px(r.High),
+                "low": pt._px(r.Low), "close": pt._px(r.Close)}
                for ts, r in df.iterrows()]
-    sma_line = [{"time": tm(ts), "value": round(v, 2)} for ts, v in sma.items() if pd.notna(v)]
+    sma_line = [{"time": tm(ts), "value": pt._px(v)} for ts, v in sma.items() if pd.notna(v)]
 
     def snap(date):
         if not date:
@@ -185,11 +201,11 @@ def candles_json(symbol, tf):
     markers = []
     if info:
         if info.get("entry") is not None:
-            lines["entry"] = round(info["entry_fill"], 2)
+            lines["entry"] = pt._px(info["entry_fill"])
         if info.get("stop") is not None:
-            lines["stop"] = round(info["stop"], 2)
+            lines["stop"] = pt._px(info["stop"])
         if info.get("target") is not None:
-            lines["target"] = round(info["target"], 2)
+            lines["target"] = pt._px(info["target"])
         bt = snap(info.get("entry_date"))
         if bt is not None:
             markers.append({"time": bt, "position": "belowBar", "color": _BLU,
@@ -201,6 +217,7 @@ def candles_json(symbol, tf):
                             "shape": "arrowDown", "text": "SAT " + (info.get("outcome") or "")})
     markers.sort(key=lambda m: (m["time"] if isinstance(m["time"], int) else m["time"]))
     return {"symbol": symbol, "tf": tf, "intraday": intraday,
+            "tz": ("UTC" if _is_crypto(symbol) else "ET"),
             "candles": candles, "sma": sma_line, "lines": lines, "markers": markers,
             "info": {"open": bool(info.get("open")) if info else None,
                      "outcome": (info.get("outcome") if info else None)},
@@ -208,13 +225,17 @@ def candles_json(symbol, tf):
 
 
 def _live_quotes(symbols):
-    """Açık pozisyonların anlık fiyatı; 45 sn cache."""
+    """Açık pozisyonların anlık fiyatı (hisse: FMP · kripto: Binance); 45 sn cache."""
     now = time.time()
     with _lock:
         if now - _quote_cache["t"] < QUOTE_TTL and set(symbols) <= set(_quote_cache["data"]):
             return dict(_quote_cache["data"])
+    eq = sorted(s for s in symbols if not _is_crypto(s))
+    cr = sorted(s for s in symbols if _is_crypto(s))
     key = _fmp_key()
-    data = pt.quote_fmp(sorted(symbols), key) if (symbols and key) else {}
+    data = pt.quote_fmp(eq, key) if (eq and key) else {}
+    if cr:
+        data.update(cd.quote_binance(cr))
     with _lock:
         _quote_cache["t"] = now
         _quote_cache["data"] = data
@@ -279,11 +300,11 @@ def _portfolio_payload(st, prices):
         else:
             mkt_val += p["shares"] * ef
         rec = {
-            "symbol": p["symbol"], "entry": round(p["entry"], 2), "entry_fill": round(ef, 2),
+            "symbol": p["symbol"], "entry": pt._px(p["entry"]), "entry_fill": pt._px(ef),
             "shares": round(p["shares"], 3), "alloc": p.get("alloc"),
-            "stop": (round(p["stop"], 2) if p.get("stop") is not None else None),
-            "target": (round(p["target"], 2) if p.get("target") is not None else None),
-            "price": (round(px, 2) if px is not None else None),
+            "stop": (pt._px(p["stop"]) if p.get("stop") is not None else None),
+            "target": (pt._px(p["target"]) if p.get("target") is not None else None),
+            "price": (pt._px(px) if px is not None else None),
             "pnl": (round(pnl, 2) if pnl is not None else None),
             "pct": (round(pct, 2) if pct is not None else None),
             "entry_ts": p.get("entry_ts", p.get("entry_date")), "entry_date": p.get("entry_date"),
@@ -293,7 +314,7 @@ def _portfolio_payload(st, prices):
             rec["exit_plan"] = "<" + "·".join(rem) if rem else "—"
         elif p.get("peak") is not None:   # şamdan varyantı: güncel trail seviyesi
             lvl = p.get("chand_stop")
-            rec["exit_plan"] = (f"kapanış<${lvl:.2f}" if lvl is not None
+            rec["exit_plan"] = (f"kapanış<${pt._fmt(lvl)}" if lvl is not None
                                 else f"tepe−{pt.CHAND_MULT}×ATR")
         positions.append(rec)
     closed = []
@@ -324,30 +345,39 @@ def portfolio_json():
     st = pt.load_state()
     ema_st = pt.load_state(pt.PAPER_EMA, variant="ema")
     ch_st = pt.load_state(pt.PAPER_CHAND, variant="chand")
-    held = sorted(pt.held_symbols(st) | pt.held_symbols(ema_st) | pt.held_symbols(ch_st))
+    cr_st = pt.load_state(pt.PAPER_CRYPTO, variant="ema")     # 🪙 HYBRID_TREND = ema bacakları
+    held = sorted(pt.held_symbols(st) | pt.held_symbols(ema_st)
+                  | pt.held_symbols(ch_st) | pt.held_symbols(cr_st))
     prices = _live_quotes(held)
     out = _portfolio_payload(st, prices)
     out["market"] = market_status()
     out["slippage"] = pt._slip_note().strip(" ·") if pt.SLIPPAGE else ""
     out["ema"] = _portfolio_payload(ema_st, prices)
     out["chand"] = _portfolio_payload(ch_st, prices)
+    out["crypto"] = _portfolio_payload(cr_st, prices)
     return out
 
 
 def scan_json():
+    crypto_ls = pt.load_last_scan(pt.LASTSCAN_CRYPTO)
+    crypto = ({"asof": crypto_ls.get("asof"), "ts": crypto_ls.get("ts"),
+               "text": crypto_ls.get("text", "")} if crypto_ls else None)
     sd = pt.load_scan_data()
     if sd:
-        return {"mode": "data", **sd}
+        return {"mode": "data", **sd, "crypto": crypto}
     ls = pt.load_last_scan()
     if ls:
-        return {"mode": "text", "asof": ls.get("asof"), "ts": ls.get("ts"), "text": ls.get("text", "")}
-    return {"mode": "none"}
+        return {"mode": "text", "asof": ls.get("asof"), "ts": ls.get("ts"),
+                "text": ls.get("text", ""), "crypto": crypto}
+    return {"mode": "none", "crypto": crypto}
 
 
 # ----------------------------- pozisyon meta (grafik overlay) -----------------------------
 def _pos_info(symbol):
-    """Sembolün giriş/stop/hedef + AL/SAT noktaları (önce açık, sonra kapanan)."""
-    st = pt.load_state()
+    """Sembolün giriş/stop/hedef + AL/SAT noktaları (önce açık, sonra kapanan).
+    Kripto sembolü → 🪙 kripto defteri; aksi halde şampiyon defter (mevcut davranış)."""
+    st = (pt.load_state(pt.PAPER_CRYPTO, variant="ema") if _is_crypto(symbol)
+          else pt.load_state())
     for p in st["positions"]:
         if p["symbol"] == symbol:
             return {"entry": p["entry"], "entry_fill": p.get("entry_fill", p["entry"]),
@@ -390,6 +420,7 @@ PAGE = """<!doctype html><html lang="tr"><head><meta charset="utf-8">
   --altin:#d4a843;         /* 🏆 sırtı */
   --buz:#7eb3e3;           /* 📐 sırtı */
   --fosfor:#5ee0a0;        /* 💡 sırtı */
+  --btc:#f7931a;           /* 🪙 sırtı (bitcoin turuncusu) */
   --b4:4px;                /* boşluk taban birimi */
  }
  *{box-sizing:border-box}
@@ -428,14 +459,14 @@ PAGE = """<!doctype html><html lang="tr"><head><meta charset="utf-8">
  .race{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin:0 0 44px}
  .lane{background:var(--defter);border:1px solid var(--cizgi);border-radius:10px;
   padding:12px 16px 14px;border-top:2px solid var(--sis)}
- .lane.r0{border-top-color:var(--altin)} .lane.r1{border-top-color:var(--buz)} .lane.r2{border-top-color:var(--fosfor)}
+ .lane.r0{border-top-color:var(--altin)} .lane.r1{border-top-color:var(--buz)} .lane.r2{border-top-color:var(--fosfor)} .lane.r3{border-top-color:var(--btc)}
  .lane .ln{font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--gumus)}
  .lane .ln .lead{color:var(--kehribar);letter-spacing:.04em;margin-left:6px;font-size:10px}
  .lane .lv{font-size:21px;font-weight:650;letter-spacing:-.01em;margin:6px 0 2px}
  .lane .lp{font-size:12.5px;font-weight:550}
  .lane .track{height:3px;background:var(--defter2);border-radius:2px;margin-top:10px;overflow:hidden}
  .lane .fill{height:100%;border-radius:2px;background:var(--sis)}
- .lane.r0 .fill{background:var(--altin)} .lane.r1 .fill{background:var(--buz)} .lane.r2 .fill{background:var(--fosfor)}
+ .lane.r0 .fill{background:var(--altin)} .lane.r1 .fill{background:var(--buz)} .lane.r2 .fill{background:var(--fosfor)} .lane.r3 .fill{background:var(--btc)}
 
  /* ---- DEFTER: her portföy, kimlik renginde sırtı olan bir kayıt defteri ---- */
  .defter{background:var(--defter);border:1px solid var(--cizgi);border-left:3px solid var(--sis);
@@ -443,6 +474,7 @@ PAGE = """<!doctype html><html lang="tr"><head><meta charset="utf-8">
  .defter.d-champ{border-left-color:var(--altin)}
  .defter.d-ema{border-left-color:var(--buz)}
  .defter.d-chand{border-left-color:var(--fosfor)}
+ .defter.d-crypto{border-left-color:var(--btc)}
  .defter.d-scan{border-left-color:var(--cizgi2)}
  .defter h2{font-size:13px;font-weight:650;letter-spacing:.02em;margin:0 0 4px}
  .defter .kural{display:block;font-size:11.5px;font-weight:450;color:var(--sis);
@@ -531,6 +563,15 @@ PAGE = """<!doctype html><html lang="tr"><head><meta charset="utf-8">
     <h3 class="alt">Kapanan İşlemler</h3><div id="closedC"></div>
   </section>
 
+  <section class="defter d-crypto">
+    <h2>🪙 Kripto — HYBRID_TREND (Binance)</h2>
+    <span class="kural">giriş: 40g kırılım + BTC rejim kapısı + BTC ATR20%&gt;2.5 oynaklık kilidi · çıkış: %50 kapanış&lt;8-EMA · %50 kapanış&lt;21-EMA · Binance spot · 7/24 · günlük bar 00:00 UTC</span>
+    <div class="kpis" id="kpisX"></div>
+    <h3 class="alt">Açık Pozisyonlar</h3><div id="openX"></div>
+    <h3 class="alt">Kapanan İşlemler</h3><div id="closedX"></div>
+    <h3 class="alt">Son Kripto Taraması</h3><div id="scanX" class="scanbox muted">…</div>
+  </section>
+
   <section class="defter d-scan">
     <h2>Son Tarama</h2>
     <span class="kural">22:45 (15:45 ET) qswing kırılım taraması — yapısal veri varsa tablo, yoksa mesaj metni</span>
@@ -553,7 +594,9 @@ PAGE = """<!doctype html><html lang="tr"><head><meta charset="utf-8">
 <script src="/static/lwc.js"></script>
 <script>
 const $=id=>document.getElementById(id);
-const f=(v,d=2)=>v==null?'—':Number(v).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+const f=(v,d=2)=>{if(v==null)return '—';const a=Math.abs(v);
+  const dd=(a>0&&a<1)?Math.max(d,5-Math.floor(Math.log10(a))):d;   // <1$ (kripto): 6 anlamlı hane
+  return Number(v).toLocaleString('en-US',{minimumFractionDigits:dd,maximumFractionDigits:dd});};
 const cls=v=>v==null?'':(v>=0?'pos':'neg');
 const sign=v=>v==null?'—':(v>=0?'+':'')+f(v);
 
@@ -563,13 +606,15 @@ async function loadAll(){
   renderKpis(p,'kpis',p.ema); renderOpen(p,'open'); renderClosed(p,'closed');
   if(p.ema){renderKpis(p.ema,'kpisE',p); renderOpen(p.ema,'openE',true); renderClosed(p.ema,'closedE');}
   if(p.chand){renderKpis(p.chand,'kpisC',p); renderOpen(p.chand,'openC',true); renderClosed(p.chand,'closedC');}
+  if(p.crypto){renderKpis(p.crypto,'kpisX',null); renderOpen(p.crypto,'openX',true); renderClosed(p.crypto,'closedX');}
+  $('scanX').innerHTML=s.crypto?`<div class="muted">🕒 ${s.crypto.ts} (asof ${s.crypto.asof})</div><div style="margin-top:8px;white-space:pre-wrap">${s.crypto.text}</div>`:'<span class="muted">Henüz kayıtlı kripto taraması yok.</span>';
   renderScan(s); renderMkt(p.market);
   $('meta').textContent=`başlangıç ${p.started||'?'} · ${p.slippage||'slippage kapalı'}`;
   $('upd').textContent='güncellendi '+new Date().toLocaleTimeString('tr-TR');
 }
 function renderRace(p){
   // yarış rayı: üç defterin özsermayesi tek bakışta (salt görüntü — /api/portfolio verisinden)
-  const L=[['🏆 ATR-trail',p,'r0'],['📐 8/21-EMA',p.ema,'r1'],['💡 63G-Şamdan',p.chand,'r2']].filter(x=>x[1]&&x[1].equity!=null);
+  const L=[['🏆 ATR-trail',p,'r0'],['📐 8/21-EMA',p.ema,'r1'],['💡 63G-Şamdan',p.chand,'r2'],['🪙 Kripto',p.crypto,'r3']].filter(x=>x[1]&&x[1].equity!=null);
   if(!L.length){$('race').innerHTML='';return;}
   const eqs=L.map(x=>x[1].equity),mx=Math.max(...eqs),mn=Math.min(...eqs);
   $('race').innerHTML=L.map(([n,d,c])=>{
@@ -689,7 +734,7 @@ async function drawChart(keep){
   _series.setMarkers(d.markers||[]);
   if(!keep)_chart.timeScale().fitContent();   // otomatik tazelemede zoom/kaydırma korunur
   if(d.error){$('chartNote').textContent='⚠️ '+d.error;}
-  else{$('chartNote').textContent=(d.intraday?'🕒 saatler ET · ':'')+((d.candles||[]).length)+' bar · tekerlek=zoom, sürükle=kaydır · SMA50 (turuncu) · giriş/stop/+2R çizgileri · AL▲/SAT▼';}
+  else{$('chartNote').textContent=(d.intraday?'🕒 saatler '+(d.tz||'ET')+' · ':'')+((d.candles||[]).length)+' bar · tekerlek=zoom, sürükle=kaydır · SMA50 (turuncu) · giriş/stop/+2R çizgileri · AL▲/SAT▼';}
 }
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeChart();});
 loadAll();

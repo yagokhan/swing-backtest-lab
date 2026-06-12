@@ -107,8 +107,11 @@ def fetch_klines_binance(symbol: str, interval: str = "1d",
     rows = [b for b in rows if b[6] < now_ms]          # oluşan barı at
     if not rows:
         return None
+    idx = pd.to_datetime([b[0] for b in rows], unit="ms")
+    if interval.endswith(("d", "w")):
+        idx = idx.normalize()              # günlük/haftalık: 00:00 UTC açılış → tarih indeksi
     df = pd.DataFrame({
-        "date": pd.to_datetime([b[0] for b in rows], unit="ms").normalize(),
+        "date": idx,
         "Open": [float(b[1]) for b in rows], "High": [float(b[2]) for b in rows],
         "Low": [float(b[3]) for b in rows], "Close": [float(b[4]) for b in rows],
         "Volume": [float(b[5]) for b in rows],
