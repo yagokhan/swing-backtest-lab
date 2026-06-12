@@ -477,7 +477,9 @@ python3 backtests/run_crypto_short_backtests.py       # kısa taraf → crypto_s
 python3 backtests/run_crypto_combined_backtests.py    # birleşik U/K → crypto_combined_SUMMARY.csv
 python3 gen_crypto_report.py                          # bu rapor → dashboard_static/crypto_report.html</pre>
 <footer>Kaynak CSV'ler: backtests/crypto_qswing_3exit_5period_SUMMARY.csv · crypto_regime_grid.csv ·
-sp500_qswing_3exit_5period_SUMMARY.csv — dashboard'da <b>/kripto-rapor</b> yolundan servis edilir.</footer>
+crypto_short_SUMMARY.csv · crypto_combined_SUMMARY.csv · sp500_qswing_3exit_5period_SUMMARY.csv —
+dashboard'da <b>/kripto-rapor</b> yolundan servis edilir. Sistemin NASIL çalıştığı (huniler, rejim
+anahtarı, mimari, işletme): <a href="/kripto-rehber" style="color:{C['buz']}">📖 Kripto Sistem Rehberi</a>.</footer>
 </section>
 </div></body></html>"""
     os.makedirs(os.path.dirname(OUT), exist_ok=True)

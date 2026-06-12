@@ -1,0 +1,268 @@
+<!doctype html><html lang="tr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>🪙 Kripto Sistem Rehberi — swing-backtest-lab</title>
+<style>
+ :root{color-scheme:dark;
+  --gece:#101216;--defter:#15181d;--defter2:#1b1f26;--cam:#20252d;
+  --cizgi:rgba(174,188,214,.10);--cizgi2:rgba(174,188,214,.20);
+  --ink:#e8ecf3;--gumus:#a9b2c1;--sis:#69727f;
+  --kar:#3ecf8e;--zarar:#f07b7b;--kehribar:#e8b04b;
+  --altin:#d4a843;--buz:#7eb3e3;--fosfor:#5ee0a0;--btc:#f7931a}
+ *{box-sizing:border-box}
+ body{margin:0;background:var(--gece);color:var(--ink);
+  font:14px/1.6 system-ui,"Segoe UI",Roboto,sans-serif;font-variant-numeric:tabular-nums}
+ .muted{color:var(--sis)} .pos{color:var(--kar)} .neg{color:var(--zarar)} .amb{color:var(--kehribar)}
+ code{background:var(--defter2);border:1px solid var(--cizgi);border-radius:4px;padding:1px 6px;font-size:12.5px}
+ a{color:var(--buz);text-decoration-color:var(--cizgi2)}
+ header{padding:26px 28px 18px;border-bottom:1px solid var(--cizgi)}
+ h1{font-size:21px;font-weight:650;letter-spacing:-.01em;margin:0}
+ h1 .alt{color:var(--sis);font-weight:500;font-size:13px;margin-left:10px}
+ nav{padding:10px 28px;border-bottom:1px solid var(--cizgi);display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px}
+ nav a{color:var(--gumus);text-decoration:none;border:1px solid var(--cizgi);border-radius:999px;padding:3px 12px}
+ nav a:hover{color:var(--ink);border-color:var(--cizgi2);background:var(--defter2)}
+ .wrap{max-width:1080px;margin:0 auto;padding:26px 28px 70px}
+ section{background:var(--defter);border:1px solid var(--cizgi);border-left:3px solid var(--btc);
+  border-radius:10px;padding:20px 22px;margin:0 0 26px;scroll-margin-top:12px}
+ section h2{font-size:14.5px;font-weight:650;margin:0 0 4px}
+ section .kural{display:block;font-size:12px;color:var(--sis);margin:0 0 16px}
+ h3{font-size:12px;font-weight:650;letter-spacing:.07em;text-transform:uppercase;color:var(--gumus);margin:18px 0 8px}
+
+ /* tek bakışta kartlar */
+ .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin:22px 0 26px}
+ .card{background:var(--defter);border:1px solid var(--cizgi);border-top:2px solid var(--btc);border-radius:10px;padding:14px 16px}
+ .card b{font-size:14px} .card p{margin:6px 0 0;font-size:12.5px;color:var(--gumus)}
+
+ /* GİRİŞ HUNİSİ */
+ .funnel{margin:6px 0 4px}
+ .fstep{position:relative;border:1px solid var(--cizgi2);border-radius:8px;background:var(--defter2);
+  padding:9px 14px;margin:0 auto 18px;font-size:13px}
+ .fstep .n{position:absolute;left:-11px;top:50%;transform:translateY(-50%);width:22px;height:22px;
+  border-radius:50%;background:var(--gece);border:1px solid var(--cizgi2);color:var(--gumus);
+  font-size:11px;font-weight:650;display:flex;align-items:center;justify-content:center}
+ .fstep::after{content:"▼";position:absolute;left:50%;bottom:-16px;transform:translateX(-50%);
+  color:var(--sis);font-size:10px}
+ .fstep:last-child::after{content:""}
+ .fstep .why{display:block;font-size:11.5px;color:var(--sis)}
+ .fL .fstep{border-left:3px solid var(--kar)} .fS .fstep{border-left:3px solid var(--zarar)}
+ .cols2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+ @media(max-width:840px){.cols2{grid-template-columns:1fr}}
+ .w95{width:95%}.w85{width:85%}.w75{width:75%}.w65{width:65%}.w55{width:55%}.w48{width:48%}
+
+ /* REJİM ANAHTARI zaman bandı */
+ .tl{display:flex;border-radius:8px;overflow:hidden;border:1px solid var(--cizgi2);margin:10px 0 6px;height:64px}
+ .tl .seg{display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:12px;font-weight:600;gap:2px}
+ .tl .bull{background:rgba(62,207,142,.13);color:var(--kar)}
+ .tl .bear{background:rgba(240,123,123,.12);color:var(--zarar)}
+ .tl .seg span{font-weight:450;font-size:11px;color:var(--gumus)}
+ .tlnote{display:flex;justify-content:space-between;font-size:11.5px;color:var(--sis);margin-bottom:14px}
+
+ /* çıkış bacakları */
+ .legs{display:flex;gap:12px;margin:8px 0 4px;flex-wrap:wrap}
+ .leg{flex:1;min-width:230px;border:1px solid var(--cizgi2);border-radius:8px;padding:12px 14px;background:var(--defter2);font-size:13px}
+ .leg b{display:block;margin-bottom:4px}
+ .leg.l8{border-top:2px solid var(--buz)} .leg.l21{border-top:2px solid var(--fosfor)}
+
+ /* mimari harita */
+ .arch{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-top:6px}
+ .lane{border:1px solid var(--cizgi);border-radius:10px;padding:12px 14px;background:var(--gece)}
+ .lane h4{margin:0 0 10px;font-size:11px;font-weight:650;letter-spacing:.07em;text-transform:uppercase;color:var(--gumus)}
+ .box{border:1px solid var(--cizgi2);border-radius:7px;padding:7px 10px;margin:0 0 14px;background:var(--defter2);
+  font-size:12.5px;position:relative}
+ .box::after{content:"▼";position:absolute;left:50%;bottom:-13px;transform:translateX(-50%);color:var(--sis);font-size:9px}
+ .box:last-child{margin-bottom:0}.box:last-child::after{content:""}
+ .box .d{display:block;font-size:11px;color:var(--sis)}
+ .b-data{border-left:3px solid var(--btc)} .b-eng{border-left:3px solid var(--altin)}
+ .b-live{border-left:3px solid var(--buz)} .b-out{border-left:3px solid var(--fosfor)}
+
+ table{width:100%;border-collapse:collapse;font-size:13px}
+ th,td{padding:7px 10px;text-align:left;border-bottom:1px solid var(--cizgi);vertical-align:top}
+ th{color:var(--sis);font-weight:600;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;white-space:nowrap}
+ tr:last-child td{border-bottom:none}
+ td.num{text-align:right;white-space:nowrap}
+ .uyar{background:rgba(232,176,75,.08);border:1px solid rgba(232,176,75,.25);border-radius:8px;
+  padding:12px 16px;font-size:12.5px;color:var(--gumus);margin-top:4px}
+ pre{background:var(--gece);border:1px solid var(--cizgi);border-radius:8px;padding:12px 14px;
+  font-size:12px;overflow-x:auto;color:var(--gumus);margin:8px 0}
+ dl{margin:0} dt{font-weight:650;font-size:13px;margin-top:12px} dd{margin:2px 0 0 0;font-size:12.5px;color:var(--gumus)}
+ footer{color:var(--sis);font-size:11.5px;padding:0 28px 40px;max-width:1080px;margin:0 auto}
+</style></head><body>
+<header><h1>🪙 Kripto Sistem Rehberi<span class="alt">swing-backtest-lab · nasıl çalışır, nasıl işletilir · dal: crypto-port</span></h1></header>
+<nav>
+ <a href="#bakis">Tek bakışta</a><a href="#giris">Giriş hunileri</a><a href="#cikis">Çıkışlar</a>
+ <a href="#rejim">Rejim anahtarı</a><a href="#maliyet">Maliyet & dürüstlük</a><a href="#mimari">Mimari</a>
+ <a href="#isletme">İşletme rehberi</a><a href="#sozluk">Sözlük</a><a href="/kripto-rapor">📊 Sayılar raporu →</a>
+</nav>
+<div class="wrap">
+
+<div class="cards" id="bakis">
+ <div class="card"><b>Ne bu?</b><p>Hisse senedi swing-trade motorunun (Qullamaggie tarzı momentum/kırılım)
+  kriptoya uyarlanması. Motor ÇATALLANMADI — aynı kod, yeni veri katmanı; hisse davranışı bit-özdeş.</p></div>
+ <div class="card"><b>Veri</b><p>Binance public klines (anahtar gerekmez), günlük UTC bar, 7 gün/hafta.
+  Evren: hacme göre top-75 USDT çifti, <code>crypto_universe_pinned.json</code>'a sabitli.</p></div>
+ <div class="card"><b>Beyin: rejim anahtarı</b><p>BTC &gt; SMA200 → UZUN defter (kilitli) ·
+  BTC &lt; SMA200 → KISA defter (kilitsiz) · ikisi de değilse → NAKİT. Tek sermaye havuzu.</p></div>
+ <div class="card"><b>Manşet sonuç</b><p>Son 1 yıl (BTC <span class="neg">−%39.8</span>):
+  birleşik portföy <span class="pos"><b>+%117.3</b></span> — boğa yarısında uzun, ayı yarısında kısa.
+  Detay: <a href="/kripto-rapor">sayılar raporu</a>.</p></div>
+</div>
+
+<section id="giris"><h2>Giriş hunileri — bir coin nasıl sinyal olur?</h2>
+<span class="kural">Her gün 00:00 UTC kapanışından sonra 75 coin bu huniden geçer. Çoğu gün hiçbiri çıkamaz — sistem seçici olacak şekilde ölçüldü (2 yılda sakin+boğa gün sayısı: 106/1515).</span>
+<div class="cols2">
+<div class="fL"><h3>🟢 Uzun (boğa rejimi)</h3><div class="funnel">
+ <div class="fstep w95"><span class="n">1</span><b>Rejim kapısı:</b> BTCUSDT &gt; SMA200
+  <span class="why">momentum stratejisi düşen piyasada uzun açmaz — en iyi kurulum bile boğulur</span></div>
+ <div class="fstep w85"><span class="n">2</span><b>Oynaklık kilidi:</b> BTC ATR20% ≤ 2.5
+  <span class="why">testere piyasasında kırılımlar tuzaktır; ızgara ölçümü: DD yarıya, ROI yukarı</span></div>
+ <div class="fstep w75"><span class="n">3</span><b>Aşama 2 trendi:</b> Fiyat &gt; SMA20 &amp; SMA50 &amp; SMA200, SMA200 eğimi yukarı
+  <span class="why">yalnız kurulu yükseliş trendindeki coinler — dip avcılığı yok</span></div>
+ <div class="fstep w65"><span class="n">4</span><b>Kırılım:</b> Kapanış &gt; önceki 40 günün tepesi
+  <span class="why">yeni alan açan fiyat — Qullamaggie'nin çekirdek tetiği</span></div>
+ <div class="fstep w55"><span class="n">5</span><b>52H yakınlığı:</b> Fiyat ≥ 0.75 × 52-hafta zirvesi
+  <span class="why">tepeye yakın kırılım güçlüdür; dipten gelen kırılım dirençlere çarpar</span></div>
+ <div class="fstep w48"><span class="n">6</span><b>Görece güç:</b> 60g getiri &gt; 0 ve ≥ BTC'nin 60g getirisi
+  <span class="why">piyasayı geçen liderler — RS, 0-100 öncelik puanının da ana bileşeni</span></div>
+</div></div>
+<div class="fS"><h3>🔻 Kısa (ayı rejimi) — ayna</h3><div class="funnel">
+ <div class="fstep w95"><span class="n">1</span><b>Rejim kapısı:</b> BTCUSDT &lt; SMA200
+  <span class="why">süper-döngüde kripto kısalamak kaybettirir — ölçüldü (3y: her konfig zararda)</span></div>
+ <div class="fstep w85"><span class="n">2</span><b>Oynaklık kilidi YOK</b>
+  <span class="why">çöküşler = yüksek-ATR günleri; kilit kısa tarafın fırsat kümesini siler (ölçüldü)</span></div>
+ <div class="fstep w75"><span class="n">3</span><b>Aşama 4 trendi:</b> Fiyat &lt; SMA20 &amp; SMA50 &amp; SMA200, SMA200 eğimi aşağı
+  <span class="why">yalnız kurulu düşüş trendi — tepe tahmini yok</span></div>
+ <div class="fstep w65"><span class="n">4</span><b>Kırılım:</b> Kapanış &lt; önceki 40 günün DİBİ
+  <span class="why">yeni dip açan fiyat</span></div>
+ <div class="fstep w55"><span class="n">5</span><b>52H dibe yakınlık:</b> Fiyat ≤ 1.33 × 52-hafta dibi
+  <span class="why">dibe yakın kırılma güçlü düşüş trendidir</span></div>
+ <div class="fstep w48"><span class="n">6</span><b>Görece zayıflık:</b> 60g getiri &lt; 0 ve ≤ BTC'ninki
+  <span class="why">piyasadan da zayıf düşenler — en negatif RS önce açılır</span></div>
+</div></div>
+</div>
+<p class="muted" style="font-size:12.5px;margin:6px 0 0">Huniden çıkanlar puana göre sıralanır; pozisyon başına
+sermayenin <b>%20</b>'si (kısa defter önerilen: <b>%10</b>), defter başına en çok <b>5 eşzamanlı pozisyon</b>,
+piramitleme yok. Dolum: sinyal barının kapanışı + slippage.</p>
+</section>
+
+<section id="cikis"><h2>Çıkışlar — HYBRID_TREND: yarı yarıya, kapanış teyitli</h2>
+<span class="kural">15 hücrelik ızgaranın her penceresinde en iyi alpha'yı veren çıkış. Sabit kâr hedefi YOK — trend ne verirse. Gün-içi iğneler (wick) pozisyon düşürmez; yalnız KAPANIŞ teyidi sayılır.</span>
+<div class="legs">
+ <div class="leg l8"><b>1. yarı — hızlı bacak (EMA8)</b>
+  Uzunda: gün <b>EMA8 altında</b> kapanırsa sat · Kısada: <b>EMA8 üstünde</b> kapanırsa kapat.
+  <span class="muted">İlk zayıflıkta kârın yarısını cebe atar; ortalama-üstü dönüşlerde portföyü korur.</span></div>
+ <div class="leg l21"><b>2. yarı — sabırlı bacak (EMA21)</b>
+  Uzunda: gün <b>EMA21 altında</b> kapanırsa sat · Kısada: <b>EMA21 üstünde</b> kapanırsa kapat.
+  <span class="muted">Trend devam ederse büyük hamleyi bu bacak yakalar (koşucu / runner).</span></div>
+</div>
+<p class="muted" style="font-size:12.5px;margin:8px 0 0">Neden şamdan (ATR-trail) değil? Kripto trendleri keskin
+kırılır: ayı rallileri ATR seviyesini deler, kapanış-teyitli EMA daha erken çıkarır — her iki yönde de ölçülen kazanan
+hibrit. (Hissede ise ATR-trail önde: varlık sınıfı karakter farkı.) Alternatif çıkışlar motorda duruyor:
+<code>atr_full</code>, <code>split</code>, <code>tp_grid</code> varyantları, <code>atr_regime</code>.</p>
+</section>
+
+<section id="rejim"><h2>Rejim anahtarı — tek sermaye, iki defter</h2>
+<span class="kural">Son 1 yılın gerçek akışı (2025-06 → 2026-06, backtest): aynı 100.000$ önce boğada uzun, sonra ayıda kısa çalıştı.</span>
+<div class="tl">
+ <div class="seg bull" style="flex:48">🟢 BOĞA · BTC &gt; SMA200<span>UZUN defter aktif · 30 işlem · +56.505$</span></div>
+ <div class="seg bear" style="flex:52">🔴 AYI · BTC &lt; SMA200<span>KISA defter aktif · 59 işlem · +60.809$</span></div>
+</div>
+<div class="tlnote"><span>2025-06</span><span class="amb">⚡ rejim değişimi: açık uzunlar kendi kurallarıyla kapanır, kısalar açılmaya başlar</span><span>2026-06</span></div>
+<table>
+ <tr><th>Kural</th><th>Detay</th></tr>
+ <tr><td><b>Girişler ayrık</b></td><td>Uzun yalnız boğada, kısa yalnız ayıda açılır — aynı anda iki yönde YENİ pozisyon açılmaz.</td></tr>
+ <tr><td><b>Pozisyonlar taşınır</b></td><td>Rejim değişince açık pozisyon zorla kapatılmaz; kendi çıkış kuralı (EMA bacakları) halleder. Geçiş günlerinde iki defter kısa süre birlikte açık olabilir.</td></tr>
+ <tr><td><b>Tek havuz, kaldıraçsız</b></td><td>Her açılış havuzdan teminat rezerve eder; havuz yetmezse açılış reddedilir → brüt pozisyon ≤ %100. Boyutlandırma birleşik özsermayeden.</td></tr>
+ <tr><td><b>Bileşiklenme bonusu</b></td><td>1y'de birleşik (+%117) iki tek defterin toplamından fazla: kısa defter, uzunun BÜYÜTTÜĞÜ sermayeyle işlem gördü.</td></tr>
+ <tr><td><b>Kısa ½ boy ★</b></td><td>Önerilen varsayılan: kısa pozisyonlar %10/poz. Her karışık pencerede tam boyu hem ROI hem MaxDD'de geçti (5y DD −%58→−%40 · 2y −%36→−%23, ROI yukarı).</td></tr>
+</table>
+</section>
+
+<section id="maliyet"><h2>Maliyet modeli & dürüstlük notları</h2>
+<span class="kural">Bütün backtest sonuçları bu maliyetlerden SONRADIR.</span>
+<table>
+ <tr><th>Kalem</th><th>Değer</th><th>Gerekçe</th></tr>
+ <tr><td>Komisyon</td><td class="num">10 bps / bacak</td><td>Binance spot taker %0.10 (alış + satış ayrı ayrı)</td></tr>
+ <tr><td>Giriş slippage</td><td class="num">8 bps</td><td>kapanış anı market emri kayması (uzunda yukarı, kısada aşağı — hep aleyhte)</td></tr>
+ <tr><td>Çıkış slippage</td><td class="num">5–15 bps</td><td>EMA8 bacağı 5 · EMA21/stop-market 15 (motorla aynı)</td></tr>
+ <tr><td>Funding (yalnız kısa)</td><td class="num">3 bps / gün</td><td>spotta kısa yok → perp varsayımı; ayıda kısalar genelde funding ÖDER — muhafazakâr sabit</td></tr>
+</table>
+<div class="uyar" style="margin-top:14px">⚠️ <b>Bilinen yanlılıklar:</b> (1) <b>Sağ-kalan yanlılığı</b> — evren bugünün
+top-75'i; delist olan coinler yok. Uzun tarafta sonuçları ŞİŞİRİR (birincil metrik bu yüzden BTC al-tuta karşı alpha),
+kısa tarafta tam tersi KÖRELTİR (sıfıra gidenleri kısalayamadık). (2) Kilitli uzun defter 5y/3y/2y pencerelerinde aynı
+32 işlemi yapar — sakin+boğa günler yalnız son ~2 yılda var; uzun pencere sonuçları aslında "çoğunlukla nakit + son
+2 yılın işlemleri"dir. (3) Tarihî funding yerine sabit oran kullanıldı. (4) Eğitim amaçlıdır; yatırım tavsiyesi değildir.</div>
+</section>
+
+<section id="mimari"><h2>Mimari — dört şerit</h2>
+<span class="kural">Soldan sağa veri akışı. Uzun motor hiç çatallanmadı: kısa ve birleşik defterler AYRI modüller, hisse davranışı bit-özdeş (golden regresyon her commit'te yeşil).</span>
+<div class="arch">
+<div class="lane"><h4>📡 Veri</h4>
+ <div class="box b-data"><b>Binance public API</b><span class="d">klines · exchangeInfo · ticker (anahtarsız ayna)</span></div>
+ <div class="box b-data"><b>crypto_data.py</b><span class="d">sayfalı indirme · sembol-başına önbellek · evren kurucu · anlık fiyat</span></div>
+ <div class="box b-data"><b>crypto_universe_pinned.json</b><span class="d">top-75 sabit liste (tekrarlanabilirlik)</span></div>
+</div>
+<div class="lane"><h4>⚙️ Motor & backtest</h4>
+ <div class="box b-eng"><b>swing2_backtest.py</b><span class="d">tek motor: hisse + kripto · price_source='binance' · bps komisyon</span></div>
+ <div class="box b-eng"><b>short_backtest.py</b><span class="d">ayna kısa defter · gerçek kısa muhasebesi + funding</span></div>
+ <div class="box b-eng"><b>combined_backtest.py</b><span class="d">tek havuz · uzun defter = motorun KENDİSİ (eşdeğerlik kanıtlı)</span></div>
+ <div class="box b-eng"><b>backtests/run_crypto_*.py</b><span class="d">15 hücre · rejim ızgarası · kısa · birleşik → CSV'ler</span></div>
+</div>
+<div class="lane"><h4>📓 Canlı (kağıt)</h4>
+ <div class="box b-live"><b>crypto_paper_telegram.py</b><span class="d">cron 00:15 UTC · tarama + kağıt portföy + Telegram</span></div>
+ <div class="box b-live"><b>~/.swing_paper_crypto.json</b><span class="d">durum: pozisyonlar + kapananlar (10.000$ başlangıç)</span></div>
+ <div class="box b-live"><b>telegram_command_bot.py</b><span class="d">/kripto → anlık K/Z (Binance fiyatlı) + son tarama</span></div>
+</div>
+<div class="lane"><h4>🖥 Arayüz</h4>
+ <div class="box b-out"><b>paper_dashboard.py :8061</b><span class="d">4. defter 🪙 · 7/24 mum grafikleri (15m–4h)</span></div>
+ <div class="box b-out"><b>backtest.html (server.py :8053)</b><span class="d">🪙 Kripto Top-75 preseti ile etkileşimli backtest</span></div>
+ <div class="box b-out"><b>gen_crypto_report.py</b><span class="d">→ /kripto-rapor (sayılar) · bu rehber → /kripto-rehber</span></div>
+</div>
+</div>
+</section>
+
+<section id="isletme"><h2>İşletme rehberi (runbook)</h2>
+<span class="kural">Sık kullanılan komutlar ve nerede ne var.</span>
+<h3>Araştırma / backtest</h3>
+<pre>python3 crypto_data.py refresh-universe --top 75        # evreni tazele (sonra commit et)
+python3 crypto_data.py check BTCUSDT --date 2024-01-01   # veri doğrulama
+python3 backtests/run_crypto_backtests.py                # uzun 15 hücre
+python3 backtests/run_crypto_backtests.py --regime-grid  # BTC kilidi eşik ızgarası
+python3 backtests/run_crypto_short_backtests.py          # kısa taraf
+python3 backtests/run_crypto_combined_backtests.py       # birleşik uzun/kısa
+python3 gen_crypto_report.py                             # sayılar raporunu yeniden üret</pre>
+<h3>Canlı kağıt-trade</h3>
+<pre>python3 crypto_paper_telegram.py --test                  # kuru koşu (göndermez, yazmaz)
+python3 paper_trader.py --crypto                         # portföy durumunu göster
+python3 paper_trader.py --crypto --reset                 # 10.000$'a sıfırla
+# cron (sunucu UTC):      15 0 * * *  cd REPO && python3 crypto_paper_telegram.py --utc-window >> cron_crypto.log 2>&1
+# cron (sunucu TR saati): 15 3 * * *  cd REPO && python3 crypto_paper_telegram.py --utc-window >> cron_crypto.log 2>&1</pre>
+<h3>Nerede ne var</h3>
+<table>
+ <tr><th>Şey</th><th>Yer</th></tr>
+ <tr><td>Telegram komutu</td><td><code>/kripto</code> (veya <code>/cp</code>) — anlık K/Z + son kripto taraması</td></tr>
+ <tr><td>Dashboard</td><td><code>:8061</code> → 🪙 defteri · üst bantta <b>🪙 Kripto Rapor</b> düğmesi · grafikler coin satırına tıklayınca</td></tr>
+ <tr><td>Raporlar</td><td><code>/kripto-rapor</code> (sayılar) · <code>/kripto-rehber</code> (bu sayfa)</td></tr>
+ <tr><td>Sonuç CSV'leri</td><td><code>backtests/crypto_*SUMMARY*.csv</code> + işlem ledger'ları (commit'li)</td></tr>
+ <tr><td>Durum dosyaları</td><td><code>~/.swing_paper_crypto.json</code> · <code>~/.swing_lastscan_crypto.json</code></td></tr>
+ <tr><td>Veri önbelleği</td><td><code>swing2_cache/binance/*.csv</code> (sembol başına; kuyruktan kendini günceller)</td></tr>
+</table>
+</section>
+
+<section id="sozluk"><h2>Sözlük</h2>
+<dl>
+ <dt>SMA200 rejim kapısı</dt><dd>BTC'nin 200-bar basit ortalaması. Üstü = boğa (uzun serbest), altı = ayı (kısa serbest). Sistemin ana anahtarı.</dd>
+ <dt>ATR20% oynaklık kilidi</dt><dd>BTC'nin 20-günlük ortalama gerçek aralığının fiyata oranı. &gt;2.5 ise piyasa "testere" kabul edilir, YENİ uzun açılmaz. Kısa tarafa uygulanmaz.</dd>
+ <dt>RS (görece güç)</dt><dd>Coin'in 60-bar getirisi − BTC'nin 60-bar getirisi. Uzunda pozitif liderler, kısada en negatif zayıflar seçilir.</dd>
+ <dt>Aşama 2 / Aşama 4</dt><dd>Weinstein evreleri: kurulu yükseliş / kurulu düşüş trendi (fiyatın SMA20/50/200'e göre konumu + SMA200 eğimi).</dd>
+ <dt>HYBRID_TREND</dt><dd>İki yarılı çıkış: %50 EMA8 kırılımında, %50 EMA21 kırılımında — yalnız kapanış teyidiyle.</dd>
+ <dt>40g kırılımı</dt><dd>Önceki 40 barın tepesini (kısada dibini) aşan kapanış. Sinyal tetiği.</dd>
+ <dt>Funding</dt><dd>Perpetual vadeli sözleşmelerde uzun-kısa arası periyodik ödeme. Backtestte kısa pozisyonlara günlük 3bps maliyet olarak işlenir.</dd>
+ <dt>Golden regresyon</dt><dd>Motor değişikliklerinden sonra hisse tarafının 326 işlemlik referans koşusunun bit-özdeş kaldığının kanıtı.</dd>
+ <dt>Eşdeğerlik testi</dt><dd>Birleşik portföyde kısa defter kapatılınca saf motor ledger'ının işlem-işlem aynı çıkması — uzun defterin motorun kendisi olduğunun kanıtı.</dd>
+ <dt>Sağ-kalan yanlılığı</dt><dd>Evren bugün hayatta olan coinlerden kurulu; ölenler yok. Uzun sonuçları iyimser, kısa sonuçları kötümser yapar.</dd>
+</dl>
+</section>
+
+</div>
+<footer>swing-backtest-lab · crypto-port dalı · bu rehber el yazısı statik sayfadır (bağımlılık yok) ·
+sayılar <a href="/kripto-rapor">/kripto-rapor</a>'daki commit'li CSV'lerden · eğitim amaçlı, yatırım tavsiyesi değildir.</footer>
+</body></html>
