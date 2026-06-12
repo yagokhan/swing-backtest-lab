@@ -2273,6 +2273,9 @@ def run_live_qswing_scan(current_market_data, cfg=None, asof=None,
             "ma10": (round(float(ma10), 2) if ma10 is not None and not pd.isna(ma10) else None),
             "ema8": (round(float(ema8), 2) if ema8 is not None and not pd.isna(ema8) else None),    # %50 çıkış (hibrit)
             "ema21": (round(float(ema21), 2) if ema21 is not None and not pd.isna(ema21) else None),  # runner çıkışı (hibrit)
+            # şampiyon (optimized) çıkış metni için: ATR0 + trailing çarpanı (+1R sonrası KAPANIŞ−mult×ATR)
+            "atr": (round(float(row["ATR"]), 2) if not pd.isna(row["ATR"]) else None),
+            "atr_trail_mult": cfg.atr_trail_mult,
             "risk_pct": (round(risk / plan["entry"] * 100, 2) if plan["entry"] else None),
             "rs": round(float(rs), 1), "ret_3m": round(float(r60), 1),
             "high40": round(float(h), 2),

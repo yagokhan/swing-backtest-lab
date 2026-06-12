@@ -48,7 +48,7 @@ _hist_cache = {}      # {symbol: (t_loaded, df)}
 _quote_cache = {"t": 0, "data": {}}
 _lock = threading.Lock()
 HIST_TTL = 900        # 15 dk
-QUOTE_TTL = 45        # sn
+QUOTE_TTL = 20        # sn
 
 
 # ----------------------------- veri yardımcıları -----------------------------
@@ -87,7 +87,7 @@ TF_SPEC = {
 }
 TF_ORDER = ["15m", "30m", "1h", "2h", "4h", "1d"]
 _tf_cache = {}        # {(symbol, tf): (t_loaded, df)}
-TF_TTL = 300          # intraday 5 dk cache
+TF_TTL = 60           # intraday 1 dk cache
 
 
 def _fetch_intraday(symbol, interval, days):
@@ -264,10 +264,8 @@ def market_status():
 
 
 # ----------------------------- portföy JSON -----------------------------
-def portfolio_json():
-    st = pt.load_state()
-    held = sorted(pt.held_symbols(st))
-    prices = _live_quotes(held)
+def _portfolio_payload(st, prices):
+    """Tek portföyün JSON gövdesi (market/slippage hariç) — şampiyon + EMA için ortak."""
     positions, mkt_val, unreal = [], 0.0, 0.0
     for p in sorted(st["positions"], key=lambda x: x["symbol"]):
         ef = p.get("entry_fill", p["entry"])
@@ -280,15 +278,24 @@ def portfolio_json():
             mkt_val += p["shares"] * px
         else:
             mkt_val += p["shares"] * ef
-        positions.append({
+        rec = {
             "symbol": p["symbol"], "entry": round(p["entry"], 2), "entry_fill": round(ef, 2),
             "shares": round(p["shares"], 3), "alloc": p.get("alloc"),
-            "stop": round(p["stop"], 2), "target": round(p["target"], 2),
+            "stop": (round(p["stop"], 2) if p.get("stop") is not None else None),
+            "target": (round(p["target"], 2) if p.get("target") is not None else None),
             "price": (round(px, 2) if px is not None else None),
             "pnl": (round(pnl, 2) if pnl is not None else None),
             "pct": (round(pct, 2) if pct is not None else None),
             "entry_ts": p.get("entry_ts", p.get("entry_date")), "entry_date": p.get("entry_date"),
-            "score": p.get("score")})
+            "score": p.get("score")}
+        if p.get("legs"):   # EMA varyantı: kalan bacaklar (çıkış planı)
+            rem = [("8E" if l["rule"] == "ema8" else "21E") for l in p["legs"] if l["shares"] > 0]
+            rec["exit_plan"] = "<" + "·".join(rem) if rem else "—"
+        elif p.get("peak") is not None:   # şamdan varyantı: güncel trail seviyesi
+            lvl = p.get("chand_stop")
+            rec["exit_plan"] = (f"kapanış<${lvl:.2f}" if lvl is not None
+                                else f"tepe−{pt.CHAND_MULT}×ATR")
+        positions.append(rec)
     closed = []
     for r in st["closed"]:
         closed.append({
@@ -309,9 +316,22 @@ def portfolio_json():
         "total_pl": round(equity - start_cap, 2),
         "total_pl_pct": round((equity - start_cap) / start_cap * 100, 2) if start_cap else 0.0,
         "n_open": len(positions), "n_closed": len(closed),
-        "started": st.get("started"), "market": market_status(),
-        "slippage": pt._slip_note().strip(" ·") if pt.SLIPPAGE else "",
+        "started": st.get("started"),
         "positions": positions, "closed": closed}
+
+
+def portfolio_json():
+    st = pt.load_state()
+    ema_st = pt.load_state(pt.PAPER_EMA, variant="ema")
+    ch_st = pt.load_state(pt.PAPER_CHAND, variant="chand")
+    held = sorted(pt.held_symbols(st) | pt.held_symbols(ema_st) | pt.held_symbols(ch_st))
+    prices = _live_quotes(held)
+    out = _portfolio_payload(st, prices)
+    out["market"] = market_status()
+    out["slippage"] = pt._slip_note().strip(" ·") if pt.SLIPPAGE else ""
+    out["ema"] = _portfolio_payload(ema_st, prices)
+    out["chand"] = _portfolio_payload(ch_st, prices)
+    return out
 
 
 def scan_json():
@@ -351,66 +371,178 @@ PAGE = """<!doctype html><html lang="tr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>qswing Kağıt-Trade Dashboard</title>
 <style>
- :root{--bg:#0d1218;--card:#161d27;--fg:#e6edf3;--mut:#8a95ad;--grn:#16a34a;--red:#dc2626;--blu:#3b82f6;--amb:#f59e0b;--bd:#2a3343}
- *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 system-ui,Segoe UI,Roboto,sans-serif}
- header{padding:16px 22px;border-bottom:1px solid var(--bd);display:flex;flex-wrap:wrap;gap:14px;align-items:center}
- h1{font-size:18px;margin:0} .muted{color:var(--mut)} .pos{color:var(--grn)} .neg{color:var(--red)}
- .wrap{padding:18px 22px;max-width:1280px;margin:0 auto}
- .kpis{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:8px}
- .kpi{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px 16px;min-width:150px}
- .kpi .v{font-size:20px;font-weight:700} .kpi .l{color:var(--mut);font-size:12px}
- h2{font-size:15px;margin:26px 0 10px;border-left:3px solid var(--blu);padding-left:9px}
- table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--bd);border-radius:12px;overflow:hidden}
- th,td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--bd);white-space:nowrap}
- th:first-child,td:first-child{text-align:left} th{color:var(--mut);font-weight:600;font-size:12px}
- tr:last-child td{border-bottom:none} .sym{font-weight:700}
- .badge{display:inline-block;padding:1px 7px;border-radius:999px;font-size:11px;font-weight:700}
- .b-buy{background:rgba(59,130,246,.18);color:#9ec5ff} .b-tp{background:rgba(22,163,74,.18);color:#7ee2a8}
- .b-stop{background:rgba(220,38,38,.18);color:#ffa3ab} .b-watch{background:rgba(245,158,11,.16);color:#ffd591}
- tbody tr.clk{cursor:pointer} tbody tr.clk:hover{background:#1d2733}
- .modal{position:fixed;inset:0;background:rgba(0,0,0,.82);display:none;align-items:center;justify-content:center;z-index:50;padding:14px}
+ /* ====== GECE MASASI — tek-ton grafit merdiveni (hue sabit, yalnız aydınlık kayar) ======
+    derinlik stratejisi: SADECE kenarlık (düşük-opak rgba) + yüzey aydınlık basamağı; gölge yalnız modal.
+    kimlik renkleri (altın/buz/fosfor) YALNIZ defter sırtı + yarış rayında — arayüz kromu nötr. */
+ :root{
+  --gece:#101216;          /* kanvas (s0) */
+  --defter:#15181d;        /* defter yüzeyi (s1) */
+  --defter2:#1b1f26;       /* satır hover / kontrol (s2) */
+  --cam:#20252d;           /* modal / üst katman (s3) */
+  --cizgi:rgba(174,188,214,.10);   /* standart kenar */
+  --cizgi2:rgba(174,188,214,.20);  /* vurgu kenar */
+  --murekkep:#e8ecf3;      /* birincil metin */
+  --gumus:#a9b2c1;         /* ikincil */
+  --sis:#69727f;           /* sönük etiket */
+  --kar:#3ecf8e;   --kar-bg:rgba(62,207,142,.09);
+  --zarar:#f07b7b; --zarar-bg:rgba(240,123,123,.09);
+  --kehribar:#e8b04b; --kehribar-bg:rgba(232,176,75,.10);
+  --altin:#d4a843;         /* 🏆 sırtı */
+  --buz:#7eb3e3;           /* 📐 sırtı */
+  --fosfor:#5ee0a0;        /* 💡 sırtı */
+  --b4:4px;                /* boşluk taban birimi */
+ }
+ *{box-sizing:border-box}
+ body{margin:0;background:var(--gece);color:var(--murekkep);
+  font:14px/1.5 system-ui,"Segoe UI",Roboto,sans-serif;
+  font-variant-numeric:tabular-nums}
+ .muted{color:var(--sis)} .pos{color:var(--kar)} .neg{color:var(--zarar)}
+ a{color:var(--gumus);text-decoration-color:var(--cizgi2)} a:hover{color:var(--murekkep)}
+
+ /* ---- üst bant ---- */
+ header{padding:14px 24px;border-bottom:1px solid var(--cizgi);
+  display:flex;flex-wrap:wrap;gap:16px;align-items:baseline}
+ h1{font-size:16px;font-weight:650;letter-spacing:-.01em;margin:0}
+ h1 .alt{color:var(--sis);font-weight:500;font-size:12px;letter-spacing:.02em;margin-left:8px}
+ #meta{font-size:12px}
+ .refresh{margin-left:auto;display:flex;gap:8px;align-items:center}
+ button{background:transparent;color:var(--gumus);border:1px solid var(--cizgi2);
+  border-radius:7px;padding:6px 12px;font-size:12.5px;font-weight:550;cursor:pointer}
+ button:hover{color:var(--murekkep);border-color:rgba(174,188,214,.34);background:var(--defter2)}
+
+ /* seans ışığı */
+ .mkt{display:inline-flex;align-items:center;gap:7px;padding:4px 11px;border-radius:999px;
+  font-size:12px;font-weight:650;border:1px solid var(--cizgi2);color:var(--gumus)}
+ .mkt .dot{width:8px;height:8px;border-radius:50%;display:inline-block;background:var(--sis)}
+ .mkt.open{color:var(--kar);border-color:rgba(62,207,142,.4);background:var(--kar-bg)}
+ .mkt.open .dot{background:var(--kar);animation:pulse 1.8s infinite}
+ .mkt.closed{color:var(--zarar);border-color:rgba(240,123,123,.35);background:var(--zarar-bg)}
+ .mkt.closed .dot{background:var(--zarar)}
+ .mkt.ext{color:var(--kehribar);border-color:rgba(232,176,75,.35);background:var(--kehribar-bg)}
+ .mkt.ext .dot{background:var(--kehribar)}
+ @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(62,207,142,.55)}70%{box-shadow:0 0 0 7px rgba(62,207,142,0)}100%{box-shadow:0 0 0 0 rgba(62,207,142,0)}}
+
+ .wrap{padding:28px 24px 56px;max-width:1240px;margin:0 auto}
+
+ /* ---- YARIŞ RAYI: üç defterin özsermayesi tek bakışta ---- */
+ .race{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin:0 0 44px}
+ .lane{background:var(--defter);border:1px solid var(--cizgi);border-radius:10px;
+  padding:12px 16px 14px;border-top:2px solid var(--sis)}
+ .lane.r0{border-top-color:var(--altin)} .lane.r1{border-top-color:var(--buz)} .lane.r2{border-top-color:var(--fosfor)}
+ .lane .ln{font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--gumus)}
+ .lane .ln .lead{color:var(--kehribar);letter-spacing:.04em;margin-left:6px;font-size:10px}
+ .lane .lv{font-size:21px;font-weight:650;letter-spacing:-.01em;margin:6px 0 2px}
+ .lane .lp{font-size:12.5px;font-weight:550}
+ .lane .track{height:3px;background:var(--defter2);border-radius:2px;margin-top:10px;overflow:hidden}
+ .lane .fill{height:100%;border-radius:2px;background:var(--sis)}
+ .lane.r0 .fill{background:var(--altin)} .lane.r1 .fill{background:var(--buz)} .lane.r2 .fill{background:var(--fosfor)}
+
+ /* ---- DEFTER: her portföy, kimlik renginde sırtı olan bir kayıt defteri ---- */
+ .defter{background:var(--defter);border:1px solid var(--cizgi);border-left:3px solid var(--sis);
+  border-radius:10px;padding:18px 20px 20px;margin:0 0 28px}
+ .defter.d-champ{border-left-color:var(--altin)}
+ .defter.d-ema{border-left-color:var(--buz)}
+ .defter.d-chand{border-left-color:var(--fosfor)}
+ .defter.d-scan{border-left-color:var(--cizgi2)}
+ .defter h2{font-size:13px;font-weight:650;letter-spacing:.02em;margin:0 0 4px}
+ .defter .kural{display:block;font-size:11.5px;font-weight:450;color:var(--sis);
+  letter-spacing:.01em;margin:0 0 16px}
+ .defter .kural a{color:var(--sis)}
+ h3.alt{font-size:10.5px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--sis);margin:20px 0 8px}
+
+ /* KPI bandı: kart grid'i değil, ayraçlı cetvel */
+ .kpis{display:flex;flex-wrap:wrap;background:var(--gece);border:1px solid var(--cizgi);
+  border-radius:8px;padding:4px 0;margin:0 0 4px}
+ .kpi{padding:8px 18px;border-right:1px solid var(--cizgi);min-width:128px}
+ .kpi:last-child{border-right:none}
+ .kpi .v{font-size:17px;font-weight:650;letter-spacing:-.01em}
+ .kpi .l{color:var(--sis);font-size:10.5px;font-weight:550;letter-spacing:.07em;text-transform:uppercase;margin-top:2px}
+
+ /* tablolar: defterin içinde çerçevesiz; satırlar ince çizgiyle */
+ table{width:100%;border-collapse:collapse;font-size:13px}
+ th,td{padding:7px 10px;text-align:right;border-bottom:1px solid var(--cizgi);white-space:nowrap}
+ th:first-child,td:first-child{text-align:left}
+ th{color:var(--sis);font-weight:600;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase}
+ tr:last-child td{border-bottom:none}
+ .sym{font-weight:650;letter-spacing:.01em}
+ tbody tr.clk{cursor:pointer} tbody tr.clk:hover{background:var(--defter2)}
+ .badge{display:inline-block;padding:1px 8px;border-radius:5px;font-size:10.5px;font-weight:650;letter-spacing:.04em}
+ .b-buy{background:var(--kar-bg);color:var(--kar)} .b-tp{background:var(--kar-bg);color:var(--kar)}
+ .b-stop{background:var(--zarar-bg);color:var(--zarar)} .b-watch{background:var(--kehribar-bg);color:var(--kehribar)}
+
+ .scanbox{white-space:pre-wrap;word-break:break-word;font-size:13px}
+ .ipucu{color:var(--sis);font-size:12px;margin-top:24px}
+
+ /* ---- grafik modalı (s3) ---- */
+ .modal{position:fixed;inset:0;background:rgba(8,9,12,.84);display:none;
+  align-items:center;justify-content:center;z-index:50;padding:14px}
  .modal.open{display:flex}
- .modal-inner{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px;max-width:1180px;width:100%;max-height:calc(100vh - 28px);display:flex;flex-direction:column;overflow:hidden}
- .modal-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap;flex:0 0 auto}
+ .modal-inner{background:var(--cam);border:1px solid var(--cizgi2);border-radius:12px;padding:14px;
+  max-width:1180px;width:100%;max-height:calc(100vh - 28px);display:flex;flex-direction:column;
+  overflow:hidden;box-shadow:0 18px 48px rgba(0,0,0,.5)}
+ .modal-head{display:flex;justify-content:space-between;align-items:center;gap:12px;
+  margin-bottom:10px;flex-wrap:wrap;flex:0 0 auto}
  #chart{width:100%;flex:1 1 auto;min-height:240px}
  .chartnote{margin-top:6px;font-size:12px;flex:0 0 auto}
  .mktmini{font-size:12px;font-weight:600}
  .tfbar{display:flex;gap:4px;flex-wrap:wrap;margin-left:auto}
- .tfbar .tf{padding:5px 11px;font-size:12.5px;font-weight:600;background:var(--bg);color:var(--mut);border:1px solid var(--bd);border-radius:8px;cursor:pointer}
- .tfbar .tf:hover{border-color:var(--blu);color:var(--fg)}
- .tfbar .tf.on{background:rgba(59,130,246,.18);color:#9ec5ff;border-color:rgba(59,130,246,.6)}
- .x{cursor:pointer;border:1px solid var(--bd);border-radius:8px;padding:5px 11px;background:var(--bg);color:var(--fg)} .x:hover{border-color:var(--blu)}
- .scanbox{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px;white-space:pre-wrap;word-break:break-word}
- a{color:var(--blu)} .refresh{margin-left:auto;display:flex;gap:8px;align-items:center}
- .mkt{display:inline-flex;align-items:center;gap:7px;padding:5px 12px;border-radius:999px;font-size:12.5px;font-weight:700;border:1px solid var(--bd)}
- .mkt .dot{width:9px;height:9px;border-radius:50%;display:inline-block}
- .mkt.open{background:rgba(22,163,74,.15);color:#7ee2a8;border-color:rgba(22,163,74,.5)} .mkt.open .dot{background:var(--grn);box-shadow:0 0 0 0 rgba(22,163,74,.7);animation:pulse 1.8s infinite}
- .mkt.closed{background:rgba(220,38,38,.13);color:#ffa3ab;border-color:rgba(220,38,38,.45)} .mkt.closed .dot{background:var(--red)}
- .mkt.ext{background:rgba(245,158,11,.14);color:#ffd591;border-color:rgba(245,158,11,.45)} .mkt.ext .dot{background:var(--amb)}
- @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(22,163,74,.7)}70%{box-shadow:0 0 0 7px rgba(22,163,74,0)}100%{box-shadow:0 0 0 0 rgba(22,163,74,0)}}
- button{background:var(--card);color:var(--fg);border:1px solid var(--bd);border-radius:8px;padding:7px 12px;cursor:pointer}
- button:hover{border-color:var(--blu)}
+ .tfbar .tf{padding:5px 11px;font-size:12px;font-weight:600;background:transparent;
+  color:var(--sis);border:1px solid var(--cizgi);border-radius:7px;cursor:pointer}
+ .tfbar .tf:hover{border-color:var(--cizgi2);color:var(--murekkep)}
+ .tfbar .tf.on{background:var(--defter2);color:var(--murekkep);border-color:var(--cizgi2)}
+ .x{cursor:pointer;border:1px solid var(--cizgi2);border-radius:7px;padding:5px 11px;
+  background:transparent;color:var(--gumus)} .x:hover{color:var(--murekkep);background:var(--defter2)}
 </style></head><body>
 <header>
-  <h1>📓 qswing Kağıt-Trade Dashboard</h1>
+  <h1>qswing Seans Masası<span class="alt">kağıt-trade defterleri</span></h1>
   <span class="mkt" id="mkt" title="ABD borsası seans durumu (ET)">…</span>
   <span class="muted" id="meta">yükleniyor…</span>
   <div class="refresh">
     <span class="muted" id="upd"></span>
+    <button onclick="window.open('/rapor','_blank')" title="Deney iterasyonu: canlı baz vs önerilen varyant — ekonomist gözüyle detaylı karşılaştırma">📊 Rapor</button>
     <button onclick="loadAll()">↻ Yenile</button>
   </div>
 </header>
 <div class="wrap">
-  <div class="kpis" id="kpis"></div>
-  <h2>Açık Pozisyonlar</h2><div id="open"></div>
-  <h2>Kapanan İşlemler</h2><div id="closed"></div>
-  <h2>Son Tarama</h2><div id="scan" class="scanbox">…</div>
-  <p class="muted" style="margin-top:22px">💡 Bir <b>açık</b> ya da <b>kapanan</b> pozisyon satırına tıkla → <b>etkileşimli</b> mum grafiği açılır: tekerlekle <b>zoom</b>, sürükleyerek <b>kaydır</b>, üstten <b>zaman dilimi</b> (15m·30m·1h·2h·4h·1d) seç. <span class="pos">AL ▲</span> / <span class="neg">SAT ▼</span> + giriş/stop/+2R çizgileri işaretli.</p>
+  <div class="race" id="race"></div>
+
+  <section class="defter d-champ">
+    <h2>🏆 ATR-trail (şampiyon)</h2>
+    <span class="kural">giriş: 40g kırılım · çıkış: %50 kısmi @+2R · +2R hedef · +1R sonrası kapanış−2.5×ATR trail</span>
+    <div class="kpis" id="kpis"></div>
+    <h3 class="alt">Açık Pozisyonlar</h3><div id="open"></div>
+    <h3 class="alt">Kapanan İşlemler</h3><div id="closed"></div>
+  </section>
+
+  <section class="defter d-ema">
+    <h2>📐 8/21-EMA varyantı</h2>
+    <span class="kural">girişler şampiyonla aynı · çıkış: %50 kapanış&lt;8-EMA · kalan %50 kapanış&lt;21-EMA</span>
+    <div class="kpis" id="kpisE"></div>
+    <h3 class="alt">Açık Pozisyonlar</h3><div id="openE"></div>
+    <h3 class="alt">Kapanan İşlemler</h3><div id="closedE"></div>
+  </section>
+
+  <section class="defter d-chand">
+    <h2>💡 63G-Şamdan varyantı</h2>
+    <span class="kural">giriş: yalnız 63g (çeyreklik) tepe kıranlar · çıkış: tüm pozisyon, kapanış&lt;tepe−3.25×ATR · kısmi/hedef yok · <a href="/rapor" target="_blank">detaylı rapor</a></span>
+    <div class="kpis" id="kpisC"></div>
+    <h3 class="alt">Açık Pozisyonlar</h3><div id="openC"></div>
+    <h3 class="alt">Kapanan İşlemler</h3><div id="closedC"></div>
+  </section>
+
+  <section class="defter d-scan">
+    <h2>Son Tarama</h2>
+    <span class="kural">22:45 (15:45 ET) qswing kırılım taraması — yapısal veri varsa tablo, yoksa mesaj metni</span>
+    <div id="scan" class="scanbox">…</div>
+  </section>
+
+  <p class="ipucu">Bir <b>açık</b> ya da <b>kapanan</b> pozisyon satırına tıkla → <b>etkileşimli</b> mum grafiği açılır: tekerlekle <b>zoom</b>, sürükleyerek <b>kaydır</b>, üstten <b>zaman dilimi</b> (15m·30m·1h·2h·4h·1d) seç. <span class="pos">AL ▲</span> / <span class="neg">SAT ▼</span> + giriş/stop/+2R çizgileri işaretli.</p>
 </div>
 <div class="modal" id="modal" onclick="if(event.target===this)closeChart()">
   <div class="modal-inner">
     <div class="modal-head">
-      <div><b id="modalTitle">—</b> <span class="mktmini" id="chartMkt"></span></div>
+      <div><b id="modalTitle">—</b> <span class="mktmini" id="chartMkt"></span> <span class="mktmini muted" id="chartCd" title="otomatik veri tazelemeye kalan süre"></span></div>
       <div class="tfbar" id="tfbar"></div>
       <button class="x" onclick="closeChart()">✕ Kapat</button>
     </div>
@@ -427,9 +559,27 @@ const sign=v=>v==null?'—':(v>=0?'+':'')+f(v);
 
 async function loadAll(){
   const [p,s]=await Promise.all([fetch('/api/portfolio').then(r=>r.json()),fetch('/api/scan').then(r=>r.json())]);
-  renderKpis(p); renderOpen(p); renderClosed(p); renderScan(s); renderMkt(p.market);
+  renderRace(p);
+  renderKpis(p,'kpis',p.ema); renderOpen(p,'open'); renderClosed(p,'closed');
+  if(p.ema){renderKpis(p.ema,'kpisE',p); renderOpen(p.ema,'openE',true); renderClosed(p.ema,'closedE');}
+  if(p.chand){renderKpis(p.chand,'kpisC',p); renderOpen(p.chand,'openC',true); renderClosed(p.chand,'closedC');}
+  renderScan(s); renderMkt(p.market);
   $('meta').textContent=`başlangıç ${p.started||'?'} · ${p.slippage||'slippage kapalı'}`;
   $('upd').textContent='güncellendi '+new Date().toLocaleTimeString('tr-TR');
+}
+function renderRace(p){
+  // yarış rayı: üç defterin özsermayesi tek bakışta (salt görüntü — /api/portfolio verisinden)
+  const L=[['🏆 ATR-trail',p,'r0'],['📐 8/21-EMA',p.ema,'r1'],['💡 63G-Şamdan',p.chand,'r2']].filter(x=>x[1]&&x[1].equity!=null);
+  if(!L.length){$('race').innerHTML='';return;}
+  const eqs=L.map(x=>x[1].equity),mx=Math.max(...eqs),mn=Math.min(...eqs);
+  $('race').innerHTML=L.map(([n,d,c])=>{
+    const w=(mx===mn)?100:Math.round(8+92*(d.equity-mn)/(mx-mn));
+    const lead=(d.equity===mx&&mx!==mn)?'<span class="lead">önde</span>':'';
+    return `<div class="lane ${c}"><div class="ln">${n}${lead}</div>
+     <div class="lv">$${f(d.equity)}</div>
+     <div class="lp ${cls(d.total_pl)}">${sign(d.total_pl)}$ · ${sign(d.total_pl_pct)}% · ${d.n_open} açık</div>
+     <div class="track"><div class="fill" style="width:${w}%"></div></div></div>`;
+  }).join('');
 }
 function renderMkt(m){
   const el=$('mkt'); if(!m){el.textContent='';return;}
@@ -437,28 +587,33 @@ function renderMkt(m){
   el.className='mkt '+cl;
   el.innerHTML=`<span class="dot"></span>${m.label}${m.et?' · '+m.et:''}`;
 }
-function renderKpis(p){
+function renderKpis(p,el,other){
   const k=[['Özsermaye','$'+f(p.equity)],['Genel K/Z',sign(p.total_pl)+'$ ('+sign(p.total_pl_pct)+'%)',cls(p.total_pl)],
    ['Gerçekleşmemiş',sign(p.unrealized)+'$',cls(p.unrealized)],['Gerçekleşen',sign(p.realized)+'$',cls(p.realized)],
    ['Nakit','$'+f(p.cash)],['Pozisyon',p.n_open+' açık · '+p.n_closed+' kapanan']];
-  $('kpis').innerHTML=k.map(x=>`<div class="kpi"><div class="v ${x[2]||''}">${x[1]}</div><div class="l">${x[0]}</div></div>`).join('');
+  if(other&&other.equity!=null){const d=p.equity-other.equity;
+   k.push(['⚖️ Fark (diğerine göre)',sign(d)+'$',cls(d)]);}
+  $(el).innerHTML=k.map(x=>`<div class="kpi"><div class="v ${x[2]||''}">${x[1]}</div><div class="l">${x[0]}</div></div>`).join('');
 }
-function renderOpen(p){
-  if(!p.positions.length){$('open').innerHTML='<p class="muted">Açık pozisyon yok.</p>';return;}
-  let h='<table><tr><th>Hisse</th><th>Fiyat</th><th>Giriş</th><th>Adet</th><th>K/Z</th><th>%</th><th>Stop</th><th>Hedef</th><th>Giriş zamanı</th></tr>';
-  for(const x of p.positions){h+=`<tr class="clk" onclick="openChart('${x.symbol}')"><td class="sym">${x.symbol}</td><td>${f(x.price)}</td><td>${f(x.entry_fill)}</td>
+function renderOpen(p,el,ema){
+  if(!p.positions.length){$(el).innerHTML='<p class="muted">Açık pozisyon yok.</p>';return;}
+  const exitH=ema?'<th>Çıkış planı</th>':'<th>Stop</th><th>Hedef</th>';
+  let h='<table><tr><th>Hisse</th><th>Fiyat</th><th>Giriş</th><th>Adet</th><th>K/Z</th><th>%</th>'+exitH+'<th>Giriş zamanı</th></tr>';
+  for(const x of p.positions){
+   const exitC=ema?`<td>${x.exit_plan||'—'}</td>`:`<td>${f(x.stop)}</td><td>${f(x.target)}</td>`;
+   h+=`<tr class="clk" onclick="openChart('${x.symbol}')"><td class="sym">${x.symbol}</td><td>${f(x.price)}</td><td>${f(x.entry_fill)}</td>
    <td>${f(x.shares,3)}</td><td class="${cls(x.pnl)}">${sign(x.pnl)}$</td><td class="${cls(x.pct)}">${sign(x.pct)}%</td>
-   <td>${f(x.stop)}</td><td>${f(x.target)}</td><td class="muted">${x.entry_ts||''}</td></tr>`;}
-  $('open').innerHTML=h+'</table>';
+   ${exitC}<td class="muted">${x.entry_ts||''}</td></tr>`;}
+  $(el).innerHTML=h+'</table>';
 }
-function renderClosed(p){
-  if(!p.closed.length){$('closed').innerHTML='<p class="muted">Kapanan işlem yok.</p>';return;}
+function renderClosed(p,el){
+  if(!p.closed.length){$(el).innerHTML='<p class="muted">Kapanan işlem yok.</p>';return;}
   let h='<table><tr><th>Hisse</th><th>Sonuç</th><th>Giriş</th><th>Çıkış</th><th>K/Z</th><th>%</th><th>Giriş→Çıkış</th></tr>';
-  for(const x of p.closed){const b=x.outcome==='TP'?'b-tp':'b-stop';
+  for(const x of p.closed){const b=(x.outcome==='TP'||(x.pnl!=null&&x.pnl>=0))?'b-tp':'b-stop';
    h+=`<tr class="clk" onclick="openChart('${x.symbol}')"><td class="sym">${x.symbol}</td><td><span class="badge ${b}">${x.outcome||''}</span></td>
    <td>${f(x.entry_fill)}</td><td>${f(x.exit)}</td><td class="${cls(x.pnl)}">${sign(x.pnl)}$</td>
    <td class="${cls(x.pnl_pct)}">${sign(x.pnl_pct)}%</td><td class="muted">${x.entry_date} → ${x.exit_date}</td></tr>`;}
-  $('closed').innerHTML=h+'</table>';
+  $(el).innerHTML=h+'</table>';
 }
 function renderScan(s){
   if(s.mode==='none'){$('scan').innerHTML='<span class="muted">Henüz kayıtlı tarama yok.</span>';return;}
@@ -473,7 +628,7 @@ function renderScan(s){
   $('scan').innerHTML=h; $('scan').classList.remove('scanbox');
 }
 const TFS=['15m','30m','1h','2h','4h','1d'];
-let _chart=null,_series=null,_sma=null,_plines=[],_cursym=null,_curtf='1d';
+let _chart=null,_series=null,_sma=null,_plines=[],_cursym=null,_curtf='1d',_chartTimer=null,_cdTimer=null,_nextAt=0;
 function buildTfbar(){
   $('tfbar').innerHTML=TFS.map(tf=>`<button class="tf${tf===_curtf?' on':''}" onclick="setTf('${tf}')">${tf}</button>`).join('');
 }
@@ -484,27 +639,40 @@ function openChart(sym){
   buildTfbar();
   ensureChart();
   drawChart();
+  if(_chartTimer)clearInterval(_chartTimer);
+  _nextAt=Date.now()+60000;
+  _chartTimer=setInterval(()=>{_nextAt=Date.now()+60000;drawChart(true);},60000);   // açıkken 60 sn'de bir tazele (zoom korunur)
+  if(_cdTimer)clearInterval(_cdTimer);
+  _cdTimer=setInterval(tickCd,1000); tickCd();          // geri sayım rozeti (↻ Ns)
 }
-function closeChart(){$('modal').classList.remove('open');}
+function tickCd(){
+  const s=Math.max(0,Math.ceil((_nextAt-Date.now())/1000));
+  $('chartCd').textContent='↻ '+s+'s';
+}
+function closeChart(){
+  $('modal').classList.remove('open');
+  if(_chartTimer){clearInterval(_chartTimer);_chartTimer=null;}
+  if(_cdTimer){clearInterval(_cdTimer);_cdTimer=null;}
+}
 function ensureChart(){
   if(_chart)return;
   const el=$('chart');el.innerHTML='';
   _chart=LightweightCharts.createChart(el,{
     width:el.clientWidth,height:el.clientHeight,autoSize:true,
-    layout:{background:{color:'#161d27'},textColor:'#e6edf3',fontSize:12},
-    grid:{vertLines:{color:'#222c3a'},horzLines:{color:'#222c3a'}},
-    timeScale:{timeVisible:true,secondsVisible:false,borderColor:'#2a3343'},
-    rightPriceScale:{borderColor:'#2a3343'},
+    layout:{background:{color:'#20252d'},textColor:'#e8ecf3',fontSize:12},
+    grid:{vertLines:{color:'rgba(174,188,214,.06)'},horzLines:{color:'rgba(174,188,214,.06)'}},
+    timeScale:{timeVisible:true,secondsVisible:false,borderColor:'rgba(174,188,214,.20)'},
+    rightPriceScale:{borderColor:'rgba(174,188,214,.20)'},
     crosshair:{mode:0}});
   _series=_chart.addCandlestickSeries({upColor:'#16a34a',downColor:'#dc2626',
     wickUpColor:'#16a34a',wickDownColor:'#dc2626',borderVisible:false});
   _sma=_chart.addLineSeries({color:'#f59e0b',lineWidth:1,priceLineVisible:false,lastValueVisible:false});
   window.addEventListener('resize',()=>{if(_chart)_chart.applyOptions({width:el.clientWidth,height:el.clientHeight});});
 }
-async function drawChart(){
+async function drawChart(keep){
   const sym=_cursym,tf=_curtf;
   $('modalTitle').textContent=sym+' · '+tf;
-  $('chartNote').textContent='yükleniyor…';
+  if(!keep)$('chartNote').textContent='yükleniyor…';
   let d;
   try{d=await fetch(`/api/candles/${sym}?tf=${tf}`).then(r=>r.json());}
   catch(e){$('chartNote').textContent='grafik yüklenemedi';return;}
@@ -519,13 +687,13 @@ async function drawChart(){
   const addL=(p,c,t)=>{if(p!=null)_plines.push(_series.createPriceLine({price:p,color:c,lineWidth:1,lineStyle:2,axisLabelVisible:true,title:t}));};
   addL(L.entry,'#3b82f6','Giriş');addL(L.stop,'#dc2626','Stop');addL(L.target,'#16a34a','+2R');
   _series.setMarkers(d.markers||[]);
-  _chart.timeScale().fitContent();
+  if(!keep)_chart.timeScale().fitContent();   // otomatik tazelemede zoom/kaydırma korunur
   if(d.error){$('chartNote').textContent='⚠️ '+d.error;}
   else{$('chartNote').textContent=(d.intraday?'🕒 saatler ET · ':'')+((d.candles||[]).length)+' bar · tekerlek=zoom, sürükle=kaydır · SMA50 (turuncu) · giriş/stop/+2R çizgileri · AL▲/SAT▼';}
 }
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeChart();});
 loadAll();
-setInterval(loadAll,60000);   // piyasa durumu + fiyatlar otomatik tazelensin
+setInterval(loadAll,30000);   // piyasa durumu + fiyatlar otomatik tazelensin
 </script></body></html>"""
 
 
@@ -555,6 +723,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._send(200, json.dumps(scan_json(), ensure_ascii=False), "application/json")
             elif path == "/static/lwc.js":
                 self._send(200, _LWC_JS, "application/javascript; charset=utf-8")
+            elif path == "/rapor":
+                # Strateji karşılaştırma raporu (statik, gen_exp_report.py üretir) — salt-okur
+                rp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dashboard_static", "exp_report.html")
+                if os.path.exists(rp):
+                    with open(rp, "rb") as fh:
+                        self._send(200, fh.read(), "text/html; charset=utf-8")
+                else:
+                    self._send(404, "Rapor henüz üretilmedi (python3 gen_exp_report.py)", "text/plain; charset=utf-8")
             elif path.startswith("/api/candles/"):
                 sym = path[len("/api/candles/"):].upper()
                 q = urllib.parse.parse_qs(self.path.split("?", 1)[1]) if "?" in self.path else {}
