@@ -97,13 +97,13 @@ th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:
           </select></label>
         <label class="fld" title="Çıkış/stop motoru. Şampiyon = ATR-trail (kısmi @2R + 2.5×ATR süren stop). MA-trail = 10g SMA altına kapanış. 8-EMA modları = sabit 8-EMA stop + farklı kâr-al (TP)."><span class="kicker">Çıkış Stratejisi</span>
           <select id="exit" onchange="refreshForm()">
-            <option value="champion">⭐ Şampiyon (ATR-trail)</option>
+            <option value="champion">🏆 Şampiyon (canlı · 2R kısmi + 2.5×ATR · sabit)</option>
             <option value="atr_trail">💡 63G-Şamdan (63g giriş · 3.25×ATR şamdan)</option>
             <option value="ma_trail">Qullamaggie · 10g MA trail</option>
             <option value="rr_based">8-EMA stop · RR hedef</option>
             <option value="momentum">8-EMA stop · RSI/Stoch</option>
             <option value="atr_climax">8-EMA stop · ATR climax</option>
-            <option value="hybrid">8-EMA stop · 21-EMA hibrit</option>
+            <option value="hybrid">📐 8/21-EMA hibrit (canlı · sabit)</option>
             <option value="hybrid2">8-EMA Hibrit 2 (kapanış + BE kilidi)</option>
             <option value="split">✂️ Bölünmüş çıkış (½ A + ½ B)</option>
             <option value="atr_regime">🛡️ ATR-Rejim (saf ATR + oynaklık kilidi)</option>
@@ -191,13 +191,13 @@ th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:
           <div>
             <div class="kicker" style="margin-bottom:4px;">Çıkışlar</div>
             <div class="row" style="gap:10px;">
-              <label class="chk" title="ATR-trail şampiyon çıkış"><input type="checkbox" class="cmp-exit" value="champion" checked> Şampiyon</label>
+              <label class="chk" title="Canlı 🏆 SABİT paket: %50 kısmi @2R + 2.5×ATR trail + strict BE (ATR stop 1.5 · R/R 2.0)"><input type="checkbox" class="cmp-exit" value="champion" checked> 🏆 Şampiyon</label>
               <label class="chk" title="63G-Şamdan SABİT paket: qswing girişinde 63g kırılım + 3.25×ATR şamdan tam-pozisyon çıkış (parametresiz)"><input type="checkbox" class="cmp-exit" value="atr_trail"> 💡 63G-Şamdan</label>
               <label class="chk" title="Qullamaggie 10-gün MA trail çıkış"><input type="checkbox" class="cmp-exit" value="ma_trail" checked> MA-trail 10g</label>
               <label class="chk" title="8-EMA stop + R hedef (varsayılan alt-parametrelerle)"><input type="checkbox" class="cmp-exit" value="rr_based"> RR</label>
               <label class="chk" title="8-EMA stop + RSI/Stoch aşırı-alımda kâr-al"><input type="checkbox" class="cmp-exit" value="momentum"> RSI</label>
               <label class="chk" title="8-EMA stop + ATR climax kâr-al"><input type="checkbox" class="cmp-exit" value="atr_climax"> Climax</label>
-              <label class="chk" title="8-EMA stop + 21-EMA hibrit gövde takibi"><input type="checkbox" class="cmp-exit" value="hybrid"> Hibrit</label>
+              <label class="chk" title="Canlı 📐 SABİT paket: ilk %50 8-EMA, kalan %50 21-EMA; kapanış teyidi daima açık"><input type="checkbox" class="cmp-exit" value="hybrid"> 📐 8/21-EMA</label>
               <label class="chk" title="Hibrit 2: ilk %50 8-EMA KAPANIŞ altında + LOW10 felaket stop; runner BREAKEVEN kilidi, 21-EMA kapanışta çıkar"><input type="checkbox" class="cmp-exit" value="hybrid2"> Hibrit 2</label>
               <label class="chk" title="Bölünmüş çıkış — yukarıdaki 'Çıkış A / Çıkış B' seçimini kullanır. Karşılaştırmadan önce ana formda Çıkış=Bölünmüş seçip A/B kurallarını ayarla."><input type="checkbox" class="cmp-exit" value="split"> ✂️ Bölünmüş (<span id="cmp-split-lbl">A/B</span>)</label>
               <label class="chk" title="ATR-Rejim: saf ATR (sabit hedef/stop) + sabit $ risk + SPY oynaklık kilidi. ATR× ve eşik için ana formda Çıkış=ATR-Rejim seçip ayarla."><input type="checkbox" class="cmp-exit" value="atr_regime"> 🛡️ ATR-Rejim</label>
@@ -289,13 +289,13 @@ function showTab(t){
 $('qs-universe').onchange = e => $('qs-custom').classList.toggle('hide', e.target.value!=='custom');
 
 const HINTS = {
-  champion:'ATR-trail şampiyonu (FMP-B): %50 kısmi @2R · 2.5×ATR süren stop · strict BE.',
+  champion:'CANLI 🏆 SABİT paket: %50 kısmi @2R · 2.5×ATR süren stop · strict BE · ATR stop 1.5 · R/R 2.0 — kağıt-portföy şampiyonuyla birebir; ayarlanacak parametre yok.',
   atr_trail:'63G-ŞAMDAN — SABİT paket: qswing girişi 63g tepeden kırılım, çıkış kapanış < tepe − 3.25×ATR(14) olunca TÜM pozisyon (kısmi/hedef/gün-içi stop YOK). Deney kazananı: 5y FULL +%272 · DD −18.7 · PF 3.95; üç ayrık pencerede de pozitif. DİKKAT: gün-içi sert stop yok → sert düşüş günü kapanışa kadar taşınır.',
   ma_trail:'Qullamaggie: %50 kısmi @2R, kalanı N-gün SMA altına kapanınca sat.',
   rr_based:'Stop = 8-EMA (sabit). Kısmi tetikte sat, kalanı hedef R\'ye bırak.',
   momentum:'Stop = 8-EMA. RSI eşiği VEYA Stoch>80 aşağı kesişimde kârla kapat.',
   atr_climax:'Stop = 8-EMA. Fiyat 8-EMA\'dan aşırı saparsa (climax) kâr al.',
-  hybrid:'Stop = 8-EMA. İlk %50 8-EMA\'da, kalan %50 21-EMA gövde takibi.',
+  hybrid:'CANLI 📐 SABİT paket: stop = 8-EMA; ilk %50 8-EMA, kalan %50 21-EMA gövde takibi; kapanış teyidi DAİMA açık — kağıt-portföy 8/21-EMA bacaklarıyla birebir.',
   hybrid2:'Hibrit 2: ilk %50 yalnız 8-EMA KAPANIŞ altında satılır (gün-içi iğne elemez); LOW10 felaket stopu gün-içi aktif. İlk %50 sonrası runner stopu BREAKEVEN\'e (giriş) çekilir → 21-EMA altına kapanınca veya BE\'ye değince çıkar.',
   split:'Pozisyon %50/%50 ikiye bölünür; A ve B yarıları KENDİ atomik kurallarıyla bağımsız çıkar (ortak felaket stopu YOK). İşlem defterinde bacaklar A:… / B:… diye görünür. Örn. A=8-EMA (erken kilit) + B=21-EMA (runner) → küçük kaybı kes, kazananı koştur.',
   atr_regime:'SAF ATR rejim modu: pozisyon bölünmez; girişte ATR0 ile sabitlenen hedefe (kâr-al) ya da stopa (zarar-kes) kadar beklenir — trailing YOK. Boyut = sabit $ risk. Ayrıca SPY 20g ATR% eşiği aşılınca (testere/oynaklık) o gün YENİ İŞLEM AÇILMAZ → uzun vadeli backtestte gürültüden korur.'
@@ -311,9 +311,9 @@ function refreshForm(){
   show('fld-earnings',  !q);
   if(q) $('earnings').checked = false;   // qswing earnings'i kontrol etmez → boşa yavaş çekim olmasın
   // ÇIKIŞ'a göre — plan stop/hedef yalnız ilgili modlarda kullanılır
-  show('fld-atr_stop',  exit==='champion' || exit==='ma_trail' || exit==='hybrid2');  // hibrit2: LOW10/ATR felaket stopu aktif
-  show('fld-rr_target', exit==='champion');                       // nihai R hedefi yalnız şampiyon
-  show('fld-confirm',   exit!=='champion' && exit!=='split' && exit!=='atr_regime'); // atr-regime/split kapanış-teyiti kullanmaz
+  show('fld-atr_stop',  exit==='ma_trail' || exit==='hybrid2');   // şampiyonda SABİT 1.5 (canlı paket)
+  show('fld-rr_target', false);                                   // şampiyonda SABİT 2.0 (canlı paket)
+  show('fld-confirm',   exit!=='champion' && exit!=='split' && exit!=='atr_regime' && exit!=='hybrid' && exit!=='atr_trail'); // hibritte SABİT açık; şamdan kullanmaz
   show('fld-risk_pct',  $('sizing').value==='risk');              // risk %'si yalnız risk-bazlı modda
   updateCmpSplitLabel();
   // ipucu
@@ -350,6 +350,8 @@ function buildPayload(){
   const es = p.exit_strategy;
   if(es==='atr_trail'){ p.atr_trail_mult = 3.25;                       // SABİT (deney kazananı)
     if(p.entry_mode==='qswing') p.qswing_breakout_lb = 63; }            // 63G-Şamdan paketi
+  if(es==='champion'){ p.rr_target = 2.0; p.atr_stop_mult = 1.5; }      // canlı 🏆 sabitleri
+  if(es==='hybrid') p.ma_confirm_close = true;                          // canlı 📐: kapanış teyidi daima
   if(es!=='champion') p.ma_confirm_close = $('confirm').checked;
   if(es==='ma_trail') p.ma_trail_len = parseInt($('ma_trail_len').value)||10;
   if(es==='rr_based'){ p.partial_pct=parseFloat($('partial_pct').value)||0.3; p.partial_rr=parseFloat($('partial_rr').value)||1.5; p.rr_target=parseFloat($('rr_tp').value)||3.0; }
@@ -583,6 +585,7 @@ async function compareBacktest(){
     if(ex==='momentum'){p.rsi_overbought_limit=70;p.ma_confirm_close=true;}
     if(ex==='atr_climax'){p.climax_atr_mult=2.0;p.ma_confirm_close=true;}
     if(ex==='hybrid') p.ma_confirm_close=true;
+    if(ex==='champion'){ p.rr_target=2.0; p.atr_stop_mult=1.5; }
     if(ex==='hybrid2') p.ma_confirm_close=true;
     if(ex==='split'){ p.split_a=$('split_a').value; p.split_b=$('split_b').value;
       p.split_a_param=parseFloat($('split_a_param').value)||0; p.split_b_param=parseFloat($('split_b_param').value)||0; }
