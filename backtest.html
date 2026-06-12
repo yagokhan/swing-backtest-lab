@@ -98,7 +98,7 @@ th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:
         <label class="fld" title="Çıkış/stop motoru. Şampiyon = ATR-trail (kısmi @2R + 2.5×ATR süren stop). MA-trail = 10g SMA altına kapanış. 8-EMA modları = sabit 8-EMA stop + farklı kâr-al (TP)."><span class="kicker">Çıkış Stratejisi</span>
           <select id="exit" onchange="refreshForm()">
             <option value="champion">⭐ Şampiyon (ATR-trail)</option>
-            <option value="atr_trail">💡 Şamdan ATR-trail (tam pozisyon)</option>
+            <option value="atr_trail">💡 63G-Şamdan (63g giriş · 3.25×ATR şamdan)</option>
             <option value="ma_trail">Qullamaggie · 10g MA trail</option>
             <option value="rr_based">8-EMA stop · RR hedef</option>
             <option value="momentum">8-EMA stop · RSI/Stoch</option>
@@ -109,8 +109,6 @@ th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:
             <option value="atr_regime">🛡️ ATR-Rejim (saf ATR + oynaklık kilidi)</option>
           </select></label>
         <label class="fld" id="fld-min_score" title="8-katman skor eşiği (0–24). Yalnız swing2 girişinde kullanılır; qswing kırılımı skor kullanmaz."><span class="kicker">Min skor (swing2)</span><input type="number" id="min_score" value="16" min="0" max="24"></label>
-        <label class="fld" id="fld-qlb" title="qswing kırılım periyodu: giriş = kapanış > önceki N günün tepesi. 40g = canlı tarama standardı. 63g = 63G-Şamdan deney kazananının girişi (daha seyrek, daha güçlü kırılımlar). Yalnız 10/20/40/63 desteklenir."><span class="kicker">Kırılım periyodu (qswing)</span>
-          <select id="qlb" onchange="refreshForm()"><option value="40">40 gün (canlı tarama)</option><option value="63">63 gün (63G-Şamdan)</option><option value="20">20 gün</option><option value="10">10 gün</option></select></label>
         <label class="fld" id="fld-qmin" title="qswing 0–100 öncelik skoru EŞİĞİ — canlı tarayıcıyla AYNI formül (RS 45 + 52H yakınlık 20 + tazelik/SMA20 20 + risk kalitesi 15). 0 = filtre kapalı (tüm kırılımlar). Ör. 65 = yalnız skoru ≥65 olan temiz kurulumlara gir. Yalnız qswing girişinde geçerli."><span class="kicker">Min qswing skoru (0–100)</span><input type="number" id="qmin" value="0" min="0" max="100" step="5"></label>
         <label class="fld" id="fld-rr_target" title="İlk/nihai hedef = giriş + (giriş−stop) × bu (R cinsinden). Yalnız Şampiyon (ATR-trail) çıkışında devreye girer."><span class="kicker">R/R hedef</span><input type="number" id="rr_target" value="2.0" step="0.5" min="1" max="6"></label>
         <label class="fld" id="fld-atr_stop" title="Stop tabanı = kapanış − bu × ATR(14). Şampiyon ve MA-trail çıkışında geçerli. 8-EMA modlarında stop daima 8-EMA'dır → kullanılmaz."><span class="kicker">ATR stop ×</span><input type="number" id="atr_stop" value="1.5" step="0.5" min="0.5" max="5"></label>
@@ -121,9 +119,6 @@ th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:
         <label class="fld" title="Sabit modda poz başına sermaye payı; Risk modda poz büyüklüğü tavanı."><span class="kicker">Poz %</span><input type="number" id="pos_pct" value="20" step="5" min="2" max="100"></label>
       </div>
       <!-- çıkış alt-parametreleri -->
-      <div class="row exsub ex-atr_trail hide" style="margin-top:12px;">
-        <label class="fld" title="Şamdan stopu: tepe (en yüksek High) izlenir; KAPANIŞ < tepe − bu × ATR(14) olunca TÜM pozisyon satılır. Kısmi yok, hedef yok, gün-içi stop YOK. Deney kazananı 63g giriş ile 3.25."><span class="kicker">Şamdan ATR ×</span><input type="number" id="atr_trail_mult" value="3.25" step="0.25" min="0.5" max="6"></label>
-      </div>
       <div class="row exsub ex-ma_trail hide" style="margin-top:12px;">
         <label class="fld" title="Süren çıkış için hareketli ortalama periyodu. Qullamaggie standardı 10 gün: fiyat bu SMA'nın altına KAPANINCA çıkılır."><span class="kicker">MA periyodu</span><input type="number" id="ma_trail_len" value="10" min="3" max="50"></label>
       </div>
@@ -197,7 +192,7 @@ th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:
             <div class="kicker" style="margin-bottom:4px;">Çıkışlar</div>
             <div class="row" style="gap:10px;">
               <label class="chk" title="ATR-trail şampiyon çıkış"><input type="checkbox" class="cmp-exit" value="champion" checked> Şampiyon</label>
-              <label class="chk" title="Şamdan ATR-trail (tam pozisyon) — çarpan için ana formda Çıkış=Şamdan seçip ayarla (varsayılan 3.25). 63g girişle = 63G-Şamdan"><input type="checkbox" class="cmp-exit" value="atr_trail"> 💡 Şamdan</label>
+              <label class="chk" title="63G-Şamdan SABİT paket: qswing girişinde 63g kırılım + 3.25×ATR şamdan tam-pozisyon çıkış (parametresiz)"><input type="checkbox" class="cmp-exit" value="atr_trail"> 💡 63G-Şamdan</label>
               <label class="chk" title="Qullamaggie 10-gün MA trail çıkış"><input type="checkbox" class="cmp-exit" value="ma_trail" checked> MA-trail 10g</label>
               <label class="chk" title="8-EMA stop + R hedef (varsayılan alt-parametrelerle)"><input type="checkbox" class="cmp-exit" value="rr_based"> RR</label>
               <label class="chk" title="8-EMA stop + RSI/Stoch aşırı-alımda kâr-al"><input type="checkbox" class="cmp-exit" value="momentum"> RSI</label>
@@ -295,7 +290,7 @@ $('qs-universe').onchange = e => $('qs-custom').classList.toggle('hide', e.targe
 
 const HINTS = {
   champion:'ATR-trail şampiyonu (FMP-B): %50 kısmi @2R · 2.5×ATR süren stop · strict BE.',
-  atr_trail:'ŞAMDAN (pozisyon-trade): kısmi/hedef/gün-içi stop YOK; tepe izlenir, kapanış < tepe − N×ATR(14) olunca TÜM pozisyon satılır. 63g giriş + 3.25 = 63G-Şamdan deney kazananı (5y FULL +%272 · DD −18.7 · PF 3.95; üç ayrık pencerede de pozitif). DİKKAT: gün-içi sert stop yok → sert düşüş günü kapanışa kadar taşınır.',
+  atr_trail:'63G-ŞAMDAN — SABİT paket: qswing girişi 63g tepeden kırılım, çıkış kapanış < tepe − 3.25×ATR(14) olunca TÜM pozisyon (kısmi/hedef/gün-içi stop YOK). Deney kazananı: 5y FULL +%272 · DD −18.7 · PF 3.95; üç ayrık pencerede de pozitif. DİKKAT: gün-içi sert stop yok → sert düşüş günü kapanışa kadar taşınır.',
   ma_trail:'Qullamaggie: %50 kısmi @2R, kalanı N-gün SMA altına kapanınca sat.',
   rr_based:'Stop = 8-EMA (sabit). Kısmi tetikte sat, kalanı hedef R\'ye bırak.',
   momentum:'Stop = 8-EMA. RSI eşiği VEYA Stoch>80 aşağı kesişimde kârla kapat.',
@@ -313,7 +308,6 @@ function refreshForm(){
   // GİRİŞ'e özgü — yalnız swing2 (8-katman)
   show('fld-min_score', !q);
   show('fld-qmin',       q);    // qswing skor eşiği yalnız qswing girişinde
-  show('fld-qlb',        q);    // kırılım periyodu yalnız qswing girişinde
   show('fld-earnings',  !q);
   if(q) $('earnings').checked = false;   // qswing earnings'i kontrol etmez → boşa yavaş çekim olmasın
   // ÇIKIŞ'a göre — plan stop/hedef yalnız ilgili modlarda kullanılır
@@ -323,7 +317,7 @@ function refreshForm(){
   show('fld-risk_pct',  $('sizing').value==='risk');              // risk %'si yalnız risk-bazlı modda
   updateCmpSplitLabel();
   // ipucu
-  const em = q ? 'qswing kırılım girişi ('+(($('qlb')&&$('qlb').value)||40)+'g tepe · 52H yakın · SPY\'ı geçen momentum). ' : '';
+  const em = q ? 'qswing kırılım girişi ('+(exit==='atr_trail'?63:40)+'g tepe · 52H yakın · SPY\'ı geçen momentum). ' : '';
   $('hint').textContent = em + (HINTS[exit]||'');
 }
 // Karşılaştırma menüsündeki "Bölünmüş (A/B)" etiketini ana formdaki seçimle güncel tut
@@ -348,14 +342,14 @@ function buildPayload(){
     max_position_pct: (parseFloat($('pos_pct').value)||20)/100,
   };
   if(p.sizing_mode==='risk') p.risk_per_trade_pct = parseFloat($('risk_pct').value)||1.0;
-  if(p.entry_mode==='qswing'){ p.qswing_min_score = parseFloat($('qmin').value)||0;
-    p.qswing_breakout_lb = parseInt($('qlb').value)||40; }
+  if(p.entry_mode==='qswing') p.qswing_min_score = parseFloat($('qmin').value)||0;
   const sy = $('symbols').value.trim();
   if(sy) p.symbols = sy.split(/[ ,]+/).filter(Boolean);
   const sd=$('start').value, ed=$('end').value;
   if(sd && ed){ p.start_date=sd; p.end_date=ed; }
   const es = p.exit_strategy;
-  if(es==='atr_trail') p.atr_trail_mult = parseFloat($('atr_trail_mult').value)||3.25;
+  if(es==='atr_trail'){ p.atr_trail_mult = 3.25;                       // SABİT (deney kazananı)
+    if(p.entry_mode==='qswing') p.qswing_breakout_lb = 63; }            // 63G-Şamdan paketi
   if(es!=='champion') p.ma_confirm_close = $('confirm').checked;
   if(es==='ma_trail') p.ma_trail_len = parseInt($('ma_trail_len').value)||10;
   if(es==='rr_based'){ p.partial_pct=parseFloat($('partial_pct').value)||0.3; p.partial_rr=parseFloat($('partial_rr').value)||1.5; p.rr_target=parseFloat($('rr_tp').value)||3.0; }
@@ -568,7 +562,7 @@ function renderBacktest(d){
 
 // ---- karşılaştırma ----
 let cmpChart=null, cmpLabels=[], cmpDs=[];
-const EXLBL={champion:'ATR-trail',atr_trail:'Şamdan ATR',ma_trail:'MA-trail 10g',rr_based:'RR (8-EMA)',momentum:'RSI (8-EMA)',atr_climax:'Climax (8-EMA)',hybrid:'Hibrit (8-EMA)',hybrid2:'Hibrit 2 (BE)',split:'Bölünmüş ½+½',atr_regime:'ATR-Rejim'};
+const EXLBL={champion:'ATR-trail',atr_trail:'63G-Şamdan',ma_trail:'MA-trail 10g',rr_based:'RR (8-EMA)',momentum:'RSI (8-EMA)',atr_climax:'Climax (8-EMA)',hybrid:'Hibrit (8-EMA)',hybrid2:'Hibrit 2 (BE)',split:'Bölünmüş ½+½',atr_regime:'ATR-Rejim'};
 const CMPCOL=['#27c281','#5aa2ff','#f5b14c','#ff5d6c','#a78bfa','#34d399','#fb923c','#22d3ee','#f472b6','#a3e635','#e879f9','#facc15'];
 async function compareBacktest(){
   const entries=[...document.querySelectorAll('.cmp-entry:checked')].map(c=>c.value);
@@ -583,7 +577,7 @@ async function compareBacktest(){
     const {en,ex}=combos[i];
     btn.textContent=`Koşuyor ${i+1}/${combos.length}…`; $('cmp-hint').textContent=`${en} × ${EXLBL[ex]} koşuyor…`;
     const p=Object.assign({},base,{entry_mode:en,exit_strategy:ex});
-    if(ex==='atr_trail') p.atr_trail_mult=parseFloat($('atr_trail_mult').value)||3.25;
+    if(ex==='atr_trail'){ p.atr_trail_mult=3.25; if(en==='qswing') p.qswing_breakout_lb=63; }
     if(ex==='ma_trail') p.ma_trail_len=parseInt($('ma_trail_len').value)||10;
     if(ex==='rr_based'){p.partial_pct=0.3;p.partial_rr=1.5;p.rr_target=3.0;p.ma_confirm_close=true;}
     if(ex==='momentum'){p.rsi_overbought_limit=70;p.ma_confirm_close=true;}
