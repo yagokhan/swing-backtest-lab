@@ -301,6 +301,19 @@ const HINTS = {
   atr_regime:'SAF ATR rejim modu: pozisyon bölünmez; girişte ATR0 ile sabitlenen hedefe (kâr-al) ya da stopa (zarar-kes) kadar beklenir — trailing YOK. Boyut = sabit $ risk. Ayrıca SPY 20g ATR% eşiği aşılınca (testere/oynaklık) o gün YENİ İŞLEM AÇILMAZ → uzun vadeli backtestte gürültüden korur.'
 };
 function show(id,on){ const el=$(id); if(el) el.style.display = on ? '' : 'none'; }
+// Yöntem parametreleri SABİT (canlı/standart paketler) — görünür ama değiştirilemez.
+const FIXED_PARAMS={min_score:16,qmin:0,rr_target:2.0,atr_stop:1.5,ma_trail_len:10,
+  partial_pct:0.3,partial_rr:1.5,rr_tp:3.0,rsi_ob:70,climax:2.0,
+  split_a:'ema8',split_b:'ema21',split_a_param:0,split_b_param:0,
+  regime_thr:1.5,reg_stop:1.5,reg_target:3.0,reg_risk:1000};
+function lockMethodParams(){
+  for(const [id,v] of Object.entries(FIXED_PARAMS)){
+    const el=$(id); if(!el) continue;
+    el.value=v; el.disabled=true; el.title='SABİT — yöntem paketinin parçası, değiştirilemez.';
+  }
+  const c=$('confirm'); if(c){ c.checked=true; c.disabled=true; }
+}
+document.addEventListener('DOMContentLoaded', lockMethodParams);
 function refreshForm(){
   const entry=$('entry').value, exit=$('exit').value, q=entry==='qswing';
   // çıkış alt-parametreleri (yalnız ilgili çıkış modunda)
@@ -329,9 +342,7 @@ function updateCmpSplitLabel(){
 function buildPayload(){
   const p = {
     preset: $('preset').value, period: $('period').value,
-    min_score: parseInt($('min_score').value)||16,
-    rr_target: parseFloat($('rr_target').value)||2.0,
-    atr_stop_mult: parseFloat($('atr_stop').value)||1.5,
+    min_score: 16, rr_target: 2.0, atr_stop_mult: 1.5,        // SABİT paket değerleri
     max_positions: parseInt($('max_pos').value)||5,
     compounding: $('compound').checked,
     use_earnings: $('earnings').checked,
@@ -342,7 +353,7 @@ function buildPayload(){
     max_position_pct: (parseFloat($('pos_pct').value)||20)/100,
   };
   if(p.sizing_mode==='risk') p.risk_per_trade_pct = parseFloat($('risk_pct').value)||1.0;
-  if(p.entry_mode==='qswing') p.qswing_min_score = parseFloat($('qmin').value)||0;
+  if(p.entry_mode==='qswing') p.qswing_min_score = 0;       // SABİT: canlı tarama gibi filtresiz
   const sy = $('symbols').value.trim();
   if(sy) p.symbols = sy.split(/[ ,]+/).filter(Boolean);
   const sd=$('start').value, ed=$('end').value;
@@ -351,17 +362,14 @@ function buildPayload(){
   if(es==='atr_trail'){ p.atr_trail_mult = 3.25;                       // SABİT (deney kazananı)
     if(p.entry_mode==='qswing') p.qswing_breakout_lb = 63; }            // 63G-Şamdan paketi
   if(es==='champion'){ p.rr_target = 2.0; p.atr_stop_mult = 1.5; }      // canlı 🏆 sabitleri
-  if(es!=='champion') p.ma_confirm_close = $('confirm').checked;
-  if(es==='hybrid') p.ma_confirm_close = true;                          // canlı 📐: kapanış teyidi daima (genel satırı ezer)
-  if(es==='ma_trail') p.ma_trail_len = parseInt($('ma_trail_len').value)||10;
-  if(es==='rr_based'){ p.partial_pct=parseFloat($('partial_pct').value)||0.3; p.partial_rr=parseFloat($('partial_rr').value)||1.5; p.rr_target=parseFloat($('rr_tp').value)||3.0; }
-  if(es==='momentum') p.rsi_overbought_limit=parseFloat($('rsi_ob').value)||70;
-  if(es==='atr_climax') p.climax_atr_mult=parseFloat($('climax').value)||2.0;
-  if(es==='split'){ p.split_a=$('split_a').value; p.split_b=$('split_b').value;
-    p.split_a_param=parseFloat($('split_a_param').value)||0; p.split_b_param=parseFloat($('split_b_param').value)||0; }
-  if(es==='atr_regime'){ p.regime_atr_threshold=parseFloat($('regime_thr').value)||1.5;
-    p.atr_stop_mult=parseFloat($('reg_stop').value)||1.5; p.atr_target_mult=parseFloat($('reg_target').value)||3.0;
-    p.risk_per_trade_usd=parseFloat($('reg_risk').value)||1000; }
+  if(es!=='champion') p.ma_confirm_close = true;                       // SABİT: kapanış teyidi daima
+  if(es==='ma_trail') p.ma_trail_len = 10;
+  if(es==='rr_based'){ p.partial_pct=0.3; p.partial_rr=1.5; p.rr_target=3.0; }
+  if(es==='momentum') p.rsi_overbought_limit=70;
+  if(es==='atr_climax') p.climax_atr_mult=2.0;
+  if(es==='split'){ p.split_a='ema8'; p.split_b='ema21'; p.split_a_param=0; p.split_b_param=0; }
+  if(es==='atr_regime'){ p.regime_atr_threshold=1.5;
+    p.atr_stop_mult=1.5; p.atr_target_mult=3.0; p.risk_per_trade_usd=1000; }
   return p;
 }
 
@@ -580,18 +588,16 @@ async function compareBacktest(){
     btn.textContent=`Koşuyor ${i+1}/${combos.length}…`; $('cmp-hint').textContent=`${en} × ${EXLBL[ex]} koşuyor…`;
     const p=Object.assign({},base,{entry_mode:en,exit_strategy:ex});
     if(ex==='atr_trail'){ p.atr_trail_mult=3.25; if(en==='qswing') p.qswing_breakout_lb=63; }
-    if(ex==='ma_trail') p.ma_trail_len=parseInt($('ma_trail_len').value)||10;
+    if(ex==='ma_trail') p.ma_trail_len=10;
     if(ex==='rr_based'){p.partial_pct=0.3;p.partial_rr=1.5;p.rr_target=3.0;p.ma_confirm_close=true;}
     if(ex==='momentum'){p.rsi_overbought_limit=70;p.ma_confirm_close=true;}
     if(ex==='atr_climax'){p.climax_atr_mult=2.0;p.ma_confirm_close=true;}
     if(ex==='hybrid') p.ma_confirm_close=true;
     if(ex==='champion'){ p.rr_target=2.0; p.atr_stop_mult=1.5; }
     if(ex==='hybrid2') p.ma_confirm_close=true;
-    if(ex==='split'){ p.split_a=$('split_a').value; p.split_b=$('split_b').value;
-      p.split_a_param=parseFloat($('split_a_param').value)||0; p.split_b_param=parseFloat($('split_b_param').value)||0; }
-    if(ex==='atr_regime'){ p.regime_atr_threshold=parseFloat($('regime_thr').value)||1.5;
-      p.atr_stop_mult=parseFloat($('reg_stop').value)||1.5; p.atr_target_mult=parseFloat($('reg_target').value)||3.0;
-      p.risk_per_trade_usd=parseFloat($('reg_risk').value)||1000; }
+    if(ex==='split'){ p.split_a='ema8'; p.split_b='ema21'; p.split_a_param=0; p.split_b_param=0; }
+    if(ex==='atr_regime'){ p.regime_atr_threshold=1.5;
+      p.atr_stop_mult=1.5; p.atr_target_mult=3.0; p.risk_per_trade_usd=1000; }
     try{ const r=await fetch('/api/backtest',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)}); const d=await r.json();
       if(d&&!d.error&&d.metrics) out.push({en,ex,m:d.metrics,eq:d.equity}); }catch(e){}
   }
