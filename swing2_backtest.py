@@ -1940,6 +1940,12 @@ def run_backtest_api(params: dict) -> dict:
         cfg.qswing_min_score = float(max(0.0, min(100.0, params.get("qswing_min_score", 0) or 0)))
     except (TypeError, ValueError):
         cfg.qswing_min_score = 0.0
+    # qswing kırılım periyodu — yalnız {10,20,40,63} ön-hesaplı (HIGH_PRIOR_N); başkası 40'a düşer
+    try:
+        _qlb = int(params.get("qswing_breakout_lb", cfg.qswing_breakout_lb))
+    except (TypeError, ValueError):
+        _qlb = cfg.qswing_breakout_lb
+    cfg.qswing_breakout_lb = _qlb if _qlb in (10, 20, 40, 63) else 40
     run_grid = bool(params.get("run_grid", False))
 
     # --- Çıkış stratejisi (UI dropdown) ---
