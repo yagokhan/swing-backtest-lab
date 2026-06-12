@@ -242,15 +242,17 @@ class ShortBacktester:
                         break
                     self._open(sym, date, close, rs)
             self.equity_curve.append((date, self._equity(date)))
-        # pencere sonu: kalan kısa pozisyonları kapat (temiz muhasebe)
-        last = trading[-1]
+        self._force_cover_all(trading[-1])
+        return self
+
+    def _force_cover_all(self, last):
+        """Pencere sonu: kalan kısa pozisyonları son geçerli kapanıştan kapat (temiz muhasebe)."""
         for sym in list(self.positions):
             df = self.data[sym]
             c = df.loc[last, "Close"] if last in df.index else None
             if c is None or pd.isna(c):
                 c = self.positions[sym].entry_fill
             self._cover(sym, last, float(c), 1.0, "EOD")
-        return self
 
     def metrics(self):
         eq = pd.Series(dict(self.equity_curve)).sort_index()

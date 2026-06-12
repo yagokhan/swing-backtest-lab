@@ -75,6 +75,7 @@ python3 crypto_data.py check BTCUSDT --date 2024-01-01 # veri doğrulama (bar + 
 python3 backtests/run_crypto_backtests.py             # 15 hücre: qswing × 3 çıkış × 5 dönem
 python3 backtests/run_crypto_backtests.py --regime-grid  # BTC ATR-rejim eşik ızgarası (2y)
 python3 backtests/run_crypto_short_backtests.py       # KISA taraf (yalnız ayı rejimi, perp varsayımı)
+python3 backtests/run_crypto_combined_backtests.py    # BİRLEŞİK uzun/kısa (tek nakit havuzu)
 python3 gen_crypto_report.py                          # genel bakış raporu → /kripto-rapor
 ```
 
@@ -84,6 +85,13 @@ yakınlık + BTC'den zayıf momentum; kapatma `hybrid` (%50 kapanış&gt;EMA8 ·
 veya `atr_cover`. Gerçek kısa muhasebesi + günlük funding maliyeti (perp varsayımı).
 Bulgu: yalnız taze ayıda kazanır (1y +37% · 6mo +32%, hibrit); karışık rejimlerde zarar;
 oynaklık kilidi kısa tarafa UYGULANMAZ (fırsat kümesini siler).
+
+**Birleşik uzun/kısa** — `combined_backtest.py`: TEK nakit havuzu; uzun defter motorun
+KENDİSİ (eşdeğerlik kanıtlı: kısa-kapalı koşu = saf motor ledger'ı birebir), kısa defter
+ayna modül. Girişler rejim-anahtarlı (uzun: BTC&gt;SMA200+kilit · kısa: BTC&lt;SMA200,
+kilitsiz), pozisyonlar geçişte taşınır, havuz kaldıraçsız sınırlar. 1y: **+%117**
+(uzun +56k$ boğa yarısı · kısa +61k$ ayı yarısı, BTC −%40). Önerilen varsayılan: kısa
+defter **½ boy** (%10/poz) — her karışık pencerede tam boyu hem ROI hem DD'de geçer.
 
 Kripto koşu ayarları: `price_source="binance"` · `benchmark="BTCUSDT"` ·
 `commission_bps=10` (%0.10/bacak spot taker; sabit $ yerine yüzde komisyon) ·

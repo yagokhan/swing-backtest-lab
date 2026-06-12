@@ -194,6 +194,72 @@ def table_short(srows):
     return "".join(out)
 
 
+CMB_LABEL = {"long": "🟢 uzun-tek (kilit 2.5)", "short": "🔻 kısa-tek (kilitsiz)",
+             "combined": "⚖️ birleşik", "combined_half": "⚖️ birleşik (kısa ½ boy)"}
+CMB_COLOR = {"long": C["altin"], "combined": C["buz"], "combined_half": C["fosfor"]}
+
+
+def chart_combined(rows):
+    """Pencere başına: uzun-tek / birleşik / birleşik-½ / BTC al-tut ROI çubukları."""
+    by = {(r["side"], r["period"]): r for r in rows}
+    sides = ["long", "combined", "combined_half"]
+    vals = [float(by[(sd, p)]["roi_pct"]) for p in PERIODS for sd in sides]
+    btc = {p: float(by[("long", p)]["bench_roi_pct"]) for p in PERIODS}
+    vals += list(btc.values())
+    lo, hi = min(vals + [0]), max(vals)
+    pad = (hi - lo) * 0.12
+    lo, hi = lo - pad, hi + pad
+    W, H, ML, MB, MT = 920, 320, 46, 34, 14
+    PW = (W - ML - 10) / len(PERIODS)
+    def y(v): return MT + (hi - v) / (hi - lo) * (H - MT - MB)
+    bw = PW / 6.2
+    s = [f'<svg viewBox="0 0 {W} {H}" xmlns="http://www.w3.org/2000/svg" role="img">']
+    for gv in (-40, 0, 40, 80, 120):
+        if lo <= gv <= hi:
+            s.append(f'<line x1="{ML}" y1="{y(gv):.1f}" x2="{W-10}" y2="{y(gv):.1f}" '
+                     f'stroke="{C["cizgi2" if gv == 0 else "cizgi"]}" stroke-width="1"/>'
+                     f'<text x="{ML-6}" y="{y(gv)+4:.1f}" text-anchor="end" font-size="11" '
+                     f'fill="{C["sis"]}">{gv}%</text>')
+    for i, p in enumerate(PERIODS):
+        x0 = ML + i * PW + PW * 0.14
+        bars = [(CMB_COLOR[sd], float(by[(sd, p)]["roi_pct"])) for sd in sides] + [(C["btc"], btc[p])]
+        for j, (col, v) in enumerate(bars):
+            bx = x0 + j * bw * 1.18
+            yt, yb = (y(v), y(0)) if v >= 0 else (y(0), y(v))
+            s.append(f'<rect x="{bx:.1f}" y="{yt:.1f}" width="{bw:.1f}" height="{max(abs(yb-yt),1.5):.1f}" '
+                     f'rx="2" fill="{col}" fill-opacity="{0.55 if j == 3 else 0.92}"/>')
+            s.append(f'<text x="{bx+bw/2:.1f}" y="{(yt-4) if v >= 0 else (yb+11):.1f}" text-anchor="middle" '
+                     f'font-size="9.5" fill="{C["gumus"]}">{v:+.0f}</text>')
+        s.append(f'<text x="{ML+i*PW+PW/2:.1f}" y="{H-10}" text-anchor="middle" font-size="12" '
+                 f'font-weight="600" fill="{C["ink"]}">{p}</text>')
+    s.append("</svg>")
+    return "".join(s)
+
+
+def table_combined(rows):
+    by = {(r["side"], r["period"]): r for r in rows}
+    out = ['<table><tr><th>Pencere</th><th>Taraf</th><th>ROI</th><th>BTC al-tut</th>'
+           '<th>Alpha</th><th>MaxDD</th><th>PF</th><th>İşlem (U·K)</th></tr>']
+    for p in PERIODS:
+        for k, sd in enumerate(["long", "short", "combined", "combined_half"]):
+            r = by.get((sd, p))
+            if r is None:
+                continue
+            nL, nS = r.get("long_trades") or "", r.get("short_trades") or ""
+            ntx = f'{r["trades"]}' + (f' <span class="muted">({nL}·{nS})</span>' if nL != "" else "")
+            champ = sd == "combined_half"
+            out.append(
+                f'<tr{" class=champ" if champ else (" class=sep" if k == 0 else "")}>'
+                f'<td>{("<b>" + p + "</b>") if k == 0 else ""}</td>'
+                f'<td>{CMB_LABEL[sd]}{" ★" if champ else ""}</td>'
+                f'<td>{_sgn(r["roi_pct"], 1, "%")}</td><td>{_sgn(r["bench_roi_pct"], 1, "%")}</td>'
+                f'<td><b>{_sgn(r["alpha_pct"], 1, " pt")}</b></td>'
+                f'<td class="neg">{_f(r["max_dd_pct"])}%</td>'
+                f'<td>{_f(r["profit_factor"], 2)}</td><td>{ntx}</td></tr>')
+    out.append("</table>")
+    return "".join(out)
+
+
 def table_vs_equity(crypto, sp500):
     cb = {(r["exit_key"], r["period"]): r for r in crypto}
     sb = {(r["exit_key"], r["period"]): r for r in sp500}
@@ -223,6 +289,10 @@ def build():
         short = _read("crypto_short_SUMMARY.csv")
     except FileNotFoundError:
         short = []
+    try:
+        combined = _read("crypto_combined_SUMMARY.csv")
+    except FileNotFoundError:
+        combined = []
     cb = {(r["exit_key"], r["period"]): r for r in crypto}
     gb = {(r["exit_key"], r["regime_atr_threshold"]): r for r in grid}
     h1y = cb[("hybrid", "1y")]
@@ -351,10 +421,30 @@ süper-döngüde intihar. (2) <b>Oynaklık kilidi kısa tarafı aç bırakıyor<
 2 yılda 1-2 işleme düşürüyor (%100 Win satırları örneklem yanılsaması, "n!"). Uzunları koruyan filtre kısaların fırsat
 kümesini siliyor → kısa konfig kilitSİZ. (3) <b>Hibrit kapatma &gt; ATR-cover</b>: sert ayı ralli'leri şamdan seviyesini
 deler; EMA üstü kapanış teyidi daha erken çıkarıyor. Uzun ve kısa defterler rejim gereği <b>doğal olarak ayrık</b>
-(uzun: BTC&gt;SMA200 · kısa: BTC&lt;SMA200) — tek portföyde birleşik koşu mantıklı bir sonraki adım.</p>
+(uzun: BTC&gt;SMA200 · kısa: BTC&lt;SMA200) — birleşik portföy sonuçları bir sonraki bölümde.</p>
 </section>
 
-''') if short else ''}<section><h2>Kripto vs hisse — aynı 15 hücre, alpha karşılaştırması</h2>
+''') if short else ''}{('''<section><h2>⚖️ Birleşik uzun/kısa portföy — tek nakit havuzu, rejim anahtarı</h2>
+<span class="kural">Uzun defter = motorun KENDİSİ (şampiyon: kırılım + kilit 2.5 + HYBRID_TREND) · kısa defter = ayna,
+kilitsiz, 3bps/gün funding · girişler rejime göre ayrık (uzun: BTC&gt;SMA200 · kısa: BTC&lt;SMA200), pozisyonlar geçişte
+taşınır, havuz kaldıraçsız sınırlar · eşdeğerlik kanıtlı: kısa-kapalı birleşik koşu = saf motor ledger'ı birebir ·
+★ = önerilen varsayılan (kısa ½ boy)</span>
+<div class="legend"><span><span class="dot" style="background:''' + C["altin"] + '''"></span>uzun-tek</span>
+<span><span class="dot" style="background:''' + C["buz"] + '''"></span>birleşik</span>
+<span><span class="dot" style="background:''' + C["fosfor"] + '''"></span>birleşik (kısa ½)</span>
+<span><span class="dot" style="background:''' + C["btc"] + '''"></span>BTC al-tut</span></div>
+''' + chart_combined(combined) + table_combined(combined) + '''
+<p class="muted" style="font-size:12.5px;margin-bottom:0">Okuma: <b>1y penceresi tezin kanıtı</b> — aynı sermaye boğa
+yarısında uzun (+56.5k$), ayı yarısında kısa (+60.8k$) çalışıp <b>+%117.3</b>'e bileşikleniyor (BTC −%39.8; iki tek
+defterin toplamından fazla, çünkü kısa defter uzunun büyüttüğü sermayeyle işlem görüyor). <b>Kısa ½ boy her karışık
+pencerede tam boyu hem getiride hem DD'de geçiyor</b> (5y: DD −%58→−%40 ve ROI ↑ · 2y: DD −%36→−%23 ve ROI ↑) — tam boy
+kısa defter geçişlerde uzun defterin sermayesini de kilitliyordu. Saf taze ayıda (1y/6mo) tam boy daha çok kazanıyor ama
+½ boyun PF'i orada bile daha yüksek (3.35 vs 2.98). Önerilen varsayılan: <b>birleşik, kısa ½ boy</b>; agresif varyant tam boy.
+Not: kilitli uzun defter 5y/3y/2y pencerelerinde aynı 32 işlemi yapıyor — kilit+rejim koşulları yalnız son ~2 yılda
+sakin gün bıraktı.</p>
+</section>
+
+''') if combined else ''}<section><h2>Kripto vs hisse — aynı 15 hücre, alpha karşılaştırması</h2>
 <span class="kural">Dikkat: pencereler farklı piyasa karakterinde (kripto 1y/2y = ayı · hisse 1y/2y = boğa) — birebir kıyas değil, davranış kıyası</span>
 {table_vs_equity(crypto, sp500)}
 <p class="muted" style="font-size:12.5px;margin-bottom:0">Davranış tutarlı: strateji her iki varlık sınıfında da <b>düşen/yatay
@@ -384,6 +474,7 @@ komisyon+slippage sonrası; eğitim amaçlıdır, yatırım tavsiyesi değildir.
 python3 backtests/run_crypto_backtests.py             # 15 hücre → crypto_qswing_*.csv + SUMMARY
 python3 backtests/run_crypto_backtests.py --regime-grid   # kilit eşiği ızgarası → crypto_regime_grid.csv
 python3 backtests/run_crypto_short_backtests.py       # kısa taraf → crypto_short_SUMMARY.csv
+python3 backtests/run_crypto_combined_backtests.py    # birleşik U/K → crypto_combined_SUMMARY.csv
 python3 gen_crypto_report.py                          # bu rapor → dashboard_static/crypto_report.html</pre>
 <footer>Kaynak CSV'ler: backtests/crypto_qswing_3exit_5period_SUMMARY.csv · crypto_regime_grid.csv ·
 sp500_qswing_3exit_5period_SUMMARY.csv — dashboard'da <b>/kripto-rapor</b> yolundan servis edilir.</footer>
