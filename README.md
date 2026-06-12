@@ -74,7 +74,16 @@ python3 crypto_data.py refresh-universe --top 75      # top-N USDT evrenini yeni
 python3 crypto_data.py check BTCUSDT --date 2024-01-01 # veri doğrulama (bar + invaryantlar)
 python3 backtests/run_crypto_backtests.py             # 15 hücre: qswing × 3 çıkış × 5 dönem
 python3 backtests/run_crypto_backtests.py --regime-grid  # BTC ATR-rejim eşik ızgarası (2y)
+python3 backtests/run_crypto_short_backtests.py       # KISA taraf (yalnız ayı rejimi, perp varsayımı)
+python3 gen_crypto_report.py                          # genel bakış raporu → /kripto-rapor
 ```
+
+**Kısa (short) taraf** — `short_backtest.py`: uzun motorun aynası, ayrı modül (uzun motor
+bit-özdeş kalır). Giriş yalnız BTC&lt;SMA200 ayı rejiminde: 40g dip kırılımı + 52H dibe
+yakınlık + BTC'den zayıf momentum; kapatma `hybrid` (%50 kapanış&gt;EMA8 · %50 &gt;EMA21)
+veya `atr_cover`. Gerçek kısa muhasebesi + günlük funding maliyeti (perp varsayımı).
+Bulgu: yalnız taze ayıda kazanır (1y +37% · 6mo +32%, hibrit); karışık rejimlerde zarar;
+oynaklık kilidi kısa tarafa UYGULANMAZ (fırsat kümesini siler).
 
 Kripto koşu ayarları: `price_source="binance"` · `benchmark="BTCUSDT"` ·
 `commission_bps=10` (%0.10/bacak spot taker; sabit $ yerine yüzde komisyon) ·

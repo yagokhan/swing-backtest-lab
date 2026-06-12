@@ -172,6 +172,28 @@ def table_regime(grid):
     return "".join(out)
 
 
+def table_short(srows):
+    out = ['<table><tr><th>Pencere</th><th>Kapatma</th><th>Kilit</th><th>ROI</th>'
+           '<th>BTC al-tut</th><th>Alpha</th><th>MaxDD</th><th>Win</th><th>PF</th><th>İşlem</th></tr>']
+    for p in PERIODS:
+        rows = [r for r in srows if r["period"] == p]
+        for k, r in enumerate(rows):
+            n = int(r["trades"])
+            tiny = ' <span class="muted" title="örneklem çok küçük — istatistiksel anlamı yok">(n!)</span>' if 0 < n < 5 else ""
+            champ = p in ("1y", "6mo") and r["exit_key"] == "hybrid" and r["lock"] == "kilitsiz"
+            out.append(
+                f'<tr{" class=champ" if champ else (" class=sep" if k == 0 else "")}>'
+                f'<td>{("<b>" + p + "</b>") if k == 0 else ""}</td>'
+                f'<td>{"8/21-EMA hibrit" if r["exit_key"] == "hybrid" else "ATR-cover 2.5×"}</td>'
+                f'<td>{r["lock"]}</td>'
+                f'<td>{_sgn(r["roi_pct"], 1, "%")}</td><td>{_sgn(r["bench_roi_pct"], 1, "%")}</td>'
+                f'<td><b>{_sgn(r["alpha_pct"], 1, " pt")}</b></td>'
+                f'<td class="neg">{_f(r["max_dd_pct"])}%</td><td>{_f(r["win_rate_pct"], 0)}%</td>'
+                f'<td>{_f(r["profit_factor"], 2)}</td><td>{n}{tiny}</td></tr>')
+    out.append("</table>")
+    return "".join(out)
+
+
 def table_vs_equity(crypto, sp500):
     cb = {(r["exit_key"], r["period"]): r for r in crypto}
     sb = {(r["exit_key"], r["period"]): r for r in sp500}
@@ -197,6 +219,10 @@ def build():
     crypto = _read("crypto_qswing_3exit_5period_SUMMARY.csv")
     grid = _read("crypto_regime_grid.csv")
     sp500 = _read("sp500_qswing_3exit_5period_SUMMARY.csv")
+    try:
+        short = _read("crypto_short_SUMMARY.csv")
+    except FileNotFoundError:
+        short = []
     cb = {(r["exit_key"], r["period"]): r for r in crypto}
     gb = {(r["exit_key"], r["regime_atr_threshold"]): r for r in grid}
     h1y = cb[("hybrid", "1y")]
@@ -314,7 +340,21 @@ SPY'a karşı bilinen davranışın aynısı). <b>6 ayda 0 işlem</b> hata deği
 12 işlemlik örneklem güvenilir değil (PF 32 = küçük-örneklem yanılsaması) — canlı konfig için <b>2.5</b> seçildi.</p>
 </section>
 
-<section><h2>Kripto vs hisse — aynı 15 hücre, alpha karşılaştırması</h2>
+{('''<section><h2>Kısa (short) taraf — ayna strateji, yalnız ayı rejiminde</h2>
+<span class="kural">Giriş: 40g DİP kırılımı + 52H dibe yakın + BTC'den zayıf momentum, YALNIZ BTC&lt;SMA200 iken ·
+kapatma kapanış-teyitli · maliyet: 10bps/bacak + slippage + 3bps/GÜN funding (perp varsayımı, muhafazakâr) ·
+★ = anlamlı örneklemli kazanan konfig</span>
+''' + table_short(short) + '''
+<p class="muted" style="font-size:12.5px;margin-bottom:0">Üç dürüst bulgu: (1) <b>Kısa taraf yalnız taze ayıda kazanıyor</b>
+(1y: +37.3% · 6mo: +32.1%, hibrit kapatma) — 5y/3y gibi karışık rejimlerde HER konfig zararda; kripto kısalamak
+süper-döngüde intihar. (2) <b>Oynaklık kilidi kısa tarafı aç bırakıyor</b>: çöküşler = yüksek-ATR günleri; kilit 2.5
+2 yılda 1-2 işleme düşürüyor (%100 Win satırları örneklem yanılsaması, "n!"). Uzunları koruyan filtre kısaların fırsat
+kümesini siliyor → kısa konfig kilitSİZ. (3) <b>Hibrit kapatma &gt; ATR-cover</b>: sert ayı ralli'leri şamdan seviyesini
+deler; EMA üstü kapanış teyidi daha erken çıkarıyor. Uzun ve kısa defterler rejim gereği <b>doğal olarak ayrık</b>
+(uzun: BTC&gt;SMA200 · kısa: BTC&lt;SMA200) — tek portföyde birleşik koşu mantıklı bir sonraki adım.</p>
+</section>
+
+''') if short else ''}<section><h2>Kripto vs hisse — aynı 15 hücre, alpha karşılaştırması</h2>
 <span class="kural">Dikkat: pencereler farklı piyasa karakterinde (kripto 1y/2y = ayı · hisse 1y/2y = boğa) — birebir kıyas değil, davranış kıyası</span>
 {table_vs_equity(crypto, sp500)}
 <p class="muted" style="font-size:12.5px;margin-bottom:0">Davranış tutarlı: strateji her iki varlık sınıfında da <b>düşen/yatay
@@ -343,6 +383,7 @@ komisyon+slippage sonrası; eğitim amaçlıdır, yatırım tavsiyesi değildir.
 <pre>python3 crypto_data.py refresh-universe --top 75      # evreni tazele (crypto_universe_pinned.json)
 python3 backtests/run_crypto_backtests.py             # 15 hücre → crypto_qswing_*.csv + SUMMARY
 python3 backtests/run_crypto_backtests.py --regime-grid   # kilit eşiği ızgarası → crypto_regime_grid.csv
+python3 backtests/run_crypto_short_backtests.py       # kısa taraf → crypto_short_SUMMARY.csv
 python3 gen_crypto_report.py                          # bu rapor → dashboard_static/crypto_report.html</pre>
 <footer>Kaynak CSV'ler: backtests/crypto_qswing_3exit_5period_SUMMARY.csv · crypto_regime_grid.csv ·
 sp500_qswing_3exit_5period_SUMMARY.csv — dashboard'da <b>/kripto-rapor</b> yolundan servis edilir.</footer>
