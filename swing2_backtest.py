@@ -608,6 +608,8 @@ def download_and_align_data(cfg: Config) -> dict:
     etfs = sorted({SECTOR_MAP[s] for s in cfg.universe if s in SECTOR_MAP})
     tickers = list(dict.fromkeys(list(cfg.universe) + [cfg.benchmark] + etfs))
     today = pd.Timestamp.now().normalize()
+    if cfg.interval != "1d":
+        today = pd.Timestamp.now()   # gün-içi bar: bugünün KAPANMIŞ barları kesilmesin
 
     # ---- El ile tarih aralığı (varsa) — indirme penceresi warmup tamponuyla genişler ----
     use_dates = bool(cfg.start_date or cfg.end_date)
@@ -655,9 +657,10 @@ def download_and_align_data(cfg: Config) -> dict:
         from crypto_data import fetch_daily_binance
         bn_start = dl_start or _period_to_start(cfg.period, cfg.warmup_calendar_buffer)
         bn_end = cfg.end_date or today.strftime("%Y-%m-%d")
-        print(f"Veri indiriliyor (Binance klines): {len(tickers)} sembol · {bn_start}→{bn_end} ...", flush=True)
+        print(f"Veri indiriliyor (Binance klines {cfg.interval}): {len(tickers)} sembol · {bn_start}→{bn_end} ...", flush=True)
         frames = fetch_daily_binance(tickers, bn_start, bn_end, workers=6,
-                                     cache_dir=os.path.join(cfg.cache_dir, "binance"))
+                                     cache_dir=os.path.join(cfg.cache_dir, "binance"),
+                                     interval=cfg.interval)
         if sum(1 for v in frames.values() if v is not None and len(v)) == 0:
             raise SystemExit("Binance indirme başarısız (ağ/geo).")
     elif cfg.per_ticker_download:

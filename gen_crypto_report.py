@@ -432,6 +432,47 @@ def build():
     except FileNotFoundError:
         combined = []
     eqrows = _read_equity()
+    try:
+        h1 = _read("crypto_1h_SUMMARY.csv")
+    except FileNotFoundError:
+        h1 = []
+
+    h1_html = ""
+    if h1:
+        H1LBL = {"long": "🟢 uzun", "short": "🔻 kısa", "combined": "⚖️ birleşik"}
+        out = ['<table><tr><th>Pencere</th><th>Taraf</th><th>Kilit (1h ATR%)</th><th>ROI</th>'
+               '<th>BTC al-tut</th><th>Alpha</th><th>MaxDD</th><th>Win</th><th>PF</th><th>İşlem</th></tr>']
+        order = {"1y": 0, "6mo": 1, "3mo": 2}
+        prev_p = None
+        for r in sorted(h1, key=lambda x: (order.get(x["period"], 9), x["lock"] != "kapalı", x["side"])):
+            champ = r["side"] == "long" and r["lock"] == "0.6"
+            cls = " class=champ" if champ else (" class=sep" if r["period"] != prev_p else "")
+            prev_p = r["period"]
+            out.append(
+                f'<tr{cls}><td><b>{r["period"]}</b></td>'
+                f'<td>{H1LBL[r["side"]]}{" ★" if champ else ""}</td>'
+                f'<td>{"—" if r["lock"] == "kapalı" else r["lock"]}</td>'
+                f'<td>{_sgn(r["roi_pct"], 1, "%")}</td><td>{_sgn(r["bench_roi_pct"], 1, "%")}</td>'
+                f'<td><b>{_sgn(r["alpha_pct"], 1, " pt")}</b></td>'
+                f'<td class="neg">{_f(r["max_dd_pct"])}%</td><td>{_f(r["win_rate_pct"], 0)}%</td>'
+                f'<td>{_f(r["profit_factor"], 2)}</td><td>{r["trades"]}</td></tr>')
+        out.append("</table>")
+        h1_html = f"""<section><h2>⚡ 1 saatlik barlar — aynı yöntem, hızlı ölçek</h2>
+<span class="kural">Bar-sayısı semantiği: SMA200=200 saat (~8 gün) · 40-bar kırılım=40 saat · HIGH52/LOW52=365 saat
+(~15 gün) · komisyon+slippage AYNI (10bps/bacak) · kısa funding bara bölünür (yine 3bps/gün) ·
+kilit eşiği 1h için yeniden ölçüldü (BTC 1h ATR20% medyanı ~0.56) · ★ = risk-ayarlı kazanan</span>
+{"".join(out)}
+<p class="muted" style="font-size:12.5px;margin-bottom:0">Üç bulgu: (1) <b>1h'de uzun taraf ayı yılında bile çalışıyor</b>
+(1y: +%112 kilitsiz · +%102 kilit 0.6 ile DD −%19, BTC −%42 iken) — 200-saatlik "rejim" ayı rallilerinde sık sık açılıyor,
+günlük sistemin nakitte beklediği yılda ~1.000+ hızlı trend işlemi alınıyor. (2) <b>KISA taraf 1h'de HER yerde zararda</b>
+(1y: −%45, PF 0.75) — saatlik ayı rallileri EMA kapatmalarını testereye çevirir, maliyet oranı tüm kenarı yer; birleşik
+defteri de bu aşağı çeker (1h'de doğru yapı: yalnız-uzun + kilit). (3) <b>Maliyet gerçekçiliği uyarısı</b>: yılda 1.000+
+işlemde sonuç slippage varsayımına çok duyarlıdır — sabit 8-15bps, ince defterli altcoinlerde saatlik frekansta iyimser
+olabilir; canlıya alınmadan önce kağıt-trade ile doğrulanmalı. Günlük sistemle 1:1 karşılaştırma değildir (farklı işlem
+ufku); en uzun pencere 1y (saatlik veri derinliği).</p>
+</section>
+
+"""
 
     monthly_html = ""
     if eqrows:
@@ -619,7 +660,7 @@ Not: kilitli uzun defter 5y/3y/2y pencerelerinde aynı 32 işlemi yapıyor — k
 sakin gün bıraktı.</p>
 </section>
 
-''') if combined else ''}{monthly_html}<section><h2>Kripto vs hisse — aynı 15 hücre, alpha karşılaştırması</h2>
+''') if combined else ''}{monthly_html}{h1_html}<section><h2>Kripto vs hisse — aynı 15 hücre, alpha karşılaştırması</h2>
 <span class="kural">Dikkat: pencereler farklı piyasa karakterinde (kripto 1y/2y = ayı · hisse 1y/2y = boğa) — birebir kıyas değil, davranış kıyası</span>
 {table_vs_equity(crypto, sp500)}
 <p class="muted" style="font-size:12.5px;margin-bottom:0">Davranış tutarlı: strateji her iki varlık sınıfında da <b>düşen/yatay

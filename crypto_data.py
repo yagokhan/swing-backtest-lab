@@ -127,10 +127,16 @@ def _ms(ts: pd.Timestamp) -> int:
     return int(pd.Timestamp(ts).value // 10**6)
 
 
-def _cache_paths(cache_dir: str, symbol: str):
+def _iv_delta(interval: str) -> pd.Timedelta:
+    """Binance aralık etiketi → bar süresi ('1h' → 1 saat, '1d' → 1 gün ...)."""
+    n, u = int(interval[:-1]), interval[-1]
+    return pd.Timedelta(**{{"m": "minutes", "h": "hours", "d": "days", "w": "weeks"}[u]: n})
+
+
+def _cache_paths(cache_dir: str, symbol: str, interval: str = "1d"):
     safe = symbol.upper().replace("/", "_")
-    return (os.path.join(cache_dir, f"{safe}_1d.csv"),
-            os.path.join(cache_dir, f"{safe}_1d.meta.json"))
+    return (os.path.join(cache_dir, f"{safe}_{interval}.csv"),
+            os.path.join(cache_dir, f"{safe}_{interval}.meta.json"))
 
 
 def _read_cache(path: str) -> Optional[pd.DataFrame]:
@@ -154,11 +160,11 @@ def _write_cache(path: str, meta_path: str, df: pd.DataFrame, fetched_from: str)
 
 
 def _fetch_one_cached(symbol: str, dl_start: Optional[str], dl_end: Optional[str],
-                      cache_dir: str) -> Optional[pd.DataFrame]:
+                      cache_dir: str, interval: str = "1d") -> Optional[pd.DataFrame]:
     """Önbellekli tek sembol. Önbellek istenen başlangıcı kapsıyorsa yalnız KUYRUK
-    çekilir (max+1g→); kapsamıyorsa tam indirme. meta.fetched_from, geç listelenen
+    çekilir (max+1bar→); kapsamıyorsa tam indirme. meta.fetched_from, geç listelenen
     coinlerde (ilk bar > dl_start) gereksiz tam-indirme tekrarını önler."""
-    path, meta_path = _cache_paths(cache_dir, symbol)
+    path, meta_path = _cache_paths(cache_dir, symbol, interval)
     cached = _read_cache(path)
     start_ts = pd.Timestamp(dl_start) if dl_start else None
     covered = False
@@ -171,8 +177,8 @@ def _fetch_one_cached(symbol: str, dl_start: Optional[str], dl_end: Optional[str
             except Exception:
                 pass
     if cached is not None and covered:
-        tail_start = cached.index.max() + pd.Timedelta(days=1)
-        tail = fetch_klines_binance(symbol, start_ms=_ms(tail_start))
+        tail_start = cached.index.max() + _iv_delta(interval)
+        tail = fetch_klines_binance(symbol, interval=interval, start_ms=_ms(tail_start))
         if tail is not None and len(tail):
             cached = pd.concat([cached, tail]).sort_index()
             cached = cached[~cached.index.duplicated(keep="last")]
@@ -180,7 +186,8 @@ def _fetch_one_cached(symbol: str, dl_start: Optional[str], dl_end: Optional[str
             _write_cache(path, meta_path, cached, old_ff or str(cached.index.min().date()))
         df = cached
     else:
-        df = fetch_klines_binance(symbol, start_ms=_ms(start_ts) if start_ts is not None else None)
+        df = fetch_klines_binance(symbol, interval=interval,
+                                  start_ms=_ms(start_ts) if start_ts is not None else None)
         if df is None:
             return None
         _write_cache(path, meta_path, df, dl_start or str(df.index.min().date()))
@@ -188,21 +195,25 @@ def _fetch_one_cached(symbol: str, dl_start: Optional[str], dl_end: Optional[str
         return None
     out = df.loc[(df.index >= start_ts) if start_ts is not None else slice(None)]
     if isinstance(out, pd.DataFrame) and dl_end:
-        out = out[out.index <= pd.Timestamp(dl_end)]
+        # gün-içi aralıklarda 'YYYY-MM-DD' biten o GÜNÜN barlarını da kapsasın
+        # (günlükte davranış aynı: <= dl_end ≡ < dl_end+1g)
+        out = out[out.index < pd.Timestamp(dl_end) + pd.Timedelta(days=1)]
     return out[OHLCV].astype(float) if len(out) else None
 
 
 def fetch_daily_binance(symbols: List[str], dl_start: Optional[str],
                         dl_end: Optional[str], workers: int = 6,
                         cache_dir: str = "swing2_cache/binance",
+                        interval: str = "1d",
                         ) -> Dict[str, Optional[pd.DataFrame]]:
     """Tüm sembolleri eşzamanlı indir → {sym: OHLCV DataFrame | None}.
-    fetch_daily_fmp sözleşmesinin aynısı: toplam bütçe aşılırsa kalanlar None."""
+    fetch_daily_fmp sözleşmesinin aynısı: toplam bütçe aşılırsa kalanlar None.
+    interval='1h' vb. gün-içi de desteklenir (ilk indirme sayfalı → bütçe ×6)."""
     frames: Dict[str, Optional[pd.DataFrame]] = {s: None for s in symbols}
     ex = _cf.ThreadPoolExecutor(max_workers=workers)
-    fut = {ex.submit(_fetch_one_cached, s, dl_start, dl_end, cache_dir): s
+    fut = {ex.submit(_fetch_one_cached, s, dl_start, dl_end, cache_dir, interval): s
            for s in symbols}
-    budget = 45 + 1.2 * len(symbols)
+    budget = (45 + 1.2 * len(symbols)) * (1 if interval == "1d" else 6)
     try:
         for f in _cf.as_completed(fut, timeout=budget):
             s = fut[f]

@@ -37,7 +37,8 @@ class ShortParams:
     atr_cover_mult: float = 2.5       # atr_cover: dip + mult×ATR üstünde kapanış → kapat
     regime_atr_filter: bool = False   # BTC oynaklık kilidi (uzun taraftakiyle aynı metrik)
     regime_atr_threshold: float = 2.5
-    funding_bps_daily: float = 3.0    # perp funding maliyeti (bps/gün, pozisyon açıkken)
+    funding_bps_daily: float = 3.0    # perp funding maliyeti (bps/GÜN, pozisyon açıkken)
+    bars_per_day: int = 1             # gün-içi barlarda funding'i bara böl (1h → 24)
     initial_capital: float = 100_000.0
     max_positions: int = 5
     max_position_pct: float = 0.20
@@ -151,7 +152,7 @@ class ShortBacktester:
             close, low = row["Close"], row["Low"]
             if pd.isna(close):
                 continue
-            pos.funding += pos.shares * pos.entry_fill * p.funding_bps_daily / 1e4
+            pos.funding += pos.shares * pos.entry_fill * p.funding_bps_daily / 1e4 / p.bars_per_day
             if not pd.isna(low):
                 pos.trough = min(pos.trough, float(low))
             if p.exit_mode == "atr_cover":

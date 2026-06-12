@@ -76,6 +76,7 @@ python3 backtests/run_crypto_backtests.py             # 15 hücre: qswing × 3 �
 python3 backtests/run_crypto_backtests.py --regime-grid  # BTC ATR-rejim eşik ızgarası (2y)
 python3 backtests/run_crypto_short_backtests.py       # KISA taraf (yalnız ayı rejimi, perp varsayımı)
 python3 backtests/run_crypto_combined_backtests.py    # BİRLEŞİK uzun/kısa (tek nakit havuzu)
+python3 backtests/run_crypto_1h_backtests.py          # 1 SAATLİK barlar (hızlı ölçek, bar-sayısı semantiği)
 python3 gen_crypto_report.py                          # genel bakış raporu → /kripto-rapor
 ```
 
