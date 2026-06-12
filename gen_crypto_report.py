@@ -194,6 +194,110 @@ def table_short(srows):
     return "".join(out)
 
 
+MONTHS = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"]
+
+
+def _read_equity(name="crypto_combined_equity_5y.csv"):
+    """[(tarih, {kolon: değer})] — yoksa boş liste."""
+    try:
+        rows = _read(name)
+    except FileNotFoundError:
+        return []
+    return [(r["date"], {k: float(v) for k, v in r.items() if k != "date"}) for r in rows]
+
+
+def _monthly(eqrows, col):
+    """Ay-sonu değerlerinden aylık % getiriler + yıllık bileşik %. (motorun
+    monthly_returns_table'ı ile aynı tanım: resample ay-sonu → pct_change)."""
+    me, last_ym, last_v = [], None, None
+    for d, vals in eqrows:
+        ym = (int(d[:4]), int(d[5:7]))
+        if last_ym is not None and ym != last_ym:
+            me.append((*last_ym, last_v))
+        last_ym, last_v = ym, vals[col]
+    me.append((*last_ym, last_v))
+    rets = {}
+    for i in range(1, len(me)):
+        y, m, v = me[i]
+        pv = me[i - 1][2]
+        if pv > 0:
+            rets[(y, m)] = (v / pv - 1) * 100
+    yearly = {}
+    for (y, _m), r in rets.items():
+        yearly[y] = yearly.get(y, 1.0) * (1 + r / 100)
+    return rets, {y: (v - 1) * 100 for y, v in yearly.items()}
+
+
+def heatmap_monthly(title, rets, yearly):
+    """Yıl × ay ısı ızgarası (HTML tablo; hücre arkaplanı getiri şiddetiyle)."""
+    years = sorted({y for y, _ in rets})
+    out = [f'<h3 style="font-size:11px;font-weight:650;letter-spacing:.07em;text-transform:uppercase;'
+           f'color:{C["gumus"]};margin:18px 0 8px">{title}</h3>',
+           '<table class="hm"><tr><th>Yıl</th>' + "".join(f"<th>{m}</th>" for m in MONTHS)
+           + '<th>Yıl%</th></tr>']
+    def cell(r, strong=False):
+        if r is None:
+            return f'<td class="muted" style="text-align:right">·</td>'
+        a = min(0.50, abs(r) / 40.0)
+        bg = f"rgba(62,207,142,{a:.2f})" if r >= 0 else f"rgba(240,123,123,{a:.2f})"
+        return (f'<td style="text-align:right;background:{bg}">'
+                f'{"<b>" if strong else ""}{r:+.1f}{"</b>" if strong else ""}</td>')
+    for y in years:
+        out.append(f"<tr><td><b>{y}</b></td>"
+                   + "".join(cell(rets.get((y, m))) for m in range(1, 13))
+                   + cell(yearly.get(y), strong=True) + "</tr>")
+    out.append("</table>")
+    return "".join(out)
+
+
+def chart_drawdown(eqrows, cols=(("combined_half", None, "⚖️ birleşik (kısa ½)"),
+                                 ("btc_bh", None, "₿ BTC al-tut"))):
+    """Sualtı (underwater) grafiği: zirveden düşüş %, iki seri (SVG)."""
+    series = {}
+    for col, _c, _l in cols:
+        vals, peak, dd = [], 0.0, []
+        for _d, v in eqrows:
+            x = v[col]
+            peak = max(peak, x)
+            dd.append((x / peak - 1) * 100)
+        series[col] = dd
+    n = len(eqrows)
+    lo = min(min(s) for s in series.values())
+    lo = lo * 1.06 - 1
+    W, H, ML, MB, MT = 920, 260, 46, 26, 8
+    def y(v): return MT + (0 - v) / (0 - lo) * (H - MT - MB)
+    def x(i): return ML + i / max(n - 1, 1) * (W - ML - 12)
+    step = max(1, n // 460)
+    s = [f'<svg viewBox="0 0 {W} {H}" xmlns="http://www.w3.org/2000/svg" role="img">']
+    for gv in (0, -20, -40, -60):
+        if gv >= lo:
+            s.append(f'<line x1="{ML}" y1="{y(gv):.1f}" x2="{W-12}" y2="{y(gv):.1f}" '
+                     f'stroke="{C["cizgi2" if gv == 0 else "cizgi"]}"/>'
+                     f'<text x="{ML-6}" y="{y(gv)+4:.1f}" text-anchor="end" font-size="11" '
+                     f'fill="{C["sis"]}">{gv}%</text>')
+    seen = set()
+    for i, (d, _v) in enumerate(eqrows):
+        yy = d[:4]
+        if yy not in seen and i > 0:
+            seen.add(yy)
+            s.append(f'<line x1="{x(i):.1f}" y1="{MT}" x2="{x(i):.1f}" y2="{H-MB}" '
+                     f'stroke="{C["cizgi"]}"/>'
+                     f'<text x="{x(i)+3:.1f}" y="{H-8}" font-size="11" fill="{C["sis"]}">{yy}</text>')
+        elif i == 0:
+            seen.add(yy)
+    # BTC: çizgi · strateji: dolgulu alan
+    idx = list(range(0, n, step)) + ([n - 1] if (n - 1) % step else [])
+    btc_pts = " ".join(f"{x(i):.1f},{y(series['btc_bh'][i]):.1f}" for i in idx)
+    s.append(f'<polyline points="{btc_pts}" fill="none" stroke="{C["btc"]}" '
+             f'stroke-width="1.1" stroke-opacity="0.75"/>')
+    st_pts = " ".join(f"{x(i):.1f},{y(series['combined_half'][i]):.1f}" for i in idx)
+    s.append(f'<polygon points="{x(idx[0]):.1f},{y(0):.1f} {st_pts} {x(idx[-1]):.1f},{y(0):.1f}" '
+             f'fill="{C["buz"]}" fill-opacity="0.22" stroke="none"/>')
+    s.append(f'<polyline points="{st_pts}" fill="none" stroke="{C["buz"]}" stroke-width="1.4"/>')
+    s.append("</svg>")
+    return "".join(s), min(series["combined_half"]), min(series["btc_bh"])
+
+
 CMB_LABEL = {"long": "🟢 uzun-tek (kilit 2.5)", "short": "🔻 kısa-tek (kilitsiz)",
              "combined": "⚖️ birleşik", "combined_half": "⚖️ birleşik (kısa ½ boy)"}
 CMB_COLOR = {"long": C["altin"], "combined": C["buz"], "combined_half": C["fosfor"]}
@@ -293,6 +397,31 @@ def build():
         combined = _read("crypto_combined_SUMMARY.csv")
     except FileNotFoundError:
         combined = []
+    eqrows = _read_equity()
+
+    monthly_html = ""
+    if eqrows:
+        sr, sy = _monthly(eqrows, "combined_half")
+        br, by = _monthly(eqrows, "btc_bh")
+        ddsvg, sdd, bdd = chart_drawdown(eqrows)
+        monthly_html = f"""<section><h2>Aylık ızgara & drawdown — ⚖️ birleşik (kısa ½) vs ₿ al-tut</h2>
+<span class="kural">5y penceresi ({eqrows[0][0]} → {eqrows[-1][0]}) · aylık % = ay-sonu özsermayeden ·
+hücre rengi getiri şiddetiyle koyulaşır · "·" = veri yok (ilk kısmi ay)</span>
+{heatmap_monthly("⚖️ Birleşik (kısa ½ boy) ★ — aylık %", sr, sy)}
+{heatmap_monthly("₿ BTC al-tut — aylık %", br, by)}
+<h3 style="font-size:11px;font-weight:650;letter-spacing:.07em;text-transform:uppercase;color:{C['gumus']};margin:20px 0 8px">
+Zirveden düşüş (underwater) — günlük</h3>
+<div class="legend"><span><span class="dot" style="background:{C['buz']}"></span>⚖️ birleşik (kısa ½) ·
+maxDD <b class="neg">{sdd:.1f}%</b></span>
+<span><span class="dot" style="background:{C['btc']}"></span>₿ BTC al-tut · maxDD <b class="neg">{bdd:.1f}%</b></span></div>
+{ddsvg}
+<p class="muted" style="font-size:12.5px;margin-bottom:0">Okuma: stratejinin ızgarasındaki uzun <b>0.0 şeritleri</b>
+hata değil — rejim kapısı + oynaklık kilidi o aylarda portföyü <b>nakitte</b> tuttu (BTC satırındaki derin kırmızı
+aylarla karşılaştırın). Sualtı grafiğinde fark daha net: BTC iki kez %60+ çukura inerken strateji çukuru
+{sdd:.0f}%'te kaldı — momentum sisteminin asıl işi getiri yapmak kadar <b>çukurda olmamak</b>.</p>
+</section>
+
+"""
     cb = {(r["exit_key"], r["period"]): r for r in crypto}
     gb = {(r["exit_key"], r["regime_atr_threshold"]): r for r in grid}
     h1y = cb[("hybrid", "1y")]
@@ -366,6 +495,8 @@ def build():
  tr.sep td{{border-top:1px solid {C['cizgi2']}}}
  tr.champ td{{background:rgba(232,176,75,.07);border-top:1px solid rgba(232,176,75,.3);
   border-bottom:1px solid rgba(232,176,75,.3)}}
+ table.hm td,table.hm th{{padding:4px 7px;font-size:12px}}
+ table.hm td:first-child{{color:{C['gumus']}}}
  .dot{{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:7px;vertical-align:baseline}}
  .legend{{display:flex;gap:18px;flex-wrap:wrap;font-size:12px;color:{C['gumus']};margin:4px 0 10px}}
  .legend span{{display:inline-flex;align-items:center}}
@@ -444,7 +575,7 @@ Not: kilitli uzun defter 5y/3y/2y pencerelerinde aynı 32 işlemi yapıyor — k
 sakin gün bıraktı.</p>
 </section>
 
-''') if combined else ''}<section><h2>Kripto vs hisse — aynı 15 hücre, alpha karşılaştırması</h2>
+''') if combined else ''}{monthly_html}<section><h2>Kripto vs hisse — aynı 15 hücre, alpha karşılaştırması</h2>
 <span class="kural">Dikkat: pencereler farklı piyasa karakterinde (kripto 1y/2y = ayı · hisse 1y/2y = boğa) — birebir kıyas değil, davranış kıyası</span>
 {table_vs_equity(crypto, sp500)}
 <p class="muted" style="font-size:12.5px;margin-bottom:0">Davranış tutarlı: strateji her iki varlık sınıfında da <b>düşen/yatay

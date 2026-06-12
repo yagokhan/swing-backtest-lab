@@ -50,6 +50,14 @@ for plabel, pdays in PERIODS:
     hm = ch.metrics(); hm["spy_roi"] = hm.pop("bench_roi")
     runs.append(("combined_half", "⚖️ birleşik (kısa ½)", hm,
                  f"U:{hm['long_trades']}/{hm['long_pnl']:+,.0f}$ · K:{hm['short_trades']}/{hm['short_pnl']:+,.0f}$"))
+    if plabel == "5y":
+        # 5y özsermaye eğrileri → aylık ızgara + drawdown görselleri için (gen_crypto_report)
+        eqs = {key: m["equity"] for key, _, m, _ in runs}
+        btc = market["spy"]["Close"].reindex(eqs["long"].index)
+        btc = btc / btc.iloc[0] * 100_000.0
+        pd.DataFrame({**eqs, "btc_bh": btc}).to_csv(
+            os.path.join(OUT, "crypto_combined_equity_5y.csv"),
+            index_label="date", float_format="%.2f")
     for key, lbl, m, detail in runs:
         pf = m["profit_factor"]
         ntx = f"{m['trades']:4d}" + (f"  ({detail})" if detail else "")
