@@ -41,6 +41,24 @@ def _secret(name):
     return None
 
 
+def _filter_glitches(buyable, quotes, tol=0.25):
+    """Veri-glitch çapraz kontrolü: tarama kapanışını BAĞIMSIZ gerçek-zamanlı FMP
+    quote ile karşılaştır; oran (büyük/küçük) > 1+tol ise veri hatası say → AL
+    listesinden DÜŞ. (2026-06-11 KLAC olayı: bulk veri hattı KLAC'ı 10× ölçekle
+    verdi, quote gerçekti; sahte fiyat üç kağıt portföye de bulaştı.)
+    Referans yoksa (quote dönmemişse) MUHAFAZAKÂR: adayı KORU → yanlış pozitif yok.
+    Dönen: (temiz_liste, [(sembol, tarama_close, quote), ...])"""
+    clean, dropped = [], []
+    for c in buyable:
+        ref = quotes.get(c["symbol"])
+        sc = c.get("close")
+        if ref and sc and ref > 0 and sc > 0 and (max(sc, ref) / min(sc, ref)) > (1 + tol):
+            dropped.append((c["symbol"], sc, ref))
+        else:
+            clean.append(c)
+    return clean, dropped
+
+
 def _held():
     if os.path.exists(HELD):
         try:
@@ -217,6 +235,21 @@ def main():
     paper_st = pt.load_state()
     held_union = sorted(set(_held()) | pt.held_symbols(paper_st))
     res = s.run_live_qswing_scan(market, cfg, asof=asof, held=held_union)
+
+    # VERİ-GLITCH GUARD: AL adaylarını bağımsız FMP quote ile çapraz kontrol et; tarama
+    # fiyatı gerçek-zamanlı fiyattan >%25 sapan sembolleri (10× ölçek hatası vb.) düş —
+    # böylece glitch ne sinyale ne de üç kağıt portföye girer (2026-06-11 KLAC olayı).
+    if res.get("buyable"):
+        _fk = _secret("FMP_API_KEY")
+        if _fk:
+            try:
+                _q = pt.quote_fmp([c["symbol"] for c in res["buyable"]], _fk)
+                res["buyable"], _drp = _filter_glitches(res["buyable"], _q)
+                for _s, _sc, _ref in _drp:
+                    print(f"[GLITCH-GUARD] {_s} düşürüldü: tarama={_sc} vs quote={_ref} "
+                          f"({_sc/_ref:.1f}×) — AL listesinden çıkarıldı", flush=True)
+            except Exception as _e:
+                print(f"[glitch-guard atlandı] {_e}", flush=True)
 
     cands, demo = res["buyable"], False          # tüm KIRILIM'ler için grafik+detay (puan sırasıyla)
     if not cands and demo_watch:
