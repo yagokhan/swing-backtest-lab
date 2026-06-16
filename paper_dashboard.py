@@ -320,17 +320,74 @@ def _portfolio_payload(st, prices):
         "positions": positions, "closed": closed}
 
 
+_spy_cache = {"t": 0.0, "hist": {}}
+SPY_TTL = 1800   # SPY tarihsel EOD: 30 dk cache
+
+
+def _spy_history():
+    """SPY günlük kapanışları {tarih: close} — 30 dk cache (al-tut kıyas tabanı)."""
+    now = time.time()
+    with _lock:
+        if now - _spy_cache["t"] < SPY_TTL and _spy_cache["hist"]:
+            return dict(_spy_cache["hist"])
+    key = _fmp_key()
+    hist = {}
+    if key:
+        try:
+            import requests
+            r = requests.get("https://financialmodelingprep.com/stable/historical-price-eod/full"
+                             f"?symbol=SPY&apikey={key}", timeout=20)
+            rows = r.json()
+            rows = rows if isinstance(rows, list) else rows.get("historical", [])
+            hist = {x["date"]: float(x["close"]) for x in rows
+                    if x.get("date") and x.get("close") is not None}
+        except Exception as e:
+            print(f"[SPY history hata] {e}")
+    with _lock:
+        _spy_cache["t"] = now
+        _spy_cache["hist"] = hist
+    return hist
+
+
+def _spy_close_on(hist, d):
+    """d tarihindeki SPY kapanışı (yoksa ≤ d en yakın işlem günü)."""
+    if not hist or not d:
+        return None
+    if d in hist:
+        return hist[d]
+    ds = sorted(k for k in hist if k <= d)
+    return hist[ds[-1]] if ds else None
+
+
+def _spy_bench(payload, spy_now, hist):
+    """payload'a SPY al-tut kıyası ekle: başlangıç tarihinden bugüne aynı $ ile SPY."""
+    s0 = _spy_close_on(hist, payload.get("started"))
+    cap = payload.get("start_capital")
+    if not (s0 and spy_now and cap):
+        return
+    spy_pct = (spy_now / s0 - 1) * 100
+    payload["spy_pct"] = round(spy_pct, 2)
+    payload["spy_equity"] = round(cap * spy_now / s0, 2)
+    payload["alpha"] = round((payload.get("total_pl_pct") or 0.0) - spy_pct, 2)
+
+
 def portfolio_json():
     st = pt.load_state()
     ema_st = pt.load_state(pt.PAPER_EMA, variant="ema")
     ch_st = pt.load_state(pt.PAPER_CHAND, variant="chand")
     held = sorted(pt.held_symbols(st) | pt.held_symbols(ema_st) | pt.held_symbols(ch_st))
-    prices = _live_quotes(held)
+    prices = _live_quotes(list(held) + ["SPY"])          # SPY'ı da çek (kıyas)
     out = _portfolio_payload(st, prices)
     out["market"] = market_status()
     out["slippage"] = pt._slip_note().strip(" ·") if pt.SLIPPAGE else ""
     out["ema"] = _portfolio_payload(ema_st, prices)
     out["chand"] = _portfolio_payload(ch_st, prices)
+    # --- SPY al-tut kıyası (her portföy kendi başlangıç tarihinden) ---
+    spy_now = prices.get("SPY")
+    hist = _spy_history()
+    out["spy_now"] = spy_now
+    for payload in (out, out["ema"], out["chand"]):
+        _spy_bench(payload, spy_now, hist)
     return out
 
 
@@ -429,6 +486,7 @@ PAGE = """<!doctype html><html lang="tr"><head><meta charset="utf-8">
  .lane{background:var(--defter);border:1px solid var(--cizgi);border-radius:10px;
   padding:12px 16px 14px;border-top:2px solid var(--sis)}
  .lane.r0{border-top-color:var(--altin)} .lane.r1{border-top-color:var(--buz)} .lane.r2{border-top-color:var(--fosfor)}
+ .lane.rspy{border-top-color:var(--gumus);border-top-style:dashed;opacity:.9} .lane.rspy .lv{color:var(--gumus)}
  .lane .ln{font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--gumus)}
  .lane .ln .lead{color:var(--kehribar);letter-spacing:.04em;margin-left:6px;font-size:10px}
  .lane .lv{font-size:21px;font-weight:650;letter-spacing:-.01em;margin:6px 0 2px}
@@ -436,6 +494,7 @@ PAGE = """<!doctype html><html lang="tr"><head><meta charset="utf-8">
  .lane .track{height:3px;background:var(--defter2);border-radius:2px;margin-top:10px;overflow:hidden}
  .lane .fill{height:100%;border-radius:2px;background:var(--sis)}
  .lane.r0 .fill{background:var(--altin)} .lane.r1 .fill{background:var(--buz)} .lane.r2 .fill{background:var(--fosfor)}
+ .lane.rspy .fill{background:var(--gumus)}
 
  /* ---- DEFTER: her portföy, kimlik renginde sırtı olan bir kayıt defteri ---- */
  .defter{background:var(--defter);border:1px solid var(--cizgi);border-left:3px solid var(--sis);
@@ -571,15 +630,26 @@ function renderRace(p){
   // yarış rayı: üç defterin özsermayesi tek bakışta (salt görüntü — /api/portfolio verisinden)
   const L=[['🏆 ATR-trail',p,'r0'],['📐 8/21-EMA',p.ema,'r1'],['💡 63G-Şamdan',p.chand,'r2']].filter(x=>x[1]&&x[1].equity!=null);
   if(!L.length){$('race').innerHTML='';return;}
-  const eqs=L.map(x=>x[1].equity),mx=Math.max(...eqs),mn=Math.min(...eqs);
-  $('race').innerHTML=L.map(([n,d,c])=>{
-    const w=(mx===mn)?100:Math.round(8+92*(d.equity-mn)/(mx-mn));
-    const lead=(d.equity===mx&&mx!==mn)?'<span class="lead">önde</span>':'';
+  // SPY referans şeridi: 🏆 ile aynı başlangıçtan ($10k al-tut) — kıyas çubuğu (yarışa katılmaz)
+  const spyEq=(p.spy_equity!=null)?p.spy_equity:null, spyPct=(p.spy_pct!=null)?p.spy_pct:null;
+  const allEq=L.map(x=>x[1].equity).concat(spyEq!=null?[spyEq]:[]);
+  const mx=Math.max(...allEq),mn=Math.min(...allEq);
+  const bar=v=>(mx===mn)?100:Math.round(8+92*(v-mn)/(mx-mn));
+  let html=L.map(([n,d,c])=>{
+    const lead=(d.equity===Math.max(...L.map(x=>x[1].equity))&&L.length>1)?'<span class="lead">önde</span>':'';
+    const al=(d.alpha!=null)?` · <span class="${cls(d.alpha)}">α ${sign(d.alpha)}%</span> vs SPY`:'';
     return `<div class="lane ${c}"><div class="ln">${n}${lead}</div>
      <div class="lv">$${f(d.equity)}</div>
-     <div class="lp ${cls(d.total_pl)}">${sign(d.total_pl)}$ · ${sign(d.total_pl_pct)}% · ${d.n_open} açık</div>
-     <div class="track"><div class="fill" style="width:${w}%"></div></div></div>`;
+     <div class="lp ${cls(d.total_pl)}">${sign(d.total_pl)}$ · ${sign(d.total_pl_pct)}%${al}</div>
+     <div class="track"><div class="fill" style="width:${bar(d.equity)}%"></div></div></div>`;
   }).join('');
+  if(spyEq!=null){
+    html+=`<div class="lane rspy"><div class="ln">📈 SPY al-tut <span class="lead">kıyas</span></div>
+     <div class="lv">$${f(spyEq)}</div>
+     <div class="lp ${cls(spyPct)}">${sign(spyPct)}% · piyasa tabanı</div>
+     <div class="track"><div class="fill" style="width:${bar(spyEq)}%"></div></div></div>`;
+  }
+  $('race').innerHTML=html;
 }
 function renderMkt(m){
   const el=$('mkt'); if(!m){el.textContent='';return;}
@@ -591,6 +661,9 @@ function renderKpis(p,el,other){
   const k=[['Özsermaye','$'+f(p.equity)],['Genel K/Z',sign(p.total_pl)+'$ ('+sign(p.total_pl_pct)+'%)',cls(p.total_pl)],
    ['Gerçekleşmemiş',sign(p.unrealized)+'$',cls(p.unrealized)],['Gerçekleşen',sign(p.realized)+'$',cls(p.realized)],
    ['Nakit','$'+f(p.cash)],['Pozisyon',p.n_open+' açık · '+p.n_closed+' kapanan']];
+  if(p.spy_pct!=null){
+   k.push(['📈 SPY (kıyas)',sign(p.spy_pct)+'%',cls(p.spy_pct)]);
+   k.push(['⚖️ Alpha (SPY üstü)',sign(p.alpha)+'%',cls(p.alpha)]);}
   if(other&&other.equity!=null){const d=p.equity-other.equity;
    k.push(['⚖️ Fark (diğerine göre)',sign(d)+'$',cls(d)]);}
   $(el).innerHTML=k.map(x=>`<div class="kpi"><div class="v ${x[2]||''}">${x[1]}</div><div class="l">${x[0]}</div></div>`).join('');
