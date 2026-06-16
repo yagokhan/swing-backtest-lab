@@ -557,8 +557,8 @@ function renderBacktest(d){
 
   // monthly
   const mn=d.monthly||[]; const MO=['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
-  $('bt-monthly').innerHTML = '<thead><tr><th title="Takvim yılı">Yıl</th>'+MO.map(x=>`<th title="${x} ayı getirisi (%)">${x}</th>`).join('')+'<th title="Yılın toplam getirisi (%)">Yıl%</th></tr></thead><tbody>'+
-    mn.map(r=>'<tr><td>'+r.year+'</td>'+r.months.map(v=>`<td class="${v>=0?'pos':'neg'}">${v==null?'':F(v,1)}</td>`).join('')+`<td class="${r.year_pct>=0?'pos':'neg'}"><b>${Fp(r.year_pct)}</b></td></tr>`).join('')+'</tbody>';
+  $('bt-monthly').innerHTML = '<thead><tr><th title="Takvim yılı">Yıl</th>'+MO.map(x=>`<th title="${x} ayı getirisi (%)">${x}</th>`).join('')+'<th title="Stratejinin yıllık toplam getirisi (%)">Yıl%</th><th title="SPY (S&P 500 ETF) al-tut aynı yıldaki getirisi (%) — kıyas">SPY%</th><th title="Yıllık Alpha = Strateji Yıl% − SPY% (+ = piyasayı geçti)">Alpha</th></tr></thead><tbody>'+
+    mn.map(r=>'<tr><td>'+r.year+'</td>'+r.months.map(v=>`<td class="${v>=0?'pos':'neg'}">${v==null?'':F(v,1)}</td>`).join('')+`<td class="${r.year_pct>=0?'pos':'neg'}"><b>${Fp(r.year_pct)}</b></td><td class="${r.spy_pct>=0?'pos':'neg'} muted">${r.spy_pct==null?'—':Fp(r.spy_pct)}</td><td class="${r.alpha_pct>=0?'pos':'neg'}"><b>${r.alpha_pct==null?'—':Fp(r.alpha_pct)}</b></td></tr>`).join('')+'</tbody>';
 
   // trades
   const tr=d.trades||[]; $('bt-trade-n').textContent=tr.length;

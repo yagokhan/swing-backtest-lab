@@ -2040,14 +2040,21 @@ def run_backtest_api(params: dict) -> dict:
                "pnl": round(t.pnl, 2), "pnl_pct": round(t.pnl_pct, 2),
                "outcome": t.outcome} for t in closed]
 
-    # Aylık tablo
+    # Aylık tablo (+ SPY al-tut yıllık kıyas → Alpha)
     monthly = []
     if len(eq) > 1:
         piv = monthly_returns_table(eq)
+        spiv = monthly_returns_table(spy_norm)              # SPY al-tut aylık → yıllık
+        spy_year = {int(y): float(spiv.loc[y, "Yıl%"])
+                    for y in spiv.index if pd.notna(spiv.loc[y, "Yıl%"])}
         for y, rowp in piv.iterrows():
             cells = [_jsafe(round(float(v), 1)) if pd.notna(v) else None for v in rowp.values[:12]]
-            monthly.append({"year": int(y), "months": cells,
-                            "year_pct": _jsafe(round(float(rowp.values[-1]), 1))})
+            yr = _jsafe(round(float(rowp.values[-1]), 1)) if pd.notna(rowp.values[-1]) else None
+            sp = spy_year.get(int(y))
+            monthly.append({"year": int(y), "months": cells, "year_pct": yr,
+                            "spy_pct": (_jsafe(round(sp, 1)) if sp is not None else None),
+                            "alpha_pct": (_jsafe(round(yr - sp, 1))
+                                          if (sp is not None and yr is not None) else None)})
 
     def _count(o): return sum(1 for t in closed if t.outcome == o)
 
