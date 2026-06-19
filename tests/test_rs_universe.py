@@ -22,3 +22,17 @@ def test_rs_score_blends_window_returns():
 def test_rs_score_nan_when_insufficient_history():
     s = _series([100 + i for i in range(50)])   # < 126 + skip bars
     assert np.isnan(rs_score(s, s.index[40]))
+
+def test_rs_score_ignores_asof_and_future_bars():
+    vals = [100 * (1.005 ** i) for i in range(200)]
+    s = _series(vals)
+    asof = s.index[150]
+    base = rs_score(s, asof)
+    # mutate the asof bar and every bar after it
+    mutated = s.copy()
+    mutated.iloc[150:] = mutated.iloc[150:] * 99.0
+    assert rs_score(mutated, asof) == pytest.approx(base, rel=1e-12)
+    # mutating a bar within the lookback window must change the score (sanity: guard isn't trivially constant)
+    mutated2 = s.copy()
+    mutated2.iloc[123] = mutated2.iloc[123] * 1.5
+    assert rs_score(mutated2, asof) != pytest.approx(base, rel=1e-12)
