@@ -1,0 +1,11 @@
+Veri indiriliyor (FMP /stable): 384 sembol · 2020-04-24→2026-06-19 · 10 işçi ...
+⚠️ >%40 tek-gün sıçrama (split olabilir): ARM(1), BIIB(1), CNC(1), FI(1), HOOD(1), PDD(1)
+Hazır: 373 hisse · 1546 bar (2020-04-24 → 2026-06-18) · sınır≤2026-06-19
+RS izleme listesi: 1546 gün · havuz 373 · top-50
+=== IN-SAMPLE (tune only) 2021-06-18 → 2023-12-31 ===
+  roi -5.4% | alpha -20.0 | DD -21.2 | PF 0.90
+=== OUT-OF-SAMPLE (REPORT) 2024-01-01 → end ===
+  roi +93.0% | SPY +58.0% | alpha +35.0 | DD -13.0 | PF 2.30
+--- DUAL-BENCHMARK GATE ---
+  beats SPY: True | beats random-95 (+9.7%): True
+  VERDICT: DEBIASED EDGE CONFIRMED
