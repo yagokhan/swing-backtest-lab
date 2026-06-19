@@ -8,4 +8,11 @@ RS izleme listesi: 1546 gün · havuz 373 · top-50
   roi +93.0% | SPY +58.0% | alpha +35.0 | DD -13.0 | PF 2.30
 --- DUAL-BENCHMARK GATE ---
   beats SPY: True | beats random-95 (+9.7%): True
-  VERDICT: DEBIASED EDGE CONFIRMED
+  VERDICT: DEBIAS VALID for THIS OOS window — beats SPY and random-95 with a SYSTEMATIC (non-hand-picked) universe, and the watchlist is provably past-only (no look-ahead).
+  CAVEAT 1 (regime): in-sample roi -5.4% (alpha -20.0) was NEGATIVE — the strategy
+           LOST in 2021-2023 and won in 2024-2026. It is REGIME-DEPENDENT, not proven
+           all-weather. One OOS win + one in-sample loss is a promising signal, not a
+           confirmed generalizable edge. Validate across more rolling OOS folds.
+  CAVEAT 2 (survivorship): the pool is CURRENT S&P500+Nasdaq100 membership, NOT
+           point-in-time constituents. Names delisted/removed 2021-2026 are absent and
+           2026 membership is itself hindsight → residual index-level survivorship bias.
