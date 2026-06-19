@@ -59,3 +59,10 @@ def test_build_watchlist_applies_liquidity_floor():
     date = mid_liquid.index[180]
     wl = build_watchlist(data, [date], n=2, dollar_vol_floor=1e6)
     assert wl[date] == {"MID_LIQ"}              # strong-but-illiquid filtered out
+
+def test_sp500_ndx_preset_is_union():
+    import swing2_backtest as sb
+    pool = set(sb.UNIVERSE_PRESETS["sp500_ndx"])
+    assert set(sb.UNIVERSE_PRESETS["sp500"]).issubset(pool)
+    assert set(sb.UNIVERSE_PRESETS["nasdaq100"]).issubset(pool)
+    assert len(pool) == len(sb.UNIVERSE_PRESETS["sp500_ndx"])   # no dups
