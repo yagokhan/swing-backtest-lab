@@ -1,9 +1,13 @@
 import numpy as np, pandas as pd, pytest
-from rs_universe import rs_score
+from rs_universe import rs_score, build_watchlist
 
 def _series(values, start="2021-01-01"):
     idx = pd.bdate_range(start, periods=len(values))
     return pd.Series(values, index=idx, dtype=float)
+
+def _frame(close_vals, vol=1e9, start="2021-01-01"):
+    idx = pd.bdate_range(start, periods=len(close_vals))
+    return pd.DataFrame({"Close": close_vals, "Volume": [vol] * len(close_vals)}, index=idx)
 
 def test_rs_score_blends_window_returns():
     # 200 bars rising 1%/bar geometrically → known trailing returns
@@ -36,3 +40,22 @@ def test_rs_score_ignores_asof_and_future_bars():
     mutated2 = s.copy()
     mutated2.iloc[123] = mutated2.iloc[123] * 1.5
     assert rs_score(mutated2, asof) != pytest.approx(base, rel=1e-12)
+
+def test_build_watchlist_picks_top_n_by_score():
+    n_bars = 200
+    strong = _frame([100 * (1.02 ** i) for i in range(n_bars)])   # steep
+    mid    = _frame([100 * (1.01 ** i) for i in range(n_bars)])
+    weak   = _frame([100 * (1.001 ** i) for i in range(n_bars)])  # flat-ish
+    data = {"STRONG": strong, "MID": mid, "WEAK": weak}
+    date = strong.index[180]
+    wl = build_watchlist(data, [date], n=2)
+    assert wl[date] == {"STRONG", "MID"}        # WEAK excluded by rank
+
+def test_build_watchlist_applies_liquidity_floor():
+    n_bars = 200
+    strong_illiquid = _frame([100 * (1.02 ** i) for i in range(n_bars)], vol=1.0)  # tiny $vol
+    mid_liquid      = _frame([100 * (1.01 ** i) for i in range(n_bars)], vol=1e9)
+    data = {"STRONG_ILLIQ": strong_illiquid, "MID_LIQ": mid_liquid}
+    date = mid_liquid.index[180]
+    wl = build_watchlist(data, [date], n=2, dollar_vol_floor=1e6)
+    assert wl[date] == {"MID_LIQ"}              # strong-but-illiquid filtered out
