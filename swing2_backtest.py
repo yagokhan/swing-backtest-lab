@@ -1103,6 +1103,7 @@ class Swing2Backtester:
         self.data = self.market["data"]; self.spy = self.market["spy"]
         self.sectors = self.market["sectors"]; self.earnings = self.market["earnings"]
         self.calendar = self.market["calendar"]; self.vcp_cache = self.market["vcp_cache"]
+        self.watchlist = self.market.get("watchlist")   # {date→set} veya None
         self.cash = cfg.initial_capital
         self.positions: dict[str, Position] = {}
         self.trades: list[Trade] = []
@@ -1111,6 +1112,13 @@ class Swing2Backtester:
         self._entry_slip = cfg.entry_slippage_bps / 10_000.0   # girişe özel (kapanış oynaklığı)
         self._stop_slip = cfg.stop_slippage_bps / 10_000.0
         self.px1545 = self.market.get("px1545", {})            # {sym: Series(date→gerçek 15:45 fiyatı)}
+
+    def _in_watchlist(self, sym, date):
+        """RS evreni açıkken yalnız o günün top-N listesindeki semboller YENİ pozisyon açabilir.
+        Kapalıysa daima True (eski statik-evren davranışı). Çıkışları ASLA kapılamaz."""
+        if not getattr(self.cfg, "use_rs_universe", False) or self.watchlist is None:
+            return True
+        return sym in self.watchlist.get(date, set())
 
     # ---- piyasa bağlamı --------------------------------------------------
     def _common(self, date):
@@ -1528,6 +1536,7 @@ class Swing2Backtester:
                 spy_ret60 = self.spy.loc[date, "RET60"] if qmode else None
                 for sym, df in self.data.items():
                     if sym in self.positions: continue
+                    if not self._in_watchlist(sym, date): continue   # v6: RS evren kapısı
                     row = df.loc[date]
                     if (pd.isna(row["Close"]) or pd.isna(row["SMA200"]) or row["Close"] <= row["SMA200"]
                             or row["Close"] <= row["SMA50"] or row["Close"] <= row["SMA20"]
