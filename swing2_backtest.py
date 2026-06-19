@@ -753,7 +753,20 @@ def download_and_align_data(cfg: Config) -> dict:
 
 
 # Geriye dönük uyumluluk
-load_market = download_and_align_data
+def load_market(cfg: Config) -> dict:
+    market = download_and_align_data(cfg)
+    if getattr(cfg, "use_rs_universe", False):
+        from rs_universe import build_watchlist
+        pool = cfg.rs_pool or cfg.universe
+        pool_data = {s: market["data"][s] for s in pool if s in market["data"]}
+        market["watchlist"] = build_watchlist(
+            pool_data, market["calendar"],
+            n=cfg.rs_n, weights=cfg.rs_weights, skip=cfg.rs_skip,
+            windows=cfg.rs_windows, dollar_vol_floor=cfg.rs_dollar_vol_floor)
+        print(f"RS izleme listesi: {len(market['watchlist'])} gün · havuz {len(pool_data)} · top-{cfg.rs_n}", flush=True)
+    else:
+        market["watchlist"] = None
+    return market
 
 
 # =========================================================================
