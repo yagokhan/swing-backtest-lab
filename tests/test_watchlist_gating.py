@@ -1,3 +1,4 @@
+import inspect
 import pandas as pd
 import swing2_backtest as sb
 from rs_universe import build_watchlist
@@ -62,3 +63,11 @@ def test_open_position_survives_leaving_watchlist(monkeypatch):
     assert bt._in_watchlist("AAA", idx[1]) is False
     # The exit path (_manage) never calls _in_watchlist — verified by code inspection:
     # the gate is only in run()'s entry-candidate loop, not in _manage().
+
+def test_exit_path_never_consults_watchlist():
+    """Invariant: the watchlist gates ENTRIES only. _manage (the exit/position-
+    management path) must never reference the watchlist — a future refactor that
+    gates exits would break the strategy's design and must fail here."""
+    src = inspect.getsource(sb.Swing2Backtester._manage)
+    assert "watchlist" not in src, "_manage must not consult the watchlist (exits are never gated)"
+    assert "_in_watchlist" not in src, "_manage must not call _in_watchlist (exits are never gated)"
