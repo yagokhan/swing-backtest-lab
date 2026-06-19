@@ -1,7 +1,8 @@
 # wf_validate.py
 """Walk-forward validation for the RS-universe debias.
 In-sample (tune): 2021-06-18 → 2023-12-31. Out-of-sample (report): 2024-01-01 → end.
-Dual benchmark: must beat SPY AND the random-95 baseline (+9.7%)."""
+Dual benchmark: must beat SPY AND the random-95 baseline (+9.7%).
+NOTE: params are pre-locked (not tuned on in-sample), so the in-sample window is effectively a second held-out window the strategy FAILED — results are regime-dependent. The pool is current index membership, so residual survivorship bias remains; this is not a point-in-time-constituents test."""
 import pandas as pd
 import swing2_backtest as sb
 
@@ -53,8 +54,20 @@ def main():
     beats_rand = oos["roi"] > RANDOM_95_BASELINE
     print("--- DUAL-BENCHMARK GATE ---")
     print("  beats SPY: %s | beats random-95 (+%.1f%%): %s" % (beats_spy, RANDOM_95_BASELINE, beats_rand))
-    print("  VERDICT: %s" % ("DEBIASED EDGE CONFIRMED" if (beats_spy and beats_rand)
-                             else "NO GENERALIZABLE EDGE — stop or pivot"))
+    passed = beats_spy and beats_rand
+    print("  VERDICT: %s" % (
+        "DEBIAS VALID for THIS OOS window — beats SPY and random-95 with a SYSTEMATIC"
+        " (non-hand-picked) universe, and the watchlist is provably past-only (no look-ahead)."
+        if passed else
+        "NO EDGE in this OOS window — stop or pivot."))
+    print("  CAVEAT 1 (regime): in-sample roi %+.1f%% (alpha %+.1f) was NEGATIVE — the strategy"
+          % (is_m["roi"], is_m["alpha"]))
+    print("           LOST in 2021-2023 and won in 2024-2026. It is REGIME-DEPENDENT, not proven")
+    print("           all-weather. One OOS win + one in-sample loss is a promising signal, not a")
+    print("           confirmed generalizable edge. Validate across more rolling OOS folds.")
+    print("  CAVEAT 2 (survivorship): the pool is CURRENT S&P500+Nasdaq100 membership, NOT")
+    print("           point-in-time constituents. Names delisted/removed 2021-2026 are absent and")
+    print("           2026 membership is itself hindsight → residual index-level survivorship bias.")
 
 if __name__ == "__main__":
     main()
