@@ -30,6 +30,7 @@ import pandas as pd
 
 import paper_trader as pt
 import swing2_backtest as s2
+import qulla_paper as qp
 
 PORT = 8061
 _BG, _CARD, _FG, _MUT = "#0d1218", "#161d27", "#e6edf3", "#8a95ad"
@@ -180,31 +181,63 @@ def candles_json(symbol, tf):
         pos = df.index.get_indexer([pd.Timestamp(date).normalize()], method="nearest")
         return tm(df.index[int(pos[0])]) if len(pos) and pos[0] >= 0 else None
 
-    info = _pos_info(symbol)
+    ev = _trade_events(symbol)
     lines = {"entry": None, "stop": None, "target": None}
     markers = []
-    if info:
-        if info.get("entry") is not None:
-            lines["entry"] = round(info["entry_fill"], 2)
-        if info.get("stop") is not None:
-            lines["stop"] = round(info["stop"], 2)
-        if info.get("target") is not None:
-            lines["target"] = round(info["target"], 2)
-        bt = snap(info.get("entry_date"))
-        if bt is not None:
-            markers.append({"time": bt, "position": "belowBar", "color": _BLU,
-                            "shape": "arrowUp", "text": "AL"})
-        st = snap(info.get("exit_date"))
-        if st is not None and info.get("exit") is not None:
-            col = _GRN if info.get("outcome") == "TP" else _RED
-            markers.append({"time": st, "position": "aboveBar", "color": col,
-                            "shape": "arrowDown", "text": "SAT " + (info.get("outcome") or "")})
+    if ev:
+        lines = ev["lines"]
+        for b in ev["buys"]:
+            t = snap(b["date"])
+            if t is None:
+                continue
+            txt = "AL " + (b["date"] or "")
+            if b["price"] is not None:
+                txt += f" ${b['price']:.2f}"
+            markers.append({"time": t, "position": "belowBar", "color": _BLU,
+                            "shape": "arrowUp", "text": txt})
+        for s_ in ev["sells"]:
+            t = snap(s_["date"])
+            if t is None or s_["price"] is None:
+                continue
+            col = _GRN if (s_.get("pnl") or 0) >= 0 else _RED
+            txt = ("SAT " + (s_.get("outcome") or "") + " "
+                   + (s_["date"] or "") + f" ${s_['price']:.2f}")
+            markers.append({"time": t, "position": "aboveBar", "color": col,
+                            "shape": "arrowDown", "text": txt.strip()})
     markers.sort(key=lambda m: (m["time"] if isinstance(m["time"], int) else m["time"]))
     return {"symbol": symbol, "tf": tf, "intraday": intraday,
             "candles": candles, "sma": sma_line, "lines": lines, "markers": markers,
-            "info": {"open": bool(info.get("open")) if info else None,
-                     "outcome": (info.get("outcome") if info else None)},
+            "info": ({"open": ev["open"], "partial_open": ev["partial_open"],
+                      "buys": ev["buys"], "sells": ev["sells"]} if ev else None),
             "market": market_status()}
+
+
+_dchg_cache = {}      # {symbol: (t_loaded, res|None)}
+DCHG_TTL = 60         # günlük-değişim 60 sn cache (15dk barlarla uyumlu)
+
+
+def _daily_change(symbol):
+    """Bugünkü (gün-içi) K/Z — 15 DK barlardan. Önceki işlem gününün son 15dk
+    kapanışı baz, en güncel 15dk kapanışı 'şimdi'. Döner: {day_chg(hisse başı $),
+    day_pct, last} ya da None. Grafik 15m cache'iyle aynı veriyi paylaşır (ek ağ yok)."""
+    now = time.time()
+    with _lock:
+        c = _dchg_cache.get(symbol)
+        if c and now - c[0] < DCHG_TTL:
+            return c[1]
+    df = _history_tf(symbol, "15m")        # 15dk intraday (kendi 60sn cache'i)
+    res = None
+    if df is not None and len(df):
+        days = sorted(set(df.index.normalize()))
+        if len(days) >= 2:
+            last_close = float(df[df.index.normalize() == days[-1]]["Close"].iloc[-1])
+            prev_close = float(df[df.index.normalize() == days[-2]]["Close"].iloc[-1])
+            if prev_close:
+                res = {"day_chg": last_close - prev_close,
+                       "day_pct": (last_close / prev_close - 1) * 100, "last": last_close}
+    with _lock:
+        _dchg_cache[symbol] = (now, res)
+    return res
 
 
 def _live_quotes(symbols):
@@ -269,13 +302,20 @@ def _portfolio_payload(st, prices):
     positions, mkt_val, unreal = [], 0.0, 0.0
     for p in sorted(st["positions"], key=lambda x: x["symbol"]):
         ef = p.get("entry_fill", p["entry"])
+        # gerçek maliyet bazı (giriş komisyonu dahil) → realized ile aynı temel, total_pl ile tutar.
+        # öncelik: state'teki cost → bacak cost toplamı → adet×entry_fill (geri uyumlu)
+        basis = p.get("cost")
+        if basis is None:
+            basis = (sum(l["cost"] for l in p["legs"]) if p.get("legs")
+                     else p["shares"] * ef)
         px = prices.get(p["symbol"])
         pnl = pct = None
         if px is not None:
-            pnl = p["shares"] * (px - ef)
-            pct = (px / ef - 1) * 100
+            mv = p["shares"] * px
+            pnl = mv - basis
+            pct = (mv / basis - 1) * 100 if basis else None
             unreal += pnl
-            mkt_val += p["shares"] * px
+            mkt_val += mv
         else:
             mkt_val += p["shares"] * ef
         rec = {
@@ -288,9 +328,13 @@ def _portfolio_payload(st, prices):
             "pct": (round(pct, 2) if pct is not None else None),
             "entry_ts": p.get("entry_ts", p.get("entry_date")), "entry_date": p.get("entry_date"),
             "score": p.get("score")}
-        if p.get("legs"):   # EMA varyantı: kalan bacaklar (çıkış planı)
-            rem = [("8E" if l["rule"] == "ema8" else "21E") for l in p["legs"] if l["shares"] > 0]
-            rec["exit_plan"] = "<" + "·".join(rem) if rem else "—"
+        dc = _daily_change(p["symbol"])   # bugünkü K/Z — 15dk barlardan
+        rec["day_pnl"] = round(p["shares"] * dc["day_chg"], 2) if dc else None
+        rec["day_pct"] = round(dc["day_pct"], 2) if dc else None
+        if p.get("legs"):   # split bacaklar (çıkış planı): Qulla = +2R hedef / 21-EMA · EMA = 8E/21E
+            _lbl = {"ema8": "&lt;8E", "ema21": "&lt;21E", "target": "+2R hedef"}
+            rem = [_lbl.get(l["rule"], l["rule"]) for l in p["legs"] if l["shares"] > 0]
+            rec["exit_plan"] = " · ".join(rem) if rem else "—"
         elif p.get("peak") is not None:   # şamdan varyantı: güncel trail seviyesi
             lvl = p.get("chand_stop")
             rec["exit_plan"] = (f"kapanış<${lvl:.2f}" if lvl is not None
@@ -372,22 +416,18 @@ def _spy_bench(payload, spy_now, hist):
 
 
 def portfolio_json():
-    st = pt.load_state()
-    ema_st = pt.load_state(pt.PAPER_EMA, variant="ema")
-    ch_st = pt.load_state(pt.PAPER_CHAND, variant="chand")
-    held = sorted(pt.held_symbols(st) | pt.held_symbols(ema_st) | pt.held_symbols(ch_st))
+    # 👑 Qulla-21 (TEK yöntem) — canlı cron'un yazdığı durum dosyasından oku
+    st = pt.load_state(qp.PAPER_QULLA, variant="qulla")
+    held = sorted(pt.held_symbols(st))
     prices = _live_quotes(list(held) + ["SPY"])          # SPY'ı da çek (kıyas)
     out = _portfolio_payload(st, prices)
     out["market"] = market_status()
-    out["slippage"] = pt._slip_note().strip(" ·") if pt.SLIPPAGE else ""
-    out["ema"] = _portfolio_payload(ema_st, prices)
-    out["chand"] = _portfolio_payload(ch_st, prices)
-    # --- SPY al-tut kıyası (her portföy kendi başlangıç tarihinden) ---
+    out["slippage"] = ""
+    # --- SPY al-tut kıyası (başlangıç tarihinden) ---
     spy_now = prices.get("SPY")
     hist = _spy_history()
     out["spy_now"] = spy_now
-    for payload in (out, out["ema"], out["chand"]):
-        _spy_bench(payload, spy_now, hist)
+    _spy_bench(out, spy_now, hist)
     return out
 
 
@@ -402,25 +442,44 @@ def scan_json():
 
 
 # ----------------------------- pozisyon meta (grafik overlay) -----------------------------
-def _pos_info(symbol):
-    """Sembolün giriş/stop/hedef + AL/SAT noktaları (önce açık, sonra kapanan)."""
-    st = pt.load_state()
+def _trade_events(symbol):
+    """Sembolün TÜM AL/SAT olayları: açık pozisyon + TÜM kapanan kayıtlar.
+    Split (yarı) çıkışta yarı +2R hedefte kapanır (kapanan kayıt), kalan yarı
+    21-EMA runner olarak AÇIK kalır → ikisini de göstermek için her ikisini topla.
+    Qulla-21 durum dosyasından okur (portfolio_json ile aynı kaynak)."""
+    st = pt.load_state(qp.PAPER_QULLA, variant="qulla")
+    buys, sells = {}, []
+    lines = {"entry": None, "stop": None, "target": None}
+    open_pos = None
     for p in st["positions"]:
         if p["symbol"] == symbol:
-            return {"entry": p["entry"], "entry_fill": p.get("entry_fill", p["entry"]),
-                    "stop": p["stop"], "target": p["target"],
-                    "entry_date": p.get("entry_date"), "exit_date": None, "exit": None,
-                    "outcome": None, "open": True}
-    last = None
+            open_pos = p
+            ef = p.get("entry_fill", p["entry"])
+            if p.get("entry_date") is not None and ef is not None:
+                buys[(p["entry_date"], round(ef, 2))] = {"date": p["entry_date"], "price": round(ef, 2)}
+            lines = {"entry": round(ef, 2) if ef is not None else None,
+                     "stop": round(p["stop"], 2) if p.get("stop") is not None else None,
+                     "target": round(p["target"], 2) if p.get("target") is not None else None}
     for r in st["closed"]:
-        if r["symbol"] == symbol:
-            last = r  # en son kapanan kaydı kullan
-    if last:
-        return {"entry": last.get("entry"), "entry_fill": last.get("entry_fill", last.get("entry")),
-                "stop": None, "target": None,
-                "entry_date": last.get("entry_date"), "exit_date": last.get("exit_date"),
-                "exit": last.get("exit"), "outcome": last.get("outcome"), "open": False}
-    return None
+        if r["symbol"] != symbol:
+            continue
+        ef = r.get("entry_fill", r.get("entry"))
+        if r.get("entry_date") is not None and ef is not None:
+            buys.setdefault((r["entry_date"], round(ef, 2)),
+                            {"date": r["entry_date"], "price": round(ef, 2)})
+        if r.get("exit_date") is not None and r.get("exit") is not None:
+            sells.append({"date": r["exit_date"], "price": round(r["exit"], 2),
+                          "outcome": r.get("outcome"), "pnl": r.get("pnl"),
+                          "pnl_pct": r.get("pnl_pct")})
+    if open_pos is None and not buys and not sells:
+        return None
+    buys = sorted(buys.values(), key=lambda b: b["date"] or "")
+    sells.sort(key=lambda s: s["date"] or "")
+    if open_pos is None and lines["entry"] is None and buys:
+        lines["entry"] = buys[-1]["price"]      # kapanan: son girişi çizgi yap
+    return {"open": open_pos is not None,
+            "partial_open": bool(open_pos is not None and sells),   # yarı satıldı, kalan açık
+            "lines": lines, "buys": buys, "sells": sells}
 
 
 # ----------------------------- HTML sayfa -----------------------------
@@ -500,8 +559,6 @@ PAGE = """<!doctype html><html lang="tr"><head><meta charset="utf-8">
  .defter{background:var(--defter);border:1px solid var(--cizgi);border-left:3px solid var(--sis);
   border-radius:10px;padding:18px 20px 20px;margin:0 0 28px}
  .defter.d-champ{border-left-color:var(--altin)}
- .defter.d-ema{border-left-color:var(--buz)}
- .defter.d-chand{border-left-color:var(--fosfor)}
  .defter.d-scan{border-left-color:var(--cizgi2)}
  .defter h2{font-size:13px;font-weight:650;letter-spacing:.02em;margin:0 0 4px}
  .defter .kural{display:block;font-size:11.5px;font-weight:450;color:var(--sis);
@@ -567,27 +624,11 @@ PAGE = """<!doctype html><html lang="tr"><head><meta charset="utf-8">
   <div class="race" id="race"></div>
 
   <section class="defter d-champ">
-    <h2>🏆 ATR-trail (şampiyon)</h2>
-    <span class="kural">giriş: 40g kırılım · çıkış: %50 kısmi @+2R · +2R hedef · +1R sonrası kapanış−2.5×ATR trail</span>
+    <h2>👑 Qulla-21</h2>
+    <span class="kural">evren: günlük RS top-50 (S&amp;P500+Nasdaq100) · giriş: 63g kırılım · çıkış (split): yarı +2R hedef · kalan yarı kapanış&lt;21-EMA runner · backtest-replay (sabit çapa 2026-05-19)</span>
     <div class="kpis" id="kpis"></div>
     <h3 class="alt">Açık Pozisyonlar</h3><div id="open"></div>
     <h3 class="alt">Kapanan İşlemler</h3><div id="closed"></div>
-  </section>
-
-  <section class="defter d-ema">
-    <h2>📐 8/21-EMA varyantı</h2>
-    <span class="kural">girişler şampiyonla aynı · çıkış: %50 kapanış&lt;8-EMA · kalan %50 kapanış&lt;21-EMA</span>
-    <div class="kpis" id="kpisE"></div>
-    <h3 class="alt">Açık Pozisyonlar</h3><div id="openE"></div>
-    <h3 class="alt">Kapanan İşlemler</h3><div id="closedE"></div>
-  </section>
-
-  <section class="defter d-chand">
-    <h2>💡 63G-Şamdan varyantı</h2>
-    <span class="kural">giriş: yalnız 63g (çeyreklik) tepe kıranlar · çıkış: tüm pozisyon, kapanış&lt;tepe−3.25×ATR · kısmi/hedef yok · <a href="/rapor" target="_blank">detaylı rapor</a></span>
-    <div class="kpis" id="kpisC"></div>
-    <h3 class="alt">Açık Pozisyonlar</h3><div id="openC"></div>
-    <h3 class="alt">Kapanan İşlemler</h3><div id="closedC"></div>
   </section>
 
   <section class="defter d-scan">
@@ -596,7 +637,7 @@ PAGE = """<!doctype html><html lang="tr"><head><meta charset="utf-8">
     <div id="scan" class="scanbox">…</div>
   </section>
 
-  <p class="ipucu">Bir <b>açık</b> ya da <b>kapanan</b> pozisyon satırına tıkla → <b>etkileşimli</b> mum grafiği açılır: tekerlekle <b>zoom</b>, sürükleyerek <b>kaydır</b>, üstten <b>zaman dilimi</b> (15m·30m·1h·2h·4h·1d) seç. <span class="pos">AL ▲</span> / <span class="neg">SAT ▼</span> + giriş/stop/+2R çizgileri işaretli.</p>
+  <p class="ipucu">Bir <b>açık</b> ya da <b>kapanan</b> pozisyon satırına tıkla → <b>etkileşimli</b> mum grafiği açılır: tekerlekle <b>zoom</b>, sürükleyerek <b>kaydır</b>, üstten <b>zaman dilimi</b> (15m·30m·1h·2h·4h·1d) seç. <span class="pos">AL ▲</span> / <span class="neg">SAT ▼</span> işaretleri <b>tarih + fiyatla</b> etiketli; grafik altında AL→SAT özeti (tarih · fiyat · K/Z%) + giriş/stop/+2R çizgileri.</p>
 </div>
 <div class="modal" id="modal" onclick="if(event.target===this)closeChart()">
   <div class="modal-inner">
@@ -619,16 +660,14 @@ const sign=v=>v==null?'—':(v>=0?'+':'')+f(v);
 async function loadAll(){
   const [p,s]=await Promise.all([fetch('/api/portfolio').then(r=>r.json()),fetch('/api/scan').then(r=>r.json())]);
   renderRace(p);
-  renderKpis(p,'kpis',p.ema); renderOpen(p,'open'); renderClosed(p,'closed');
-  if(p.ema){renderKpis(p.ema,'kpisE',p); renderOpen(p.ema,'openE',true); renderClosed(p.ema,'closedE');}
-  if(p.chand){renderKpis(p.chand,'kpisC',p); renderOpen(p.chand,'openC',true); renderClosed(p.chand,'closedC');}
+  renderKpis(p,'kpis'); renderOpen(p,'open',true); renderClosed(p,'closed');
   renderScan(s); renderMkt(p.market);
   $('meta').textContent=`başlangıç ${p.started||'?'} · ${p.slippage||'slippage kapalı'}`;
   $('upd').textContent='güncellendi '+new Date().toLocaleTimeString('tr-TR');
 }
 function renderRace(p){
   // yarış rayı: üç defterin özsermayesi tek bakışta (salt görüntü — /api/portfolio verisinden)
-  const L=[['🏆 ATR-trail',p,'r0'],['📐 8/21-EMA',p.ema,'r1'],['💡 63G-Şamdan',p.chand,'r2']].filter(x=>x[1]&&x[1].equity!=null);
+  const L=[['👑 Qulla-21',p,'r0']].filter(x=>x[1]&&x[1].equity!=null);
   if(!L.length){$('race').innerHTML='';return;}
   // SPY referans şeridi: 🏆 ile aynı başlangıçtan ($10k al-tut) — kıyas çubuğu (yarışa katılmaz)
   const spyEq=(p.spy_equity!=null)?p.spy_equity:null, spyPct=(p.spy_pct!=null)?p.spy_pct:null;
@@ -671,12 +710,13 @@ function renderKpis(p,el,other){
 function renderOpen(p,el,ema){
   if(!p.positions.length){$(el).innerHTML='<p class="muted">Açık pozisyon yok.</p>';return;}
   const exitH=ema?'<th>Çıkış planı</th>':'<th>Stop</th><th>Hedef</th>';
-  let h='<table><tr><th>Hisse</th><th>Fiyat</th><th>Giriş</th><th>Adet</th><th>K/Z</th><th>%</th>'+exitH+'<th>Giriş zamanı</th></tr>';
+  let h='<table><tr><th>Hisse</th><th>Fiyat</th><th>Giriş</th><th>Adet</th><th>K/Z</th><th>%</th><th title="Bugünkü değişim — 15dk barlardan">Günlük K/Z</th>'+exitH+'<th>Giriş zamanı</th></tr>';
   for(const x of p.positions){
    const exitC=ema?`<td>${x.exit_plan||'—'}</td>`:`<td>${f(x.stop)}</td><td>${f(x.target)}</td>`;
+   const dayC=x.day_pnl==null?'<td class="muted">—</td>':`<td class="${cls(x.day_pnl)}">${sign(x.day_pnl)}$${x.day_pct!=null?' <span class="muted">('+sign(x.day_pct)+'%)</span>':''}</td>`;
    h+=`<tr class="clk" onclick="openChart('${x.symbol}')"><td class="sym">${x.symbol}</td><td>${f(x.price)}</td><td>${f(x.entry_fill)}</td>
    <td>${f(x.shares,3)}</td><td class="${cls(x.pnl)}">${sign(x.pnl)}$</td><td class="${cls(x.pct)}">${sign(x.pct)}%</td>
-   ${exitC}<td class="muted">${x.entry_ts||''}</td></tr>`;}
+   ${dayC}${exitC}<td class="muted">${x.entry_ts||''}</td></tr>`;}
   $(el).innerHTML=h+'</table>';
 }
 function renderClosed(p,el){
@@ -762,7 +802,22 @@ async function drawChart(keep){
   _series.setMarkers(d.markers||[]);
   if(!keep)_chart.timeScale().fitContent();   // otomatik tazelemede zoom/kaydırma korunur
   if(d.error){$('chartNote').textContent='⚠️ '+d.error;}
-  else{$('chartNote').textContent=(d.intraday?'🕒 saatler ET · ':'')+((d.candles||[]).length)+' bar · tekerlek=zoom, sürükle=kaydır · SMA50 (turuncu) · giriş/stop/+2R çizgileri · AL▲/SAT▼';}
+  else{
+    const i=d.info||{};const buys=(i&&i.buys)||[],sells=(i&&i.sells)||[];let trade='';
+    if(buys.length){
+      const b=buys[0];
+      trade='<b style="color:#7eb3e3">AL</b> '+b.date+(b.price!=null?' @ <b>$'+b.price+'</b>':'');
+      for(const s of sells){
+        trade+=' &nbsp;→&nbsp; <b style="color:'+((s.pnl_pct||0)>=0?'#3ecf8e':'#f07b7b')+'">SAT</b> '
+              +(s.outcome?s.outcome+' ':'')+s.date+(s.price!=null?' @ <b>$'+s.price+'</b>':'');
+        if(s.pnl_pct!=null){trade+=' <span class="'+((s.pnl_pct>=0)?'pos':'neg')+'">('+(s.pnl_pct>=0?'+':'')+s.pnl_pct+'%)</span>';}
+      }
+      if(i.partial_open){trade+=' &nbsp;·&nbsp; <span class="muted">kalan yarı açık (21-EMA runner)</span>';}
+      else if(i.open&&!sells.length){trade+=' &nbsp;·&nbsp; <span class="muted">açık pozisyon</span>';}
+      trade+=' <span class="muted">· işlemler 15:45 ET seans kapanışında (günlük bar)</span><br>';
+    }
+    $('chartNote').innerHTML=trade+(d.intraday?'🕒 saatler ET · ':'')+((d.candles||[]).length)+' bar · tekerlek=zoom, sürükle=kaydır · SMA50 (turuncu) · giriş/stop/+2R çizgileri · AL▲/SAT▼';
+  }
 }
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeChart();});
 loadAll();

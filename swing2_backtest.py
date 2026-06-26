@@ -183,6 +183,16 @@ class Config:
     atr_target_mult: float = 3.0       # sabit hedef = entry + mult × ATR0  (kâr-al)
     risk_per_trade_usd: float = 1000.0 # sabit-dolar risk: lot = 1000 / (entry − ATR-stop)
 
+    # --- v6: dinamik RS-sıralı evren (selection-bias giderme) ---
+    use_rs_universe: bool = False      # True: günlük top-N RS izleme listesi girişleri kapılar
+    rs_n: int = 50                     # izleme listesi büyüklüğü (top-N)
+    rs_weights: tuple = (0.2, 0.4, 0.4)   # 1ay/3ay/6ay momentum ağırlıkları
+    rs_skip: int = 5                   # son N barı atla (kısa vade dönüş gürültüsü)
+    rs_windows: tuple = (21, 63, 126)  # 1ay/3ay/6ay (işlem günü)
+    rs_dollar_vol_floor: float = 0.0   # min ort. $-hacim; 0 = kapalı
+    rs_pool: tuple = ()                # boş = cfg.universe'i havuz olarak kullan
+    liquidate_at_end: bool = True      # False: pencere sonunda açık pozisyonları KAPATMA (canlı snapshot için)
+
     out_dir: str = "swing2_out"
     trades_csv: str = "trades.csv"
     equity_csv: str = "equity.csv"
@@ -596,6 +606,49 @@ def fetch_daily_fmp(tickers, key, dl_start, dl_end, workers=8):
     return frames
 
 
+def build_market_from_frames(frames: dict, cfg: Config, today=None) -> dict:
+    """Önceden çekilmiş HAM OHLCV çerçevelerinden ({ticker: df}) piyasa dict'i kur:
+    temizle (gelecek-bar `today`'de kes) + indikatör (her sembol KENDİ serisinde, causal) +
+    SPY takvimine reindex (fill YOK). İNDİRME YAPMAZ — artımlı veri deposu (qulla_paper) bunu
+    kullanır: 5y yeniden indirmek yerine depodaki ham seriyi verip göstergeleri taze hesaplar."""
+    today = pd.Timestamp(today).normalize() if today is not None else pd.Timestamp.now().normalize()
+    etfs = sorted({SECTOR_MAP[s] for s in cfg.universe if s in SECTOR_MAP})
+    spy_raw = _clean_frame(frames.get(cfg.benchmark), today)
+    if spy_raw is None or len(spy_raw) < cfg.warmup_bars:
+        raise SystemExit("SPY verisi yetersiz/geçersiz.")
+    cal = spy_raw.index
+
+    data, skipped, anomalies = {}, [], []
+    for s in cfg.universe:
+        d = _clean_frame(frames.get(s), today)
+        if d is None or len(d) < cfg.warmup_bars:
+            skipped.append(s); continue
+        n_big = int((d["Close"].pct_change().abs() > 0.40).sum())
+        if n_big: anomalies.append(f"{s}({n_big})")
+        ind = add_indicators(d, cfg)               # KENDİ serisinde (causal)
+        data[s] = ind.reindex(cal)                 # SPY takvimine — fill YOK
+
+    spy = add_indicators(spy_raw, cfg)
+
+    sectors = {}
+    for e in etfs:
+        d = _clean_frame(frames.get(e), today)
+        if d is not None and len(d) >= 200:
+            cl = d["Close"]
+            sectors[e] = pd.DataFrame({"Close": cl, "SMA50": sma(cl, 50), "SMA200": sma(cl, 200)}).reindex(cal)
+
+    earnings = {}
+    if cfg.use_earnings:
+        print("Earnings takvimleri çekiliyor...")
+        for s in data: earnings[s] = _fetch_earnings(s)
+
+    if skipped: print(f"Atlanan (yetersiz/geçersiz veri): {', '.join(skipped)}")
+    if anomalies: print(f"⚠️ >%40 tek-gün sıçrama (split olabilir): {', '.join(anomalies)}")
+    print(f"Hazır: {len(data)} hisse · {len(cal)} bar ({cal[0].date()} → {cal[-1].date()}) · sınır≤{today.date()}")
+    return {"data": data, "spy": spy, "sectors": sectors, "earnings": earnings,
+            "calendar": cal, "vcp_cache": {}}
+
+
 def download_and_align_data(cfg: Config) -> dict:
     """Anti-contamination veri pipeline'ı:
     1) HER sembol TEK TEK indirilir (batch/multi-index karışması imkânsız) — thread'li
@@ -697,41 +750,8 @@ def download_and_align_data(cfg: Config) -> dict:
             else:
                 frames[t] = _flatten_ohlcv(raw, t)
 
-    # ---- Temizle + hizala ----
-    spy_raw = _clean_frame(frames.get(cfg.benchmark), today)
-    if spy_raw is None or len(spy_raw) < cfg.warmup_bars:
-        raise SystemExit("SPY verisi yetersiz/geçersiz.")
-    cal = spy_raw.index
-
-    data, skipped, anomalies = {}, [], []
-    for s in cfg.universe:
-        d = _clean_frame(frames.get(s), today)
-        if d is None or len(d) < cfg.warmup_bars:
-            skipped.append(s); continue
-        n_big = int((d["Close"].pct_change().abs() > 0.40).sum())
-        if n_big: anomalies.append(f"{s}({n_big})")
-        ind = add_indicators(d, cfg)               # KENDİ serisinde (causal)
-        data[s] = ind.reindex(cal)                 # SPY takvimine — fill YOK
-
-    spy = add_indicators(spy_raw, cfg)
-
-    sectors = {}
-    for e in etfs:
-        d = _clean_frame(frames.get(e), today)
-        if d is not None and len(d) >= 200:
-            cl = d["Close"]
-            sectors[e] = pd.DataFrame({"Close": cl, "SMA50": sma(cl, 50), "SMA200": sma(cl, 200)}).reindex(cal)
-
-    earnings = {}
-    if cfg.use_earnings:
-        print("Earnings takvimleri çekiliyor...")
-        for s in data: earnings[s] = _fetch_earnings(s)
-
-    if skipped: print(f"Atlanan (yetersiz/geçersiz veri): {', '.join(skipped)}")
-    if anomalies: print(f"⚠️ >%40 tek-gün sıçrama (split olabilir): {', '.join(anomalies)}")
-    print(f"Hazır: {len(data)} hisse · {len(cal)} bar ({cal[0].date()} → {cal[-1].date()}) · sınır≤{today.date()}")
-    result = {"data": data, "spy": spy, "sectors": sectors, "earnings": earnings,
-              "calendar": cal, "vcp_cache": {}}
+    # ---- Temizle + hizala + indikatör (önceden-çekilmiş çerçevelerden; artımlı depo da bunu kullanır) ----
+    result = build_market_from_frames(frames, cfg, today)
     if cfg.disk_cache and cache_file:
         try:
             os.makedirs(cfg.cache_dir, exist_ok=True)
@@ -744,7 +764,26 @@ def download_and_align_data(cfg: Config) -> dict:
 
 
 # Geriye dönük uyumluluk
-load_market = download_and_align_data
+def attach_watchlist(market: dict, cfg: Config) -> dict:
+    """RS evren kapısını (watchlist) market dict'ine ekle. download_and_align_data ve
+    build_market_from_frames watchlist ÜRETMEZ → hem load_market hem artımlı depo (qulla_paper)
+    bunu çağırmalı; yoksa _in_watchlist kapısı kapanır ve YANLIŞ evren seçilir."""
+    if getattr(cfg, "use_rs_universe", False):
+        from rs_universe import build_watchlist
+        pool = cfg.rs_pool or cfg.universe
+        pool_data = {s: market["data"][s] for s in pool if s in market["data"]}
+        market["watchlist"] = build_watchlist(
+            pool_data, market["calendar"],
+            n=cfg.rs_n, weights=cfg.rs_weights, skip=cfg.rs_skip,
+            windows=cfg.rs_windows, dollar_vol_floor=cfg.rs_dollar_vol_floor)
+        print(f"RS izleme listesi: {len(market['watchlist'])} gün · havuz {len(pool_data)} · top-{cfg.rs_n}", flush=True)
+    else:
+        market["watchlist"] = None
+    return market
+
+
+def load_market(cfg: Config) -> dict:
+    return attach_watchlist(download_and_align_data(cfg), cfg)
 
 
 # =========================================================================
@@ -1081,6 +1120,7 @@ class Swing2Backtester:
         self.data = self.market["data"]; self.spy = self.market["spy"]
         self.sectors = self.market["sectors"]; self.earnings = self.market["earnings"]
         self.calendar = self.market["calendar"]; self.vcp_cache = self.market["vcp_cache"]
+        self.watchlist = self.market.get("watchlist")   # {date→set} veya None
         self.cash = cfg.initial_capital
         self.positions: dict[str, Position] = {}
         self.trades: list[Trade] = []
@@ -1089,6 +1129,13 @@ class Swing2Backtester:
         self._entry_slip = cfg.entry_slippage_bps / 10_000.0   # girişe özel (kapanış oynaklığı)
         self._stop_slip = cfg.stop_slippage_bps / 10_000.0
         self.px1545 = self.market.get("px1545", {})            # {sym: Series(date→gerçek 15:45 fiyatı)}
+
+    def _in_watchlist(self, sym, date):
+        """RS evreni açıkken yalnız o günün top-N listesindeki semboller YENİ pozisyon açabilir.
+        Kapalıysa daima True (eski statik-evren davranışı). Çıkışları ASLA kapılamaz."""
+        if not getattr(self.cfg, "use_rs_universe", False) or self.watchlist is None:
+            return True
+        return sym in self.watchlist.get(date, set())
 
     # ---- piyasa bağlamı --------------------------------------------------
     def _common(self, date):
@@ -1482,6 +1529,57 @@ class Swing2Backtester:
         return eq
 
     # ---- ANA DÖNGÜ -------------------------------------------------------
+    def _step(self, date):
+        """Tek işlem gününü işle: çıkış yönetimi + (rejim açıksa) yeni girişler + equity kaydı.
+        Hem toplu backtest (run) hem ARTIMLI defter (qulla_paper) bu metodu kullanır →
+        strateji mantığı tek yerde, defter ile backtest birebir aynı kuralı çalıştırır."""
+        cfg = self.cfg
+        self._manage(date)
+        common = self._common(date)
+        # ATR-REJİM kilidi: SPY oynaklığı eşiği aşarsa (testere) bu bar YENİ alım YOK
+        if (common["spy_above_sma200"] and not self._vol_regime_locked(common)
+                and len(self.positions) < cfg.max_positions and self.cash >= self._size(date)):
+            cands = []
+            qmode = cfg.entry_mode == "qswing_breakout"
+            spy_ret60 = self.spy.loc[date, "RET60"] if qmode else None
+            for sym, df in self.data.items():
+                if sym in self.positions: continue
+                if not self._in_watchlist(sym, date): continue   # v6: RS evren kapısı
+                row = df.loc[date]
+                if (pd.isna(row["Close"]) or pd.isna(row["SMA200"]) or row["Close"] <= row["SMA200"]
+                        or row["Close"] <= row["SMA50"] or row["Close"] <= row["SMA20"]
+                        or pd.isna(row["SLOPE200"]) or row["SLOPE200"] <= 0): continue
+                plan = compute_trade_plan(row, cfg)
+                dist = (row["Close"] - row["SMA20"]) / row["SMA20"]
+                if qmode:
+                    # ----- qswing GİRİŞ: Qullamaggie kırılım (20g tepe + 52H yakın + SPY'ı geçen momentum) -----
+                    rs = self._qswing_entry_ok(row, spy_ret60)
+                    if rs is None: continue
+                    # 0–100 öncelik skoru (canlı tarayıcıyla AYNI formül) → filtre + sıralama
+                    _risk = plan["entry"] - plan["stop"]
+                    _rec = {"rs": rs,
+                            "dist_52h_pct": (row["Close"] / row["HIGH52"] - 1) * 100,
+                            "dist_sma20_pct": dist * 100,
+                            "risk_pct": (_risk / plan["entry"] * 100) if plan["entry"] else None}
+                    qscore, _ = _qswing_priority_score(_rec)
+                    if cfg.qswing_min_score > 0 and qscore < cfg.qswing_min_score: continue
+                    cands.append((qscore, -dist, sym, row, plan))
+                else:
+                    # ----- swing2 GİRİŞ: 8-katman skor + kill-switch -----
+                    stage = detect_stage(row); vcp = self._vcp(sym, df, date)
+                    mctx = self._mctx(sym, row, date, common)
+                    layers, total = score_layers(row, stage, vcp, plan, mctx)
+                    dec = decision_from_score(total, layers)
+                    if total < cfg.min_score: continue
+                    if cfg.require_not_killswitch and not dec["tradeable"]: continue
+                    if cfg.max_dist_sma20 > 0 and dist > cfg.max_dist_sma20: continue  # aşırı uzama (chase) kapısı
+                    cands.append((total, -dist, sym, row, plan))
+            cands.sort(key=lambda x: (x[0], x[1]), reverse=True)
+            for total, _nd, sym, row, plan in cands:
+                if len(self.positions) >= cfg.max_positions or self.cash < self._size(date): break
+                self._open(sym, date, row, plan, total)
+        self.equity_curve.append((date, self._equity(date)))
+
     def run(self):
         cfg = self.cfg
         cal = self.calendar
@@ -1496,56 +1594,14 @@ class Swing2Backtester:
         if len(trading) == 0:
             raise SystemExit("Seçilen tarih aralığında işlem günü yok (warmup sonrası boş).")
         for date in trading:
-            self._manage(date)
-            common = self._common(date)
-            # ATR-REJİM kilidi: SPY oynaklığı eşiği aşarsa (testere) bu bar YENİ alım YOK
-            if (common["spy_above_sma200"] and not self._vol_regime_locked(common)
-                    and len(self.positions) < cfg.max_positions and self.cash >= self._size(date)):
-                cands = []
-                qmode = cfg.entry_mode == "qswing_breakout"
-                spy_ret60 = self.spy.loc[date, "RET60"] if qmode else None
-                for sym, df in self.data.items():
-                    if sym in self.positions: continue
-                    row = df.loc[date]
-                    if (pd.isna(row["Close"]) or pd.isna(row["SMA200"]) or row["Close"] <= row["SMA200"]
-                            or row["Close"] <= row["SMA50"] or row["Close"] <= row["SMA20"]
-                            or pd.isna(row["SLOPE200"]) or row["SLOPE200"] <= 0): continue
-                    plan = compute_trade_plan(row, cfg)
-                    dist = (row["Close"] - row["SMA20"]) / row["SMA20"]
-                    if qmode:
-                        # ----- qswing GİRİŞ: Qullamaggie kırılım (20g tepe + 52H yakın + SPY'ı geçen momentum) -----
-                        rs = self._qswing_entry_ok(row, spy_ret60)
-                        if rs is None: continue
-                        # 0–100 öncelik skoru (canlı tarayıcıyla AYNI formül) → filtre + sıralama
-                        _risk = plan["entry"] - plan["stop"]
-                        _rec = {"rs": rs,
-                                "dist_52h_pct": (row["Close"] / row["HIGH52"] - 1) * 100,
-                                "dist_sma20_pct": dist * 100,
-                                "risk_pct": (_risk / plan["entry"] * 100) if plan["entry"] else None}
-                        qscore, _ = _qswing_priority_score(_rec)
-                        if cfg.qswing_min_score > 0 and qscore < cfg.qswing_min_score: continue
-                        cands.append((qscore, -dist, sym, row, plan))
-                    else:
-                        # ----- swing2 GİRİŞ: 8-katman skor + kill-switch -----
-                        stage = detect_stage(row); vcp = self._vcp(sym, df, date)
-                        mctx = self._mctx(sym, row, date, common)
-                        layers, total = score_layers(row, stage, vcp, plan, mctx)
-                        dec = decision_from_score(total, layers)
-                        if total < cfg.min_score: continue
-                        if cfg.require_not_killswitch and not dec["tradeable"]: continue
-                        if cfg.max_dist_sma20 > 0 and dist > cfg.max_dist_sma20: continue  # aşırı uzama (chase) kapısı
-                        cands.append((total, -dist, sym, row, plan))
-                cands.sort(key=lambda x: (x[0], x[1]), reverse=True)
-                for total, _nd, sym, row, plan in cands:
-                    if len(self.positions) >= cfg.max_positions or self.cash < self._size(date): break
-                    self._open(sym, date, row, plan, total)
-            self.equity_curve.append((date, self._equity(date)))
+            self._step(date)
         last = trading[-1]
-        for sym in list(self.positions.keys()):
-            # Pencere sonunda kapanış NaN olabilir → o tarihe kadarki son GEÇERLİ kapanışı kullan
-            closes = self.data[sym]["Close"].loc[:last].dropna()
-            px = float(closes.iloc[-1]) if len(closes) else self.positions[sym].entry
-            self._close(sym, last, px, "EOD")
+        if cfg.liquidate_at_end:
+            for sym in list(self.positions.keys()):
+                # Pencere sonunda kapanış NaN olabilir → o tarihe kadarki son GEÇERLİ kapanışı kullan
+                closes = self.data[sym]["Close"].loc[:last].dropna()
+                px = float(closes.iloc[-1]) if len(closes) else self.positions[sym].entry
+                self._close(sym, last, px, "EOD")
 
     # ---- metrik özeti (grid-search için sade dict) -----------------------
     def metrics(self):
@@ -1868,6 +1924,7 @@ UNIVERSE_PRESETS = {
     "sp500": tuple("AAPL MSFT NVDA GOOGL GOOG AMZN META TSLA BRK-B LLY JPM V WMT XOM MA JNJ ORCL COST PG AVGO HD NFLX UNH BAC ABBV KO CRM CVX PFE AMD TMO ADBE ACN PEP LIN MRK MCD ABT CSCO WFC NOW IBM GS ISRG INTC INTU BX AMGN AXP DIS T RTX PM MS TXN QCOM BKNG CAT SCHW GE NEE BLK AMAT SPGI UBER BA PGR GILD LMT MO ELV HON NKE COP TJX SYK PLD ETN VRTX ADI ADP AFL AIG AJG ALL AMT ANET AON APD APH ARM AZO BDX BIIB BKR BMY BSX C CB CDNS CDW CHTR CI CL CME CMG CMI CNC COF COIN CSGP CTAS CTSH CTVA D DAL DASH DD DELL DG DHR DLR DLTR DOV DOW DUK EA EBAY ECL EFX EIX EL EMR ENPH EOG EQIX EQR EQT ESS EW EXC EXR F FANG FCX FDX FERG FI FIS FITB FSLR FTNT GD GEV GIS GLW GM GPN HAL HCA HES HIG HLT HOOD HSY HUBB HUM ICE ICLR IDXX IEX ILMN INFY IP IRM IT ITW JCI K KDP KEY KHC KKR KLAC KMB KMI KR L LDOS LEN LH LNT LRCX LULU LUV LVS LYB MAR MCHP MCK MDLZ MDT MELI MET MFC MMC MMM MNST MOH MOS MPC MPWR MRO MRVL MSCI MSI MTB MU NDAQ NEM NOC NSC NTAP NTRS NUE NVO NWS O OKE OMC ON ORLY OTIS OXY PANW PARA PAYC PAYX PCAR PCG PEG PFG PH PHM PKG PLTR PNC PNR PNW POOL PPG PPL PRU PSA PSX PTC PWR PYPL QRVO QSR RCL REGN RF RL RMD ROK ROL ROP ROST SBAC SBUX SHW SLB SMCI SNA SNOW SO SPG SQ STE STLD STM STT STX STZ SUI SWK SWKS SYF SYY TDG TDY TECH TEL TER TFC TFX TGT TKO TMUS TPR TRGP TRMB TROW TRV TSCO TSN TT TTD TTWO TXT TYL UAL UDR UHS ULTA UNM UNP UPS URI USB VFC VICI VLO VLTO VMC VRSK VRSN VTR VTRS VZ WAB WAT WBA WBD WDC WEC WELL WM WMB WRB WST WTW WY WYNN XEL XYL YUM ZBH ZBRA ZS ZTS".split()),
     "nasdaq100": tuple("AAPL MSFT NVDA GOOGL GOOG AMZN META TSLA AVGO COST NFLX AMD INTC INTU AMAT ADBE ORCL CSCO TMUS ISRG QCOM TXN BKNG PEP HON MU SBUX LRCX KLAC ADI MELI ADSK PANW ABNB CTAS ASML SNPS CDNS REGN ROP CHTR FTNT MAR PYPL PCAR ORLY AEP CRWD MNST MRVL ROST MCHP CPRT ADP DASH KDP AZN FAST EXC ODFL XEL CSGP CCEP NXPI BIIB FANG IDXX KHC CTSH WBD ANSS GEHC ON TTWO LULU GFS ZS DDOG WDAY TEAM CDW SMCI ARM PDD MDB OKTA".split()),
 }
+UNIVERSE_PRESETS["sp500_ndx"] = tuple(sorted(set(UNIVERSE_PRESETS["sp500"]) | set(UNIVERSE_PRESETS["nasdaq100"])))
 
 
 def _jsafe(x):

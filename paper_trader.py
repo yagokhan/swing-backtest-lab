@@ -345,16 +345,28 @@ def _equity(st, prices=None):
     return val
 
 
+def _cost_basis(p):
+    """Pozisyonun gerçek maliyet bazı (giriş komisyonu dahil) → realize ile aynı temel.
+    Öncelik: state'teki 'cost' → bacak cost toplamı → adet×entry_fill (geri uyumlu).
+    Komisyon dahil baz, unrealize'i realize ile tutarlı kılar (total_pl = realize+unrealize)."""
+    if p.get("cost") is not None:
+        return p["cost"]
+    if p.get("legs"):
+        return sum(l["cost"] for l in p["legs"])
+    return p["shares"] * p.get("entry_fill", p["entry"])
+
+
 def _exit_plan_txt(p):
     """Pozisyonun çıkış planı metni: EMA varyantında kalan bacaklar, şamdanda trail seviyesi,
     yoksa stop+hedef."""
     if p.get("legs"):
-        rem = [("8-EMA" if l["rule"] == "ema8" else "21-EMA") for l in p["legs"] if l["shares"] > 0]
-        return "çıkış: kapanış < " + " / ".join(rem) if rem else "çıkış: tamamlandı"
+        _lbl = {"ema8": "kapanış&lt;8-EMA", "ema21": "kapanış&lt;21-EMA", "target": "+2R hedef"}
+        rem = [_lbl.get(l["rule"], l["rule"]) for l in p["legs"] if l["shares"] > 0]
+        return "çıkış: " + " / ".join(rem) if rem else "çıkış: tamamlandı"
     if p.get("peak") is not None:
         lvl = p.get("chand_stop")
-        return (f"çıkış: kapanış < <code>${lvl:.2f}</code> (tepe−{CHAND_MULT}×ATR)"
-                if lvl is not None else f"çıkış: kapanış < tepe−{CHAND_MULT}×ATR")
+        return (f"çıkış: kapanış &lt; <code>${lvl:.2f}</code> (tepe−{CHAND_MULT}×ATR)"
+                if lvl is not None else f"çıkış: kapanış &lt; tepe−{CHAND_MULT}×ATR")
     return f"stop <code>${p['stop']:.2f}</code> · hedef <code>${p['target']:.2f}</code>"
 
 
@@ -411,8 +423,10 @@ def portfolio_message(st, prices, now_str, tag=None):
             L.append(f"• <b>{p['symbol']}</b> giriş <code>${ef:.2f}</code> · "
                      f"{p['shares']:.3f} adet · <i>fiyat alınamadı</i>")
             continue
-        pnl = p["shares"] * (px - ef)
-        pct = (px / ef - 1) * 100
+        basis = _cost_basis(p)               # komisyon dahil gerçek maliyet
+        mv = p["shares"] * px
+        pnl = mv - basis
+        pct = (mv / basis - 1) * 100 if basis else 0.0
         unreal += pnl
         em = "🟢" if pnl >= 0 else "🔴"
         L.append(f"{em} <b>{p['symbol']}</b> <code>${px:.2f}</code> "
