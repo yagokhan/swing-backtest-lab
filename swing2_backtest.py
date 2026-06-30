@@ -1941,7 +1941,9 @@ def _jsafe(x):
 def _get_market(cfg: Config) -> dict:
     key = (tuple(cfg.universe), cfg.period, cfg.start_date, cfg.end_date,
            cfg.interval, cfg.atr_period,
-           cfg.slope_window, cfg.pivot_lookback, cfg.warmup_bars, cfg.use_earnings)
+           cfg.slope_window, cfg.pivot_lookback, cfg.warmup_bars, cfg.use_earnings,
+           getattr(cfg, "use_rs_universe", False), getattr(cfg, "rs_n", 50),
+           tuple(getattr(cfg, "rs_pool", ()) or ()))
     if key not in _MARKET_CACHE:
         _MARKET_CACHE[key] = load_market(cfg)
     else:
@@ -1958,6 +1960,14 @@ def run_backtest_api(params: dict) -> dict:
         cfg.universe = tuple(s.strip().upper() for s in syms if s and s.strip())[:120]
     else:
         cfg.universe = UNIVERSE_PRESETS.get(params.get("preset", "default"), DEFAULT_UNIVERSE)
+    # RS top-50 sistematik evren kapısı (canlı Qulla-21 ile birebir): havuz = seçilen evren,
+    # her gün göreli güç (RS) ile top-N'e indirilir; yalnız o N'e giriş açılır.
+    # attach_watchlist uygular (rs_pool boşsa cfg.universe havuz olur).
+    cfg.use_rs_universe = bool(params.get("use_rs_universe", False))
+    try:
+        cfg.rs_n = int(max(5, min(200, params.get("rs_n", cfg.rs_n))))
+    except (TypeError, ValueError):
+        pass
     # Parametreler (clamp'li)
     cfg.min_score = int(max(0, min(24, params.get("min_score", cfg.min_score))))
     cfg.rr_target = float(max(1.0, min(6.0, params.get("rr_target", cfg.rr_target))))
@@ -2122,6 +2132,7 @@ def run_backtest_api(params: dict) -> dict:
                    "sizing_mode": cfg.sizing_mode, "risk_per_trade_pct": cfg.risk_per_trade_pct,
                    "max_position_pct": cfg.max_position_pct,
                    "entry_mode": cfg.entry_mode, "qswing_min_score": cfg.qswing_min_score,
+                   "use_rs_universe": getattr(cfg, "use_rs_universe", False), "rs_n": getattr(cfg, "rs_n", 50),
                    "period": cfg.period, "compounding": cfg.compounding,
                    "date_range": bool(cfg.start_date or cfg.end_date),
                    "req_start": cfg.start_date or None, "req_end": cfg.end_date or None,

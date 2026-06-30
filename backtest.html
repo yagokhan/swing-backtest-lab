@@ -74,13 +74,14 @@ th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:
   <div id="panel-bt">
     <div class="card">
       <div class="grid">
-        <label class="fld"><span class="kicker">Evren (preset)</span>
-          <select id="preset" title="qswing girişi tüm evrenlerde temiz çalışır. swing2 girişinde sp500/nasdaq100'ün sektör-haritası olmayan isimleri 4. katman puanını kaybeder.">
+        <label class="fld"><span class="kicker">RS havuzu (evren)</span>
+          <select id="preset" title="Havuz = bu evrenden her gün göreli-güç (RS) ile en güçlü top-50 seçilir; yalnız o 50'ye giriş açılır (canlı Qulla-21 kapısı). Canlı = S&P500+NDX (~373). Küçük havuzlarda (≤50) kapı pasif kalır.">
+            <option value="sp500_ndx" selected>S&P500+NDX (~373, canlı havuz) → RS top-50</option>
+            <option value="sp500">Mega+Large (~350) → RS top-50</option>
+            <option value="nasdaq100">NASDAQ-100 (~86) → RS top-50</option>
             <option value="default">Geniş (~95)</option>
             <option value="mega">Mega Cap (20)</option>
             <option value="tech">Teknoloji (18)</option>
-            <option value="nasdaq100">NASDAQ-100 (~86)</option>
-            <option value="sp500">Mega+Large (~350)</option>
           </select></label>
         <label class="fld" title="Virgülle ayrılmış özel sembol listesi. Doluysa preset'i yok sayar (en çok 120 sembol)."><span class="kicker">Özel semboller (ops.)</span>
           <input type="text" id="symbols" placeholder="AAPL,MSFT,... (preset'i ezer)"></label>
@@ -93,7 +94,7 @@ th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:
         <div class="fld" style="flex:1 1 100%;background:var(--elev);border:1px solid var(--border);border-radius:8px;padding:10px 12px;" title="Backtest yalnız canlı kağıt-portföy yöntemini koşar — giriş/çıkış seçimi yoktur.">
           <span class="kicker">Yöntem (canlı · sabit)</span>
           <div style="font-size:15px;font-weight:800;margin-top:3px;">👑 Qulla-21</div>
-          <div class="muted" style="font-size:12px;margin-top:4px;">qswing <b>63g kırılım</b> girişi · <b>bölünmüş çıkış</b>: ½ <b>+2R hedef</b> · ½ <b>21-EMA runner</b> · kapanış teyidi açık · sabit <b>%5/slot · 20 slot · bileşik</b> — canlı kağıt-portföyle birebir.</div>
+          <div class="muted" style="font-size:12px;margin-top:4px;"><b>RS top-50</b> sistematik evren (havuzdan günlük göreli-güç kapısı) · qswing <b>63g kırılım</b> girişi · <b>bölünmüş çıkış</b>: ½ <b>+2R hedef</b> · ½ <b>21-EMA runner</b> · kapanış teyidi açık · sabit <b>%5/slot · 20 slot · bileşik</b> — canlı kağıt-portföyle birebir.</div>
         </div>
       </div>
       <!-- motor payload'ı için sabit yöntem değerleri (UI'da seçim yok) -->
@@ -181,6 +182,7 @@ $('qs-universe').onchange = e => $('qs-custom').classList.toggle('hide', e.targe
 function buildPayload(){
   const p = {
     preset: $('preset').value, period: $('period').value,
+    use_rs_universe: true, rs_n: 50,                                     // RS top-50 sistematik evren kapısı (canlı)
     entry_mode: 'qswing', qswing_breakout_lb: 63, qswing_min_score: 0,   // qswing 63g kırılım, filtresiz
     exit_strategy: 'split',                                              // bölünmüş çıkış
     split_a: 'target', split_a_param: 2.0,                              // ½ → +2R hedef
@@ -341,7 +343,7 @@ function renderBacktest(d){
   $('bt-results').classList.remove('hide');
   const c=d.config, m=d.metrics;
   $('bt-cfgline').textContent = `${c.universe_n} hisse · ${c.start}→${c.end}`+(c.date_range?' (el ile aralık)':' · '+c.period)
-     + ` · 👑 Qulla-21: qswing 63g kırılım + bölünmüş (A:${c.split_a||'+2R'} · B:${c.split_b||'21-EMA'})`
+     + ` · 👑 Qulla-21: ${c.use_rs_universe?('RS top-'+(c.rs_n||50)+' + '):''}qswing 63g kırılım + bölünmüş (A:${c.split_a||'+2R'} · B:${c.split_b||'21-EMA'})`
      + ` · sabit %${Math.round((c.max_position_pct||0.05)*100)}/slot · 20 slot`;
   const cls=x=>x>=0?'pos':'neg';
   $('bt-metrics').innerHTML = [
