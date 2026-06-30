@@ -154,10 +154,18 @@ def load_market_incremental(asof=None, full_refresh_days=7):
                 for t, v in ref.items():
                     if v is not None and len(v):
                         store["frames"][t] = v
+            # KORUMA: eşzamanlı (çok-işçili) fetch FMP rate-limit'te SEMBOL BUDAYABİLİR
+            # (özellikle pivot SPY) → depo sessizce donar, defter ilerlemez. Benchmark'ı
+            # tek-işçiyle güvenilir tazele + geride kalanları kurtar (yoksa net UYARI bas).
+            _incremental_repair(store, tickers, cfg, key, inc_start, end_str)
             # last_date = gerçek son SPY barı (FMP'de henüz olmayan günü "var" sanma)
             spy_df = store["frames"].get(cfg.benchmark)
-            store["last_date"] = (spy_df.index[-1] if spy_df is not None and len(spy_df)
-                                  else last).strftime("%Y-%m-%d")
+            new_last = (spy_df.index[-1] if spy_df is not None and len(spy_df) else last)
+            if asof_ts > last and new_last <= last:
+                print(f"[veri deposu] ⚠️ beklenen yeni güne rağmen benchmark ({cfg.benchmark}) "
+                      f"{last.date()}'ten ilerlemedi — FMP'de henüz yeni bar yok ya da çekim "
+                      f"başarısız; defter bugün ilerlemeyecek (eski veriyle yayın YAPMA).", flush=True)
+            store["last_date"] = new_last.strftime("%Y-%m-%d")
             _save_store(store)
         else:
             print(f"[veri deposu] güncel (son bar {store['last_date']} < asof, tam gün) → indirme yok", flush=True)
@@ -165,6 +173,67 @@ def load_market_incremental(asof=None, full_refresh_days=7):
     # Depodaki ham seriden göstergeleri TAZE hesapla (asof'ta geleceği kes) + RS watchlist EKLE
     market = s.build_market_from_frames(store["frames"], cfg, today=asof_ts)
     return s.attach_watchlist(market, cfg)   # KRİTİK: RS top-50 kapısı (yoksa yanlış evren)
+
+
+def _incremental_repair(store, tickers, cfg, key, inc_start, end_str):
+    """Artımlı çekim KORUMASI — sessiz depo donmasını önler.
+
+    Çok-işçili eşzamanlı fetch (FMP ücretsiz tier) yoğun anda (15:45 ET) bazı sembolleri
+    BUDAYABİLİR: yanıt yalnız sınır gününü döndürür → o sembol ilerlemez. Pivot SPY budanırsa
+    depo `last_date`'i (= SPY son barı) yerinde kalır, defterin 'yeni gün' listesi boşalır,
+    sistem HATASIZ ama ESKİ veriyle yayın yapar. Bu koruma iki adımda onarır:
+      1) benchmark'ı (SPY) HER ZAMAN tek-işçiyle (workers=1, rate-limit'e takılmaz) yeniden
+         çekip birleştirir — pivot mutlaka taze olmalı.
+      2) benchmark'ın son barının GERİSİNDE kalan (budanmış) sembolleri tespit edip düşük
+         eşzamanlılıkla tazeler; kurtulamayanlar için net UYARI basar.
+    Normal günde (bulk fetch sağlam) geride kalan olmaz → ek maliyet yalnız 1 SPY çağrısı."""
+    bench = cfg.benchmark
+    # 1) benchmark'ı sıralı (güvenilir) yeniden çek + birleştir
+    bf = s.fetch_daily_fmp([bench], key, inc_start, end_str, workers=1).get(bench)
+    if bf is not None and len(bf):
+        old = store["frames"].get(bench)
+        comb = pd.concat([old, bf]) if (old is not None and len(old)) else bf
+        store["frames"][bench] = comb[~comb.index.duplicated(keep="last")].sort_index()
+    spy_df = store["frames"].get(bench)
+    if spy_df is None or not len(spy_df):
+        return
+    spy_last = spy_df.index[-1]
+    # 2) benchmark'ın son barına ulaşamamış sembolleri bul. KISA boşluk (≤7 takvim günü) =
+    #    eşzamanlı fetch budaması → onarılabilir. UZUN boşluk = muhtemelen delisted/halt
+    #    (FMP'de güncel bar yok) → onarım denenmez, her gece gürültü üretmez.
+    def _gap(t):
+        df = store["frames"].get(t)
+        if df is None or not len(df):
+            return 10 ** 6
+        return (spy_last - df.index[-1]).days
+    truncated = [t for t in tickers if t != bench and 0 < _gap(t) <= 7]
+    dead = [t for t in tickers if t != bench and _gap(t) > 7]
+    if not truncated:
+        if dead:
+            print(f"[veri deposu] not: {len(dead)} sembol uzun süredir güncel değil "
+                  f"(muhtemelen delisted/halt, evren dışı): {', '.join(sorted(dead)[:12])}"
+                  + (" ..." if len(dead) > 12 else ""), flush=True)
+        return
+    print(f"[veri deposu] KORUMA: {len(truncated)} sembol benchmark'ın ({spy_last.date()}) "
+          f"gerisinde (budanma şüphesi) → tek-işçiyle tazeleniyor: {', '.join(truncated[:12])}"
+          + (" ..." if len(truncated) > 12 else ""), flush=True)
+    rf = s.fetch_daily_fmp(truncated, key, inc_start, end_str, workers=1)
+    for t, nd in rf.items():
+        if nd is None or not len(nd):
+            continue
+        old = store["frames"].get(t)
+        if old is None or not len(old):
+            store["frames"][t] = nd; continue
+        lc = float(old["Close"].iloc[-1]); fn = float(nd["Close"].iloc[0])
+        if lc > 0 and not (0.6 <= fn / lc <= 1.4):   # split şüphesi → dokunma (haftalık tam yenileme halleder)
+            continue
+        comb = pd.concat([old, nd])
+        store["frames"][t] = comb[~comb.index.duplicated(keep="last")].sort_index()
+    still = [t for t in truncated if _gap(t) > 0]
+    if still:
+        print(f"[veri deposu] ⚠️ KORUMA sonrası hâlâ geride: {len(still)} sembol "
+              f"({', '.join(still[:12])}{' ...' if len(still) > 12 else ''}) — bu semboller "
+              f"{spy_last.date()} barı olmadan değerlenecek/işlenecek.", flush=True)
 
 
 # =========================================================================

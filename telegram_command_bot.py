@@ -20,6 +20,7 @@ from datetime import datetime
 
 import requests
 import paper_trader as pt
+import qulla_paper as qp
 
 KEYS = os.path.expanduser("~/.portfolio_keys.json")
 OFFSET_FILE = os.path.expanduser("~/.swing_cmdbot_offset")
@@ -76,7 +77,7 @@ def _save_offset(off):
 
 
 HELP = ("<b>📓 Kağıt Portföy Botu</b>\n"
-        "/portfolio — anlık K/Z + açık pozisyon detayı (üç portföy)\n"
+        "/portfolio — 👑 Qulla-21 anlık K/Z + açık pozisyon detayı\n"
         "/lastscan — son 22:45 tarama mesajı\n"
         "/abone — her akşam 22:45 tarama + portföy yayınına abone ol\n"
         "/iptal — yayın aboneliğini bitir\n"
@@ -85,15 +86,12 @@ HELP = ("<b>📓 Kağıt Portföy Botu</b>\n"
 
 def handle(cmd, token, chat, fmp_key, chat_name=""):
     if cmd in ("/portfolio", "/p"):
-        st = pt.load_state()
-        ema_st = pt.load_state(pt.PAPER_EMA, variant="ema")
-        ch_st = pt.load_state(pt.PAPER_CHAND, variant="chand")
-        syms = sorted(pt.held_symbols(st) | pt.held_symbols(ema_st) | pt.held_symbols(ch_st))
+        # 👑 Qulla-21 (TEK yöntem) — canlı cron'un yazdığı durum dosyasından
+        st = pt.load_state(qp.PAPER_QULLA, variant="qulla")
+        syms = sorted(pt.held_symbols(st))
         prices = pt.quote_fmp(syms, fmp_key) if (syms and fmp_key) else {}
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        _send(token, chat, pt.portfolio_message(st, prices, now, tag="🏆 ATR-trail"))
-        _send(token, chat, pt.portfolio_message(ema_st, prices, now, tag="📐 8/21-EMA"))
-        _send(token, chat, pt.portfolio_message(ch_st, prices, now, tag="💡 63G-Şamdan"))
+        _send(token, chat, pt.portfolio_message(st, prices, now, tag="👑 Qulla-21"))
     elif cmd in ("/lastscan", "/ls"):
         ls = pt.load_last_scan()
         if not ls:
