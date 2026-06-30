@@ -312,19 +312,35 @@ def open_new(st, buyable, asof):
 
 # ----------------------------- canlı quote -------------------------------
 def quote_fmp(symbols, key):
-    """FMP /stable/quote ile anlık fiyat: {sym: price}. Başarısızsa sembol atlanır."""
+    """FMP /stable/quote ile anlık fiyat: {sym: price}. Başarısızsa sembol atlanır.
+
+    FMP toplu-quote bu planda kapalı (legacy v3 → 403, /stable/batch-quote → 402), o
+    yüzden sembol başına ayrı istek gerekiyor — ama PARALEL (ThreadPoolExecutor) çekilir.
+    20+ pozisyonda sıralı ~12-27 sn yerine ~1-2 sn (dashboard /api/portfolio + Telegram
+    /portfolio aynı yoldan hızlanır)."""
     import urllib.request as _u, urllib.parse as _up, json as _json
-    out = {}
-    for sym in symbols:
+    from concurrent.futures import ThreadPoolExecutor
+
+    def _one(sym):
         url = _FMP_QUOTE + "?" + _up.urlencode({"symbol": sym, "apikey": key})
         try:
             req = _u.Request(url, headers={"User-Agent": "swing2/1.0"})
             with _u.urlopen(req, timeout=12) as r:
                 raw = _json.loads(r.read().decode("utf-8"))
             if isinstance(raw, list) and raw and raw[0].get("price") is not None:
-                out[sym] = float(raw[0]["price"])
+                return sym, float(raw[0]["price"])
         except Exception:
             pass
+        return sym, None
+
+    syms = list(symbols)
+    if not syms:
+        return {}
+    out = {}
+    with ThreadPoolExecutor(max_workers=min(10, len(syms))) as ex:
+        for sym, px in ex.map(_one, syms):
+            if px is not None:
+                out[sym] = px
     return out
 
 

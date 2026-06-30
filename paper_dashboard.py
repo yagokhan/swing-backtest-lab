@@ -297,8 +297,21 @@ def market_status():
 
 
 # ----------------------------- portföy JSON -----------------------------
+def _warm_daily_change(symbols):
+    """Pozisyonların bugünkü K/Z'si için 15dk barları PARALEL ısıt. FMP intraday toplu
+    çekilemiyor (sembol başına ayrı istek) → sıralı 20 pozisyon ~15 sn sürüyordu; paralel
+    ısıtmadan sonra döngüdeki _daily_change çağrıları cache'ten gelir (~1-2 sn)."""
+    syms = list(dict.fromkeys(s for s in symbols if s))
+    if len(syms) <= 1:
+        return
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=min(10, len(syms))) as ex:
+        list(ex.map(_daily_change, syms))
+
+
 def _portfolio_payload(st, prices):
     """Tek portföyün JSON gövdesi (market/slippage hariç) — şampiyon + EMA için ortak."""
+    _warm_daily_change([p["symbol"] for p in st["positions"]])
     positions, mkt_val, unreal = [], 0.0, 0.0
     for p in sorted(st["positions"], key=lambda x: x["symbol"]):
         ef = p.get("entry_fill", p["entry"])
@@ -429,6 +442,42 @@ def portfolio_json():
     out["spy_now"] = spy_now
     _spy_bench(out, spy_now, hist)
     return out
+
+
+def equity_json():
+    """Defterin (ledger) equity_curve'ünden sermaye eğrisi + günlük K/Z.
+    SALT-OKUR — yalnız ~/.swing_paper_qulla_ledger.json okunur (engine/trade'e dokunmaz).
+    Döner: {points:[{date, equity, daily_pnl}], initial, start, last_date}.
+    daily_pnl = o günkü özsermaye − bir önceki gün (ilk gün: başlangıç sermayesine göre)."""
+    try:
+        with open(qp.PAPER_QULLA_LEDGER) as f:
+            L = json.load(f)
+    except Exception:
+        return {"points": [], "initial": None}
+    ec = L.get("equity_curve") or []
+    initial = float(L.get("initial", pt.START_CAPITAL) or pt.START_CAPITAL)
+    # SPY al-tut kıyası: başlangıç günü kapanışından itibaren aynı $ ile tut
+    hist = _spy_history()
+    start = L.get("start")
+    s0 = _spy_close_on(hist, start) if start else None
+    points, prev, prev_spy = [], initial, initial
+    for row in ec:
+        try:
+            d, eq = row[0], float(row[1])
+        except Exception:
+            continue
+        rec = {"date": d, "equity": round(eq, 2), "daily_pnl": round(eq - prev, 2)}
+        if s0:
+            sd = _spy_close_on(hist, d)
+            if sd:
+                spy_eq = initial * sd / s0
+                rec["spy_equity"] = round(spy_eq, 2)
+                rec["spy_daily_pnl"] = round(spy_eq - prev_spy, 2)
+                prev_spy = spy_eq
+        points.append(rec)
+        prev = eq
+    return {"points": points, "initial": round(initial, 2), "has_spy": s0 is not None,
+            "start": L.get("start"), "last_date": L.get("last_date")}
 
 
 def scan_json():
@@ -575,6 +624,14 @@ PAGE = """<!doctype html><html lang="tr"><head><meta charset="utf-8">
  .kpi .v{font-size:17px;font-weight:650;letter-spacing:-.01em}
  .kpi .l{color:var(--sis);font-size:10.5px;font-weight:550;letter-spacing:.07em;text-transform:uppercase;margin-top:2px}
 
+ /* sermaye eğrisi + günlük K/Z grafikleri (defter equity_curve'ünden, salt-görüntü) */
+ .eqcharts{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:0 0 6px}
+ @media(max-width:860px){.eqcharts{grid-template-columns:1fr}}
+ .eqbox{background:var(--gece);border:1px solid var(--cizgi);border-radius:8px;padding:10px 12px 12px}
+ .eqlbl{font-size:10.5px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--sis);margin-bottom:8px}
+ .eqlbl .lg{font-weight:650;letter-spacing:.02em;margin-left:6px;text-transform:none}
+ .eqc{width:100%;height:240px}
+
  /* tablolar: defterin içinde çerçevesiz; satırlar ince çizgiyle */
  table{width:100%;border-collapse:collapse;font-size:13px}
  th,td{padding:7px 10px;text-align:right;border-bottom:1px solid var(--cizgi);white-space:nowrap}
@@ -627,6 +684,11 @@ PAGE = """<!doctype html><html lang="tr"><head><meta charset="utf-8">
     <h2>👑 Qulla-21</h2>
     <span class="kural">evren: günlük RS top-50 (S&amp;P500+Nasdaq100) · giriş: 63g kırılım · çıkış (split): yarı +2R hedef · kalan yarı kapanış&lt;21-EMA runner · backtest-replay (sabit çapa 2026-05-19)</span>
     <div class="kpis" id="kpis"></div>
+    <h3 class="alt">Sermaye Eğrisi &amp; Günlük K/Z (başlangıçtan bugüne)</h3>
+    <div class="eqcharts">
+      <div class="eqbox"><div class="eqlbl">📈 Ana Para (Özsermaye) · Tarih <span class="lg" style="color:#d4a843">— portföy</span> <span class="lg" style="color:#a9b2c1">┄ SPY al-tut</span></div><div id="eqChart" class="eqc"></div></div>
+      <div class="eqbox"><div class="eqlbl">📊 Günlük K/Z · Tarih <span class="lg" style="color:#3ecf8e">▮</span><span class="lg" style="color:#f07b7b">▮ portföy</span> <span class="lg" style="color:#7eb3e3">— SPY</span></div><div id="pnlChart" class="eqc"></div></div>
+    </div>
     <h3 class="alt">Açık Pozisyonlar</h3><div id="open"></div>
     <h3 class="alt">Kapanan İşlemler</h3><div id="closed"></div>
   </section>
@@ -662,8 +724,51 @@ async function loadAll(){
   renderRace(p);
   renderKpis(p,'kpis'); renderOpen(p,'open',true); renderClosed(p,'closed');
   renderScan(s); renderMkt(p.market);
+  loadEquity();
   $('meta').textContent=`başlangıç ${p.started||'?'} · ${p.slippage||'slippage kapalı'}`;
   $('upd').textContent='güncellendi '+new Date().toLocaleTimeString('tr-TR');
+}
+// ---- sermaye eğrisi + günlük K/Z (defter equity_curve'ünden; salt-görüntü) ----
+let _eqChart=null,_eqSeries=null,_eqSpy=null,_pnlChart=null,_pnlSeries=null,_pnlSpy=null,_eqBase=null;
+function ensureEqCharts(){
+  if(_eqChart)return;
+  const o={layout:{background:{color:'#101216'},textColor:'#a9b2c1',fontSize:11},
+    grid:{vertLines:{color:'rgba(174,188,214,.05)'},horzLines:{color:'rgba(174,188,214,.05)'}},
+    timeScale:{borderColor:'rgba(174,188,214,.15)'},
+    rightPriceScale:{borderColor:'rgba(174,188,214,.15)'},crosshair:{mode:0}};
+  const e1=$('eqChart');e1.innerHTML='';
+  _eqChart=LightweightCharts.createChart(e1,{...o,width:e1.clientWidth,height:e1.clientHeight,autoSize:true});
+  _eqSeries=_eqChart.addAreaSeries({lineColor:'#d4a843',topColor:'rgba(212,168,67,.30)',
+    bottomColor:'rgba(212,168,67,.02)',lineWidth:2,priceLineVisible:false,
+    priceFormat:{type:'price',precision:0,minMove:1}});
+  _eqSpy=_eqChart.addLineSeries({color:'#a9b2c1',lineWidth:1,lineStyle:2,
+    priceLineVisible:false,lastValueVisible:false,priceFormat:{type:'price',precision:0,minMove:1}});
+  const e2=$('pnlChart');e2.innerHTML='';
+  _pnlChart=LightweightCharts.createChart(e2,{...o,width:e2.clientWidth,height:e2.clientHeight,autoSize:true});
+  _pnlSeries=_pnlChart.addHistogramSeries({priceLineVisible:false,
+    priceFormat:{type:'price',precision:0,minMove:1}});
+  _pnlSpy=_pnlChart.addLineSeries({color:'#7eb3e3',lineWidth:1,
+    priceLineVisible:false,lastValueVisible:false,priceFormat:{type:'price',precision:0,minMove:1}});
+  window.addEventListener('resize',()=>{if(_eqChart){
+    _eqChart.applyOptions({width:e1.clientWidth,height:e1.clientHeight});
+    _pnlChart.applyOptions({width:e2.clientWidth,height:e2.clientHeight});}});
+}
+async function loadEquity(){
+  let d;
+  try{d=await fetch('/api/equity').then(r=>r.json());}catch(e){return;}
+  if(!d.points||!d.points.length)return;
+  ensureEqCharts();
+  _eqSeries.setData(d.points.map(p=>({time:p.date,value:p.equity})));
+  _pnlSeries.setData(d.points.map(p=>({time:p.date,value:p.daily_pnl,
+    color:p.daily_pnl>=0?'#3ecf8e':'#f07b7b'})));
+  // SPY al-tut kıyası (varsa)
+  _eqSpy.setData(d.points.filter(p=>p.spy_equity!=null).map(p=>({time:p.date,value:p.spy_equity})));
+  _pnlSpy.setData(d.points.filter(p=>p.spy_daily_pnl!=null).map(p=>({time:p.date,value:p.spy_daily_pnl})));
+  if(_eqBase==null && d.initial!=null){
+    _eqBase=_eqSeries.createPriceLine({price:d.initial,color:'rgba(169,178,193,.45)',
+      lineWidth:1,lineStyle:2,axisLabelVisible:true,title:'başlangıç $'+f(d.initial,0)});
+  }
+  _eqChart.timeScale().fitContent();_pnlChart.timeScale().fitContent();
 }
 function renderRace(p){
   // yarış rayı: üç defterin özsermayesi tek bakışta (salt görüntü — /api/portfolio verisinden)
@@ -849,6 +954,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._send(200, json.dumps(portfolio_json(), ensure_ascii=False), "application/json")
             elif path == "/api/scan":
                 self._send(200, json.dumps(scan_json(), ensure_ascii=False), "application/json")
+            elif path == "/api/equity":
+                self._send(200, json.dumps(equity_json(), ensure_ascii=False), "application/json")
             elif path == "/static/lwc.js":
                 self._send(200, _LWC_JS, "application/javascript; charset=utf-8")
             elif path == "/rapor":
