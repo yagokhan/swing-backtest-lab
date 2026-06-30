@@ -55,7 +55,7 @@ th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:
     <div>
       <div class="kicker">Bağımsız · serve.py /api · FMP verisi</div>
       <h1>Swing Backtest Lab</h1>
-      <div class="muted" style="font-size:12px;">swing2 (8-katman) + qswing (Qullamaggie kırılım) · veri ve trade mantığı motordan birebir</div>
+      <div class="muted" style="font-size:12px;">👑 Qulla-21 tek yöntem · qswing 63g kırılım + bölünmüş çıkış (½ +2R · ½ 21-EMA) · canlı kağıt-portföyle birebir</div>
     </div>
     <div class="muted" style="font-size:12px;text-align:right;">
       <a id="paperDashLink" href="http://localhost:8061/" target="_blank" rel="noopener" title="Canlı kağıt-trade dashboard: portföy, tarama, AL/SAT grafikleri (port 8061).">📓 Paper Dashboard ↗</a><br>
@@ -66,7 +66,7 @@ th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:
    (function(){var l=document.getElementById('paperDashLink');if(l)l.href=location.protocol+'//'+location.hostname+':8061/';})();</script>
 
   <div class="tabs">
-    <div class="tab active" id="tab-bt" onclick="showTab('bt')" title="Geçmiş veriyle strateji simülasyonu: giriş/çıkış seç, koştur, getiri/DD/işlemleri gör.">📊 Backtest</div>
+    <div class="tab active" id="tab-bt" onclick="showTab('bt')" title="Geçmiş veriyle 👑 Qulla-21 simülasyonu: evren/dönem seç, koştur, getiri/DD/işlemleri gör.">📊 Backtest</div>
     <div class="tab" id="tab-qs" onclick="showTab('qs')" title="Anlık qswing analizi: tek hisse raporu veya bir evreni tarayıp net duruş (AL/İZLE/KAÇIN) listesi.">🔎 qswing Tarama / Rapor</div>
   </div>
 
@@ -90,133 +90,21 @@ th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:
         <label class="fld" title="El ile test aralığı bitişi. İkisi de doluysa 'Dönem'i ezer."><span class="kicker">Bitiş (ops.)</span><input type="date" id="end"></label>
       </div>
       <div class="grid" style="margin-top:12px;">
-        <label class="fld" title="Giriş sinyali motoru. swing2 = 8-katman skor (24p) + kill-switch. qswing = Qullamaggie kırılım (40g tepe + 52H yakınlık + SPY'ı geçen momentum)."><span class="kicker">Giriş Stratejisi</span>
-          <select id="entry" onchange="refreshForm()">
-            <option value="swing2">swing2 · 8-katman skor</option>
-            <option value="qswing">qswing · Qullamaggie kırılım</option>
-          </select></label>
-        <label class="fld" title="Çıkış/stop motoru. Şampiyon = ATR-trail (kısmi @2R + 2.5×ATR süren stop). MA-trail = 10g SMA altına kapanış. 8-EMA modları = sabit 8-EMA stop + farklı kâr-al (TP)."><span class="kicker">Çıkış Stratejisi</span>
-          <select id="exit" onchange="refreshForm()">
-            <option value="champion">🏆 Şampiyon (canlı · 2R kısmi + 2.5×ATR · sabit)</option>
-            <option value="atr_trail">💡 63G-Şamdan (63g giriş · 3.25×ATR şamdan)</option>
-            <option value="ma_trail">Qullamaggie · 10g MA trail</option>
-            <option value="rr_based">8-EMA stop · RR hedef</option>
-            <option value="momentum">8-EMA stop · RSI/Stoch</option>
-            <option value="atr_climax">8-EMA stop · ATR climax</option>
-            <option value="hybrid">📐 8/21-EMA hibrit (canlı · sabit)</option>
-            <option value="hybrid2">8-EMA Hibrit 2 (kapanış + BE kilidi)</option>
-            <option value="split">✂️ Bölünmüş çıkış (½ A + ½ B)</option>
-            <option value="atr_regime">🛡️ ATR-Rejim (saf ATR + oynaklık kilidi)</option>
-          </select></label>
-        <label class="fld" id="fld-min_score" title="8-katman skor eşiği (0–24). Yalnız swing2 girişinde kullanılır; qswing kırılımı skor kullanmaz."><span class="kicker">Min skor (swing2)</span><input type="number" id="min_score" value="16" min="0" max="24"></label>
-        <label class="fld" id="fld-qmin" title="qswing 0–100 öncelik skoru EŞİĞİ — canlı tarayıcıyla AYNI formül (RS 45 + 52H yakınlık 20 + tazelik/SMA20 20 + risk kalitesi 15). 0 = filtre kapalı (tüm kırılımlar). Ör. 65 = yalnız skoru ≥65 olan temiz kurulumlara gir. Yalnız qswing girişinde geçerli."><span class="kicker">Min qswing skoru (0–100)</span><input type="number" id="qmin" value="0" min="0" max="100" step="5"></label>
-        <label class="fld" id="fld-rr_target" title="İlk/nihai hedef = giriş + (giriş−stop) × bu (R cinsinden). Yalnız Şampiyon (ATR-trail) çıkışında devreye girer."><span class="kicker">R/R hedef</span><input type="number" id="rr_target" value="2.0" step="0.5" min="1" max="6"></label>
-        <label class="fld" id="fld-atr_stop" title="Stop tabanı = kapanış − bu × ATR(14). Şampiyon ve MA-trail çıkışında geçerli. 8-EMA modlarında stop daima 8-EMA'dır → kullanılmaz."><span class="kicker">ATR stop ×</span><input type="number" id="atr_stop" value="1.5" step="0.5" min="0.5" max="5"></label>
-        <label class="fld" title="Aynı anda taşınacak en fazla açık pozisyon sayısı."><span class="kicker">Maks pozisyon</span><input type="number" id="max_pos" value="5" min="1" max="20"></label>
-        <label class="fld" title="Sabit: her poz = sermaye × 'Poz %'. Risk-bazlı: her işlem 'Risk/işlem %' kadar riske eder (lot = risk$ / stop-mesafesi); 'Poz %' tavan olur."><span class="kicker">Boyutlandırma</span>
-          <select id="sizing" onchange="refreshForm()"><option value="fixed">Sabit tahsis</option><option value="risk">Risk-bazlı</option></select></label>
-        <label class="fld" id="fld-risk_pct" title="İşlem başına riske edilecek sermaye %'si (stop'a takılırsa kaybedilecek). Stop referansı: 8-EMA modlarında 8-EMA, diğerlerinde LOW10/ATR plan stop. Giriş yöntemi (swing2/qswing) bunu değiştirmez."><span class="kicker">Risk/işlem %</span><input type="number" id="risk_pct" value="1.0" step="0.25" min="0.1" max="10"></label>
-        <label class="fld" title="Sabit modda poz başına sermaye payı; Risk modda poz büyüklüğü tavanı."><span class="kicker">Poz %</span><input type="number" id="pos_pct" value="20" step="5" min="2" max="100"></label>
-      </div>
-      <!-- çıkış alt-parametreleri -->
-      <div class="row exsub ex-ma_trail hide" style="margin-top:12px;">
-        <label class="fld" title="Süren çıkış için hareketli ortalama periyodu. Qullamaggie standardı 10 gün: fiyat bu SMA'nın altına KAPANINCA çıkılır."><span class="kicker">MA periyodu</span><input type="number" id="ma_trail_len" value="10" min="3" max="50"></label>
-      </div>
-      <div class="row exsub ex-rr_based hide" style="margin-top:12px;">
-        <label class="fld" title="Kısmi kârda satılacak pozisyon oranı (0.3 = %30)."><span class="kicker">Kısmi %</span><input type="number" id="partial_pct" value="0.3" step="0.1" min="0.1" max="1"></label>
-        <label class="fld" title="Kısmi kâr tetiği: giriş + risk × bu (R cinsinden) seviyesinde kısmi sat."><span class="kicker">Kısmi tetik R</span><input type="number" id="partial_rr" value="1.5" step="0.5"></label>
-        <label class="fld" title="Kalan pozisyonun nihai hedefi (R cinsinden)."><span class="kicker">RR hedef</span><input type="number" id="rr_tp" value="3.0" step="0.5"></label>
-      </div>
-      <div class="row exsub ex-momentum hide" style="margin-top:12px;">
-        <label class="fld" title="RSI(14) bu eşiği aşarsa (aşırı-alım) pozisyon kârla kapatılır."><span class="kicker">RSI aşırı-alım</span><input type="number" id="rsi_ob" value="70" min="50" max="95"></label>
-      </div>
-      <div class="row exsub ex-atr_climax hide" style="margin-top:12px;">
-        <label class="fld" title="Fiyat 8-EMA'dan bu × ATR kadar yukarı saparsa (climax/parabolik) kâr al."><span class="kicker">Climax ATR ×</span><input type="number" id="climax" value="2.0" step="0.5"></label>
-      </div>
-      <div class="exsub ex-split hide" style="margin-top:12px;">
-        <div class="muted" style="font-size:12px;margin-bottom:8px;">Pozisyon <b>%50 / %50</b> ikiye bölünür; her yarı kendi kuralıyla çıkar (ortak felaket stopu yok). “+R hedef” ve “ATR-trail” için sağdaki param kullanılır.</div>
-        <div class="row">
-          <label class="fld" title="A yarısının (%50) çıkış kuralı."><span class="kicker">Çıkış A (%50)</span>
-            <select id="split_a" onchange="updateCmpSplitLabel()">
-              <option value="ema8">8-EMA kapanış</option>
-              <option value="ema21">21-EMA kapanış</option>
-              <option value="hybrid">8/21-EMA hibrit (yarısı 8-EMA · yarısı 21-EMA runner)</option>
-              <option value="ma10">10g MA kapanış</option>
-              <option value="ma20">20g MA kapanış</option>
-              <option value="ma50">50g MA kapanış</option>
-              <option value="target">+R sabit hedef</option>
-              <option value="atr_trail">ATR-trail</option>
-            </select></label>
-          <label class="fld" title="Yalnız 'A: +R hedef' (R katı) veya 'A: ATR-trail' (ATR×) seçilince kullanılır. 0 = varsayılan (hedef 2R · trail 2.5×)."><span class="kicker">A param (R / ATR×)</span><input type="number" id="split_a_param" value="0" step="0.5" min="0" max="10"></label>
-          <label class="fld" title="B yarısının (%50) çıkış kuralı."><span class="kicker">Çıkış B (%50)</span>
-            <select id="split_b" onchange="updateCmpSplitLabel()">
-              <option value="ema8">8-EMA kapanış</option>
-              <option value="ema21" selected>21-EMA kapanış</option>
-              <option value="hybrid">8/21-EMA hibrit (yarısı 8-EMA · yarısı 21-EMA runner)</option>
-              <option value="ma10">10g MA kapanış</option>
-              <option value="ma20">20g MA kapanış</option>
-              <option value="ma50">50g MA kapanış</option>
-              <option value="target">+R sabit hedef</option>
-              <option value="atr_trail">ATR-trail</option>
-            </select></label>
-          <label class="fld" title="Yalnız 'B: +R hedef' veya 'B: ATR-trail' seçilince kullanılır. 0 = varsayılan."><span class="kicker">B param (R / ATR×)</span><input type="number" id="split_b_param" value="0" step="0.5" min="0" max="10"></label>
+        <div class="fld" style="flex:1 1 100%;background:var(--elev);border:1px solid var(--border);border-radius:8px;padding:10px 12px;" title="Backtest yalnız canlı kağıt-portföy yöntemini koşar — giriş/çıkış seçimi yoktur.">
+          <span class="kicker">Yöntem (canlı · sabit)</span>
+          <div style="font-size:15px;font-weight:800;margin-top:3px;">👑 Qulla-21</div>
+          <div class="muted" style="font-size:12px;margin-top:4px;">qswing <b>63g kırılım</b> girişi · <b>bölünmüş çıkış</b>: ½ <b>+2R hedef</b> · ½ <b>21-EMA runner</b> · kapanış teyidi açık · sabit <b>%5/slot · 20 slot · bileşik</b> — canlı kağıt-portföyle birebir.</div>
         </div>
       </div>
-      <div class="exsub ex-atr_regime hide" style="margin-top:12px;">
-        <div class="muted" style="font-size:12px;margin-bottom:8px;">Saf ATR: pozisyon <b>bölünmez</b>, girişte sabitlenen hedef/stopa kadar beklenir (trailing yok). Boyut = <b>sabit $ risk</b>. <b>Oynaklık kilidi DAİMA açık</b>: SPY 20g ATR% eşiği aşarsa o gün yeni alım yok.</div>
-        <div class="row">
-          <label class="fld" title="SPY 20-gün ATR% (= SPY_ATR20/SPY_Close×100) tavanı. Bu değer aşılırsa piyasa testere kabul edilir → yeni işlem AÇILMAZ. Tipik 1.5–1.8."><span class="kicker">Rejim ATR% eşiği</span><input type="number" id="regime_thr" value="1.5" step="0.1" min="0.3" max="5"></label>
-          <label class="fld" title="Stop = giriş − bu × ATR0 (giriş barı ATR'si). Lot hesabı da bu mesafeye göre."><span class="kicker">ATR stop ×</span><input type="number" id="reg_stop" value="1.5" step="0.5" min="0.5" max="5"></label>
-          <label class="fld" title="Sabit kâr-al hedefi = giriş + bu × ATR0."><span class="kicker">ATR hedef ×</span><input type="number" id="reg_target" value="3.0" step="0.5" min="0.5" max="10"></label>
-          <label class="fld" title="İşlem başına riske edilecek sabit dolar. Lot = bu / (giriş − stop). Konsantrasyon tavanı %50 (poz% ile değiştirilebilir)."><span class="kicker">Sabit risk ($)</span><input type="number" id="reg_risk" value="1000" step="100" min="50" max="100000"></label>
-        </div>
-      </div>
+      <!-- motor payload'ı için sabit yöntem değerleri (UI'da seçim yok) -->
+      <input type="hidden" id="entry" value="qswing">
+      <input type="hidden" id="exit" value="split">
+      <input type="hidden" id="sizing" value="fixed">
       <div class="row" style="margin-top:14px;align-items:center;">
-        <label class="chk" title="Kâr/zararı sermayeye ekleyerek pozisyon büyüt (bileşik). Kapalıysa sabit sermaye."><input type="checkbox" id="compound" checked> Bileşik</label>
-        <label class="chk" id="fld-confirm" title="MA-trail ve 8-EMA çıkışlarında: günü MA'nın ALTINDA kapatınca çık (gün-içi fitili yok say). Şampiyon çıkışta etkisiz."><input type="checkbox" id="confirm" checked> MA kapanış teyidi</label>
-        <label class="chk" id="fld-earnings" title="Bilançosuna <7 gün kalan hisseleri ele. Yalnız swing2 girişinde; yavaşlatır."><input type="checkbox" id="earnings"> Earnings filtresi (yavaş)</label>
-        <label class="chk" title="Parametre grid-search (swing2 skor/risk/çıkış kombinasyonları). qswing girişinde skor dimi etkisizdir."><input type="checkbox" id="grid"> Grid-search</label>
-        <button class="btn" id="run" onclick="runBacktest()" title="Seçili tek giriş+çıkış kombinasyonunu koştur. Sonuç: metrikler + equity grafiği + çıkış dağılımı + aylık tablo + işlemler.">Backtest Çalıştır</button>
+        <label class="chk" title="Canlı paket: bileşik (kâr/zarar sermayeye eklenir) — sabit."><input type="checkbox" id="compound" checked disabled> Bileşik (sabit)</label>
+        <button class="btn" id="run" onclick="runBacktest()" title="👑 Qulla-21 yöntemini seçili evren/dönemde koştur. Sonuç: metrikler + sermaye eğrisi + çıkış dağılımı + aylık tablo + işlemler.">Backtest Çalıştır</button>
       </div>
       <div class="hint" id="hint"></div>
-
-      <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">
-        <div class="kicker" style="margin-bottom:8px;">⚖️ Karşılaştırma — seçili giriş × çıkış kombinasyonlarını birlikte koştur (aynı evren/dönem)</div>
-        <div class="row" style="gap:22px;align-items:flex-start;">
-          <div>
-            <div class="kicker" style="margin-bottom:4px;">Girişler</div>
-            <label class="chk" title="8-katman skor girişi"><input type="checkbox" class="cmp-entry" value="swing2" checked> swing2</label>
-            <label class="chk" title="Qullamaggie kırılım girişi"><input type="checkbox" class="cmp-entry" value="qswing" checked> qswing</label>
-          </div>
-          <div>
-            <div class="kicker" style="margin-bottom:4px;">Çıkışlar</div>
-            <div class="row" style="gap:10px;">
-              <label class="chk" title="Canlı 🏆 SABİT paket: %50 kısmi @2R + 2.5×ATR trail + strict BE (ATR stop 1.5 · R/R 2.0)"><input type="checkbox" class="cmp-exit" value="champion" checked> 🏆 Şampiyon</label>
-              <label class="chk" title="63G-Şamdan SABİT paket: qswing girişinde 63g kırılım + 3.25×ATR şamdan tam-pozisyon çıkış (parametresiz)"><input type="checkbox" class="cmp-exit" value="atr_trail"> 💡 63G-Şamdan</label>
-              <label class="chk" title="Qullamaggie 10-gün MA trail çıkış"><input type="checkbox" class="cmp-exit" value="ma_trail" checked> MA-trail 10g</label>
-              <label class="chk" title="8-EMA stop + R hedef (varsayılan alt-parametrelerle)"><input type="checkbox" class="cmp-exit" value="rr_based"> RR</label>
-              <label class="chk" title="8-EMA stop + RSI/Stoch aşırı-alımda kâr-al"><input type="checkbox" class="cmp-exit" value="momentum"> RSI</label>
-              <label class="chk" title="8-EMA stop + ATR climax kâr-al"><input type="checkbox" class="cmp-exit" value="atr_climax"> Climax</label>
-              <label class="chk" title="Canlı 📐 SABİT paket: ilk %50 8-EMA, kalan %50 21-EMA; kapanış teyidi daima açık"><input type="checkbox" class="cmp-exit" value="hybrid"> 📐 8/21-EMA</label>
-              <label class="chk" title="Hibrit 2: ilk %50 8-EMA KAPANIŞ altında + LOW10 felaket stop; runner BREAKEVEN kilidi, 21-EMA kapanışta çıkar"><input type="checkbox" class="cmp-exit" value="hybrid2"> Hibrit 2</label>
-              <label class="chk" title="Bölünmüş çıkış — yukarıdaki 'Çıkış A / Çıkış B' seçimini kullanır. Karşılaştırmadan önce ana formda Çıkış=Bölünmüş seçip A/B kurallarını ayarla."><input type="checkbox" class="cmp-exit" value="split"> ✂️ Bölünmüş (<span id="cmp-split-lbl">A/B</span>)</label>
-              <label class="chk" title="ATR-Rejim: saf ATR (sabit hedef/stop) + sabit $ risk + SPY oynaklık kilidi. ATR× ve eşik için ana formda Çıkış=ATR-Rejim seçip ayarla."><input type="checkbox" class="cmp-exit" value="atr_regime"> 🛡️ ATR-Rejim</label>
-            </div>
-          </div>
-          <button class="btn alt" id="cmp-run" onclick="compareBacktest()" title="Seçili tüm giriş×çıkış kombinasyonlarını aynı evren/dönemde koşturup yan yana göster">Karşılaştır</button>
-        </div>
-        <div class="hint" id="cmp-hint"></div>
-      </div>
-    </div>
-
-    <div id="cmp-results" class="hide">
-      <div class="card" title="Her satır bir giriş×çıkış kombinasyonu; ROI'ye göre sıralı, en iyi satır yeşil vurgulu."><div class="kicker" style="margin-bottom:8px;">Karşılaştırma sonuçları (ROI'ye göre)</div><div class="scroll"><table id="cmp-table"></table></div></div>
-      <div class="card" title="Her kombinasyonun sermaye eğrisi üst üste (gri kesik = SPY). Aynı evren/dönem → eğriler hizalı.">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-          <div class="kicker">Equity eğrileri</div>
-          <label class="chk" style="font-size:12px;cursor:pointer;" title="Logaritmik Y ekseni: eşit yüzde değişimleri eşit dikey mesafe gösterir → kombinasyonların bileşik büyümesini daha adil kıyaslatır."><input type="checkbox" id="cmp-log" onchange="drawCmpChart()"> Logaritmik</label>
-        </div>
-        <div style="position:relative;height:360px;width:100%;"><canvas id="cmpchart"></canvas></div></div>
     </div>
 
     <div id="bt-results" class="hide">
@@ -288,88 +176,24 @@ function showTab(t){
 }
 $('qs-universe').onchange = e => $('qs-custom').classList.toggle('hide', e.target.value!=='custom');
 
-const HINTS = {
-  champion:'CANLI 🏆 SABİT paket: %50 kısmi @2R · 2.5×ATR süren stop · strict BE · ATR stop 1.5 · R/R 2.0 — kağıt-portföy şampiyonuyla birebir; ayarlanacak parametre yok.',
-  atr_trail:'63G-ŞAMDAN — SABİT paket: qswing girişi 63g tepeden kırılım, çıkış kapanış < tepe − 3.25×ATR(14) olunca TÜM pozisyon (kısmi/hedef/gün-içi stop YOK). Deney kazananı: 5y FULL +%272 · DD −18.7 · PF 3.95; üç ayrık pencerede de pozitif. DİKKAT: gün-içi sert stop yok → sert düşüş günü kapanışa kadar taşınır.',
-  ma_trail:'Qullamaggie: %50 kısmi @2R, kalanı N-gün SMA altına kapanınca sat.',
-  rr_based:'Stop = 8-EMA (sabit). Kısmi tetikte sat, kalanı hedef R\'ye bırak.',
-  momentum:'Stop = 8-EMA. RSI eşiği VEYA Stoch>80 aşağı kesişimde kârla kapat.',
-  atr_climax:'Stop = 8-EMA. Fiyat 8-EMA\'dan aşırı saparsa (climax) kâr al.',
-  hybrid:'CANLI 📐 SABİT paket: stop = 8-EMA; ilk %50 8-EMA, kalan %50 21-EMA gövde takibi; kapanış teyidi DAİMA açık — kağıt-portföy 8/21-EMA bacaklarıyla birebir.',
-  hybrid2:'Hibrit 2: ilk %50 yalnız 8-EMA KAPANIŞ altında satılır (gün-içi iğne elemez); LOW10 felaket stopu gün-içi aktif. İlk %50 sonrası runner stopu BREAKEVEN\'e (giriş) çekilir → 21-EMA altına kapanınca veya BE\'ye değince çıkar.',
-  split:'Pozisyon %50/%50 ikiye bölünür; A ve B yarıları KENDİ atomik kurallarıyla bağımsız çıkar (ortak felaket stopu YOK). İşlem defterinde bacaklar A:… / B:… diye görünür. Örn. A=8-EMA (erken kilit) + B=21-EMA (runner) → küçük kaybı kes, kazananı koştur.',
-  atr_regime:'SAF ATR rejim modu: pozisyon bölünmez; girişte ATR0 ile sabitlenen hedefe (kâr-al) ya da stopa (zarar-kes) kadar beklenir — trailing YOK. Boyut = sabit $ risk. Ayrıca SPY 20g ATR% eşiği aşılınca (testere/oynaklık) o gün YENİ İŞLEM AÇILMAZ → uzun vadeli backtestte gürültüden korur.'
-};
-function show(id,on){ const el=$(id); if(el) el.style.display = on ? '' : 'none'; }
-// Yöntem parametreleri SABİT (canlı/standart paketler) — görünür ama değiştirilemez.
-const FIXED_PARAMS={min_score:16,qmin:0,rr_target:2.0,atr_stop:1.5,ma_trail_len:10,
-  partial_pct:0.3,partial_rr:1.5,rr_tp:3.0,rsi_ob:70,climax:2.0,
-  split_a:'ema8',split_b:'ema21',split_a_param:0,split_b_param:0,
-  regime_thr:1.5,reg_stop:1.5,reg_target:3.0,reg_risk:1000};
-function lockMethodParams(){
-  for(const [id,v] of Object.entries(FIXED_PARAMS)){
-    const el=$(id); if(!el) continue;
-    el.value=v; el.disabled=true; el.title='SABİT — yöntem paketinin parçası, değiştirilemez.';
-  }
-  const c=$('confirm'); if(c){ c.checked=true; c.disabled=true; }
-}
-document.addEventListener('DOMContentLoaded', lockMethodParams);
-function refreshForm(){
-  const entry=$('entry').value, exit=$('exit').value, q=entry==='qswing';
-  // çıkış alt-parametreleri (yalnız ilgili çıkış modunda)
-  document.querySelectorAll('.exsub').forEach(el=>el.classList.toggle('hide', !el.classList.contains('ex-'+exit)));
-  // GİRİŞ'e özgü — yalnız swing2 (8-katman)
-  show('fld-min_score', !q);
-  show('fld-qmin',       q);    // qswing skor eşiği yalnız qswing girişinde
-  show('fld-earnings',  !q);
-  if(q) $('earnings').checked = false;   // qswing earnings'i kontrol etmez → boşa yavaş çekim olmasın
-  // ÇIKIŞ'a göre — plan stop/hedef yalnız ilgili modlarda kullanılır
-  show('fld-atr_stop',  exit==='ma_trail' || exit==='hybrid2');   // şampiyonda SABİT 1.5 (canlı paket)
-  show('fld-rr_target', false);                                   // şampiyonda SABİT 2.0 (canlı paket)
-  show('fld-confirm',   exit!=='champion' && exit!=='split' && exit!=='atr_regime' && exit!=='hybrid' && exit!=='atr_trail'); // hibritte SABİT açık; şamdan kullanmaz
-  show('fld-risk_pct',  $('sizing').value==='risk');              // risk %'si yalnız risk-bazlı modda
-  updateCmpSplitLabel();
-  // ipucu
-  const em = q ? 'qswing kırılım girişi ('+(exit==='atr_trail'?63:40)+'g tepe · 52H yakın · SPY\'ı geçen momentum). ' : '';
-  $('hint').textContent = em + (HINTS[exit]||'');
-}
-// Karşılaştırma menüsündeki "Bölünmüş (A/B)" etiketini ana formdaki seçimle güncel tut
-function updateCmpSplitLabel(){
-  const a=$('split_a'), b=$('split_b'), el=$('cmp-split-lbl');
-  if(a&&b&&el) el.textContent = a.value+'/'+b.value;
-}
-
+// 👑 Qulla-21 — TEK yöntem (canlı kağıt-portföyle birebir). Backtest payload'ı sabittir;
+// yalnız evren/dönem/tarih kullanıcıdan gelir. Giriş/çıkış/boyutlandırma SEÇİLEMEZ.
 function buildPayload(){
   const p = {
     preset: $('preset').value, period: $('period').value,
-    min_score: 16, rr_target: 2.0, atr_stop_mult: 1.5,        // SABİT paket değerleri
-    max_positions: parseInt($('max_pos').value)||5,
-    compounding: $('compound').checked,
-    use_earnings: $('earnings').checked,
-    run_grid: $('grid').checked,
-    entry_mode: $('entry').value,
-    exit_strategy: $('exit').value,
-    sizing_mode: $('sizing').value,
-    max_position_pct: (parseFloat($('pos_pct').value)||20)/100,
+    entry_mode: 'qswing', qswing_breakout_lb: 63, qswing_min_score: 0,   // qswing 63g kırılım, filtresiz
+    exit_strategy: 'split',                                              // bölünmüş çıkış
+    split_a: 'target', split_a_param: 2.0,                              // ½ → +2R hedef
+    split_b: 'ema21',  split_b_param: 0,                                // ½ → 21-EMA runner
+    split_ratio: 0.5, ma_confirm_close: true,
+    sizing_mode: 'fixed', max_position_pct: 0.05, max_positions: 20,    // %5/slot · 20 slot
+    compounding: true, use_earnings: false, run_grid: false,
+    rr_target: 2.0, atr_stop_mult: 1.5,                                 // zararsız taban değerler
   };
-  if(p.sizing_mode==='risk') p.risk_per_trade_pct = parseFloat($('risk_pct').value)||1.0;
-  if(p.entry_mode==='qswing') p.qswing_min_score = 0;       // SABİT: canlı tarama gibi filtresiz
   const sy = $('symbols').value.trim();
   if(sy) p.symbols = sy.split(/[ ,]+/).filter(Boolean);
   const sd=$('start').value, ed=$('end').value;
   if(sd && ed){ p.start_date=sd; p.end_date=ed; }
-  const es = p.exit_strategy;
-  if(es==='atr_trail'){ p.atr_trail_mult = 3.25;                       // SABİT (deney kazananı)
-    if(p.entry_mode==='qswing') p.qswing_breakout_lb = 63; }            // 63G-Şamdan paketi
-  if(es==='champion'){ p.rr_target = 2.0; p.atr_stop_mult = 1.5; }      // canlı 🏆 sabitleri
-  if(es!=='champion') p.ma_confirm_close = true;                       // SABİT: kapanış teyidi daima
-  if(es==='ma_trail') p.ma_trail_len = 10;
-  if(es==='rr_based'){ p.partial_pct=0.3; p.partial_rr=1.5; p.rr_target=3.0; }
-  if(es==='momentum') p.rsi_overbought_limit=70;
-  if(es==='atr_climax') p.climax_atr_mult=2.0;
-  if(es==='split'){ p.split_a='ema8'; p.split_b='ema21'; p.split_a_param=0; p.split_b_param=0; }
-  if(es==='atr_regime'){ p.regime_atr_threshold=1.5;
-    p.atr_stop_mult=1.5; p.atr_target_mult=3.0; p.risk_per_trade_usd=1000; }
   return p;
 }
 
@@ -514,17 +338,11 @@ async function runBacktest(){
 }
 
 function renderBacktest(d){
-  $('cmp-results').classList.add('hide');
   $('bt-results').classList.remove('hide');
   const c=d.config, m=d.metrics;
-  // Bölünmüş çıkış koşulduysa: karşılaştırma menüsünde seçili kalsın (A/B etiketiyle)
-  if(c.exit_strategy==='split'){
-    const cb=document.querySelector('.cmp-exit[value="split"]'); if(cb) cb.checked=true;
-    updateCmpSplitLabel();
-  }
   $('bt-cfgline').textContent = `${c.universe_n} hisse · ${c.start}→${c.end}`+(c.date_range?' (el ile aralık)':' · '+c.period)
-     + ` · giriş ${ ($('entry').value) }`+((c.entry_mode==='qswing_breakout'&&c.qswing_min_score>0)?` (skor≥${c.qswing_min_score})`:'')+` · çıkış ${c.exit_strategy}`+(c.tp_mode?'/'+c.tp_mode:'')+(c.split_a?` (A:${c.split_a} · B:${c.split_b})`:'')
-     + ` · ${c.sizing_mode==='risk'?('risk %'+c.risk_per_trade_pct+'/işlem'):('sabit %'+Math.round((c.max_position_pct||0.2)*100)+'/poz')}`;
+     + ` · 👑 Qulla-21: qswing 63g kırılım + bölünmüş (A:${c.split_a||'+2R'} · B:${c.split_b||'21-EMA'})`
+     + ` · sabit %${Math.round((c.max_position_pct||0.05)*100)}/slot · 20 slot`;
   const cls=x=>x>=0?'pos':'neg';
   $('bt-metrics').innerHTML = [
     ['ROI', Fp(m.roi), cls(m.roi), 'Toplam getiri: dönem sonu sermaye / başlangıç − 1.'],
@@ -570,72 +388,6 @@ function renderBacktest(d){
   $('bt-results').scrollIntoView({behavior:'smooth',block:'nearest'});
 }
 
-// ---- karşılaştırma ----
-let cmpChart=null, cmpLabels=[], cmpDs=[];
-const EXLBL={champion:'ATR-trail',atr_trail:'63G-Şamdan',ma_trail:'MA-trail 10g',rr_based:'RR (8-EMA)',momentum:'RSI (8-EMA)',atr_climax:'Climax (8-EMA)',hybrid:'Hibrit (8-EMA)',hybrid2:'Hibrit 2 (BE)',split:'Bölünmüş ½+½',atr_regime:'ATR-Rejim'};
-const CMPCOL=['#27c281','#5aa2ff','#f5b14c','#ff5d6c','#a78bfa','#34d399','#fb923c','#22d3ee','#f472b6','#a3e635','#e879f9','#facc15'];
-async function compareBacktest(){
-  const entries=[...document.querySelectorAll('.cmp-entry:checked')].map(c=>c.value);
-  const exits=[...document.querySelectorAll('.cmp-exit:checked')].map(c=>c.value);
-  if(!entries.length||!exits.length){ $('cmp-hint').textContent='En az bir giriş ve bir çıkış seç.'; return; }
-  const combos=[]; entries.forEach(en=>exits.forEach(ex=>combos.push({en,ex})));
-  const btn=$('cmp-run'); btn.disabled=true; const old=btn.textContent;
-  const base=buildPayload(); base.use_earnings=false; base.run_grid=false;   // aynı evren → tek market cache
-  if($('split_a')&&$('split_b')) EXLBL.split='Böl: '+$('split_a').value+'/'+$('split_b').value;  // etiket A/B'yi yansıtsın
-  const out=[];
-  for(let i=0;i<combos.length;i++){
-    const {en,ex}=combos[i];
-    btn.textContent=`Koşuyor ${i+1}/${combos.length}…`; $('cmp-hint').textContent=`${en} × ${EXLBL[ex]} koşuyor…`;
-    const p=Object.assign({},base,{entry_mode:en,exit_strategy:ex});
-    if(ex==='atr_trail'){ p.atr_trail_mult=3.25; if(en==='qswing') p.qswing_breakout_lb=63; }
-    if(ex==='ma_trail') p.ma_trail_len=10;
-    if(ex==='rr_based'){p.partial_pct=0.3;p.partial_rr=1.5;p.rr_target=3.0;p.ma_confirm_close=true;}
-    if(ex==='momentum'){p.rsi_overbought_limit=70;p.ma_confirm_close=true;}
-    if(ex==='atr_climax'){p.climax_atr_mult=2.0;p.ma_confirm_close=true;}
-    if(ex==='hybrid') p.ma_confirm_close=true;
-    if(ex==='champion'){ p.rr_target=2.0; p.atr_stop_mult=1.5; }
-    if(ex==='hybrid2') p.ma_confirm_close=true;
-    if(ex==='split'){ p.split_a='ema8'; p.split_b='ema21'; p.split_a_param=0; p.split_b_param=0; }
-    if(ex==='atr_regime'){ p.regime_atr_threshold=1.5;
-      p.atr_stop_mult=1.5; p.atr_target_mult=3.0; p.risk_per_trade_usd=1000; }
-    try{ const r=await fetch('/api/backtest',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)}); const d=await r.json();
-      if(d&&!d.error&&d.metrics) out.push({en,ex,m:d.metrics,eq:d.equity}); }catch(e){}
-  }
-  btn.disabled=false; btn.textContent=old; $('cmp-hint').textContent='';
-  if(!out.length){ $('cmp-hint').textContent='Sonuç alınamadı.'; return; }
-  renderCompare(out);
-}
-function renderCompare(out){
-  $('bt-results').classList.add('hide'); $('cmp-results').classList.remove('hide');
-  out.sort((a,b)=>(b.m.roi==null?-1e9:b.m.roi)-(a.m.roi==null?-1e9:a.m.roi));
-  const best=out[0];
-  $('cmp-table').innerHTML='<thead><tr><th title="Giriş yöntemi">Giriş</th><th title="Çıkış yöntemi">Çıkış</th><th title="Toplam getiri">ROI</th><th title="SPY getirisi (kıyas)">SPY</th><th title="ROI − SPY">Alpha</th><th title="En büyük düşüş">MaxDD</th><th title="Kazanma oranı">Win</th><th title="Profit Factor (kâr/zarar)">PF</th><th title="İşlem sayısı">İşlem</th></tr></thead><tbody>'+
-    out.map(r=>{const m=r.m;const hl=(r===best)?' style="background:rgba(39,194,129,.10)"':'';
-      return `<tr${hl}><td><b>${r.en}</b></td><td>${EXLBL[r.ex]}</td>`+
-      `<td class="${m.roi>=0?'pos':'neg'}"><b>${Fp(m.roi)}</b></td><td class="${m.spy_roi>=0?'pos':'neg'}">${Fp(m.spy_roi)}</td>`+
-      `<td class="${m.alpha>=0?'pos':'neg'}">${Fp(m.alpha)}</td><td class="neg">${Fp(m.max_dd)}</td>`+
-      `<td>${m.win_rate==null?'—':m.win_rate+'%'}</td><td>${F(m.profit_factor)}</td><td>${m.trades}</td></tr>`;}).join('')+'</tbody>';
-  cmpLabels=best.eq.map(e=>e.date);
-  cmpDs=out.map((r,i)=>({label:r.en+' · '+EXLBL[r.ex],data:r.eq.map(e=>e.equity),borderColor:CMPCOL[i%CMPCOL.length],borderWidth:1.5,pointRadius:0,tension:.1,spanGaps:true}));
-  cmpDs.push({label:'SPY',data:best.eq.map(e=>e.spy),borderColor:'#8a95ad',borderWidth:1,pointRadius:0,borderDash:[4,3],tension:.1,spanGaps:true});
-  drawCmpChart();
-  $('cmp-results').scrollIntoView({behavior:'smooth',block:'nearest'});
-}
-
-function drawCmpChart(){
-  if(!cmpLabels.length) return;
-  const logEl=$('cmp-log'), log = logEl && logEl.checked;
-  const yfmt = v => '$'+(v>=1000? (v/1000).toFixed(0)+'k' : v.toFixed(0));
-  if(cmpChart) cmpChart.destroy();
-  cmpChart=new Chart($('cmpchart'),{type:'line',data:{labels:cmpLabels,datasets:cmpDs},
-    options:{responsive:true,maintainAspectRatio:false,interaction:{intersect:false,mode:'index'},
-      plugins:{legend:{labels:{color:'#8a95ad',boxWidth:12,font:{size:11}}},
-        tooltip:{callbacks:{label:c=>c.dataset.label+': $'+Math.round(c.parsed.y).toLocaleString('en-US')}}},
-      scales:{x:{ticks:{color:'#8a95ad',maxTicksLimit:8,maxRotation:0,autoSkip:true},grid:{color:'#1c2531'}},
-              y:{type: log?'logarithmic':'linear',
-                 ticks:{color:'#8a95ad', callback:yfmt},grid:{color:'#1c2531'}}}}});
-}
-
 // qswing
 function qsReport(){ const t=($('qs-ticker').value||'').trim().toUpperCase(); if(!t){$('qs-ticker').focus();return;} window.open('/api/qswing?ticker='+encodeURIComponent(t),'_blank'); }
 function qsScan(){
@@ -643,7 +395,6 @@ function qsScan(){
   if(u==='custom'){ const s=($('qs-custom').value||'').trim(); if(!s){$('qs-custom').focus();return;} window.open('/api/qswing/scan?tickers='+encodeURIComponent(s.split(/[ ,]+/).filter(Boolean).join(',')),'_blank'); }
   else window.open('/api/qswing/scan?preset='+u,'_blank');
 }
-refreshForm();
 if(location.hash==='#qs') showTab('qs');
 
 /* ---- Görünür/anlık tooltip: tüm title'ları stilize kutuya çevirir (statik + JS-üretilen) ---- */
