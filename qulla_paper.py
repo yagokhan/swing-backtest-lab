@@ -54,7 +54,10 @@ def _cfg(asof=None):
     c.split_b = "ema21";  c.split_b_param = 0.0
     c.split_ratio = 0.5
     c.initial_capital = INITIAL; c.compounding = True
-    c.max_positions = 20; c.max_position_pct = 0.05
+    # 🔓 COMBO (2026-07-01): cash-drag düzeltmesi — poz %5→%7.5 + runner slotu boşalt.
+    # Artımlı defter YALNIZ yeni günleri işler → kilitli geçmiş DEĞİŞMEZ; combo bugünden ileri geçerli.
+    c.max_positions = 20; c.max_position_pct = 0.075
+    c.free_runner_slots = True
     c.use_earnings = False
     c.price_source = "fmp"; c.period = "5y"; c.per_ticker_download = False
     c.use_rs_universe = True; c.rs_pool = POOL; c.rs_n = 50; c.universe = POOL
