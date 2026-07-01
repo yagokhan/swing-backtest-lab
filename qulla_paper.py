@@ -494,25 +494,48 @@ def _exit_plan(p):
 
 
 def qulla_message(r, tag="👑 Qulla-21"):
-    """Gün-sonu mesajı (HTML) — eod_message biçimiyle uyumlu."""
+    """Gün-sonu mesajı (HTML) — eod_message biçimiyle uyumlu.
+    Aynı gün hem çıkıp hem yeni kırılımla tekrar giren sembol (ör. eski poz +2R kâr aldı
+    ve aynı bar taze 63g kırılımı verdi) AÇILAN + ÇIKILAN'da çift görünmesin diye tek
+    '↻ TEKRAR GİRİŞ' satırında birleştirilir. Realize toplamlar her bölümde kendi
+    kalemlerini toplar; kümülatif realize (📊 Durum) tüm işlemleri kapsar → değişmez."""
     asof = r["asof"]
     L = [f"<b>📓 Kağıt Portföy — {tag} — Gün Sonu ({asof})</b>"]
-    if r["opened"]:
-        L.append(f"\n<b>🟢 AÇILAN ({len(r['opened'])})</b>")
-        for p in sorted(r["opened"], key=lambda x: -(x.score or 0)):
+    opened, exited = r["opened"], r["exited"]
+    reentry = {p.symbol for p in opened} & {t.symbol for t in exited}
+    plain_opened = [p for p in opened if p.symbol not in reentry]
+    plain_exited = [t for t in exited if t.symbol not in reentry]
+    if plain_opened:
+        L.append(f"\n<b>🟢 AÇILAN ({len(plain_opened)})</b>")
+        for p in sorted(plain_opened, key=lambda x: -(x.score or 0)):
             alloc = p.shares * p.entry
             L.append(f"• <b>{html.escape(p.symbol)}</b> @ <code>${p.entry:.2f}</code> · "
                      f"${alloc:.0f} · {p.shares:.3f} adet · {_exit_plan(p)}")
-    if r["exited"]:
-        tot = sum(t.pnl for t in r["exited"])
-        L.append(f"\n<b>🔴 ÇIKILAN ({len(r['exited'])})</b> · realize K/Z "
+    if plain_exited:
+        tot = sum(t.pnl for t in plain_exited)
+        L.append(f"\n<b>🔴 ÇIKILAN ({len(plain_exited)})</b> · realize K/Z "
                  f"<b>{'+' if tot>=0 else ''}{tot:.2f}$</b>")
-        for t in sorted(r["exited"], key=lambda x: -x.pnl):
+        for t in sorted(plain_exited, key=lambda x: -x.pnl):
             em = "✅" if t.pnl >= 0 else "❌"
             L.append(f"{em} <b>{html.escape(t.symbol)}</b> {html.escape(str(t.outcome))} @ "
                      f"<code>${t.exit:.2f}</code> · giriş <code>${t.entry:.2f}</code> · "
                      f"<b>{'+' if t.pnl>=0 else ''}{t.pnl:.2f}$ ({t.pnl_pct:+.1f}%)</b>")
-    if not r["opened"] and not r["exited"]:
+    if reentry:
+        L.append(f"\n<b>↻ TEKRAR GİRİŞ ({len(reentry)})</b> · "
+                 f"<i>eski poz kapandı, aynı gün yeni kırılımla tekrar girildi</i>")
+        opd = {p.symbol: p for p in opened}
+        for sym in sorted(reentry):
+            p = opd[sym]
+            exs = sorted((t for t in exited if t.symbol == sym), key=lambda x: -x.pnl)
+            expnl = sum(t.pnl for t in exs)
+            outs = " + ".join(html.escape(str(t.outcome)) for t in exs)
+            em = "✅" if expnl >= 0 else "❌"
+            alloc = p.shares * p.entry
+            L.append(f"{em} <b>{html.escape(sym)}</b> kapandı ({outs}) "
+                     f"<b>{'+' if expnl>=0 else ''}{expnl:.2f}$</b> → "
+                     f"🟢 yeni kırılımla tekrar @ <code>${p.entry:.2f}</code> · "
+                     f"${alloc:.0f} · {_exit_plan(p)}")
+    if not opened and not exited:
         L.append("\n<i>Bugün açılan/çıkılan pozisyon yok.</i>")
     pf = r["profit_factor"]
     pf_s = f"{pf:.2f}" if pf != float("inf") else "∞"
