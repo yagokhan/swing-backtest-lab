@@ -172,6 +172,10 @@ class Config:
     split_a_param: float = 0.0         # 'target'→R katı (vars. 2.0) · 'atr_trail'→ATR× (vars. 2.5)
     split_b_param: float = 0.0
     split_ratio: float = 0.5           # A yarısının payı (kalan B'ye)
+    # +2R (A) yarısı çıkınca kalan runner (B) slotu İŞGAL ETMESİN → boşalan sermaye yeniden
+    # konuşlanabilir. Tek başına zayıf; büyük poz% ile birlikte anlamlı ("combo").
+    # (opt-in: varsayılan kapalı; canlı Qulla-21 ve mevcut backtest davranışı DEĞİŞMEZ.)
+    free_runner_slots: bool = False
 
     # --- v7: ATR-REJİM (oynaklık/testere kilidi + saf ATR çıkış) ---
     # Rejim kilidi: SPY 20g ATR% (= SPY_ATR20/SPY_Close*100) eşiği aşarsa piyasa aşırı
@@ -1529,6 +1533,22 @@ class Swing2Backtester:
         return eq
 
     # ---- ANA DÖNGÜ -------------------------------------------------------
+    def _slot_count(self):
+        """Aktif slot sayısı. free_runner_slots açıksa +2R (A) yarısı çıkmış 'runner-only'
+        pozisyonlar slotu işgal etmez → boşalan sermaye yeni girişe konuşlanabilir.
+        Kapalıyken (varsayılan) klasik davranış: her açık pozisyon = 1 slot."""
+        if not getattr(self.cfg, "free_runner_slots", False):
+            return len(self.positions)
+        n = 0
+        for pos in self.positions.values():
+            legs = getattr(pos, "legs", None)
+            if legs:
+                if any(l["tag"] == "A" and l["shares"] > 0 for l in legs):
+                    n += 1        # hedef (A) bacağı hâlâ açık → tam slot
+            else:
+                n += 1            # split olmayan pozisyon = 1 slot
+        return n
+
     def _step(self, date):
         """Tek işlem gününü işle: çıkış yönetimi + (rejim açıksa) yeni girişler + equity kaydı.
         Hem toplu backtest (run) hem ARTIMLI defter (qulla_paper) bu metodu kullanır →
@@ -1538,7 +1558,7 @@ class Swing2Backtester:
         common = self._common(date)
         # ATR-REJİM kilidi: SPY oynaklığı eşiği aşarsa (testere) bu bar YENİ alım YOK
         if (common["spy_above_sma200"] and not self._vol_regime_locked(common)
-                and len(self.positions) < cfg.max_positions and self.cash >= self._size(date)):
+                and self._slot_count() < cfg.max_positions and self.cash >= self._size(date)):
             cands = []
             qmode = cfg.entry_mode == "qswing_breakout"
             spy_ret60 = self.spy.loc[date, "RET60"] if qmode else None
@@ -1576,7 +1596,7 @@ class Swing2Backtester:
                     cands.append((total, -dist, sym, row, plan))
             cands.sort(key=lambda x: (x[0], x[1]), reverse=True)
             for total, _nd, sym, row, plan in cands:
-                if len(self.positions) >= cfg.max_positions or self.cash < self._size(date): break
+                if self._slot_count() >= cfg.max_positions or self.cash < self._size(date): break
                 self._open(sym, date, row, plan, total)
         self.equity_curve.append((date, self._equity(date)))
 
@@ -1979,6 +1999,7 @@ def run_backtest_api(params: dict) -> dict:
     cfg.risk_per_trade_pct = float(max(0.1, min(10.0, params.get("risk_per_trade_pct", cfg.risk_per_trade_pct))))
     if params.get("max_position_pct") is not None:
         cfg.max_position_pct = float(max(0.02, min(1.0, params.get("max_position_pct"))))
+    cfg.free_runner_slots = bool(params.get("free_runner_slots", False))
     cfg.period = str(params.get("period", cfg.period))
     # El ile tarih aralığı (geçerli ISO ise period'u geçersiz kılar)
     def _vdate(s):
@@ -2131,6 +2152,7 @@ def run_backtest_api(params: dict) -> dict:
                    "max_positions": cfg.max_positions,
                    "sizing_mode": cfg.sizing_mode, "risk_per_trade_pct": cfg.risk_per_trade_pct,
                    "max_position_pct": cfg.max_position_pct,
+                   "free_runner_slots": getattr(cfg, "free_runner_slots", False),
                    "entry_mode": cfg.entry_mode, "qswing_min_score": cfg.qswing_min_score,
                    "use_rs_universe": getattr(cfg, "use_rs_universe", False), "rs_n": getattr(cfg, "rs_n", 50),
                    "period": cfg.period, "compounding": cfg.compounding,

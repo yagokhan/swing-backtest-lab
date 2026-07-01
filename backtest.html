@@ -103,6 +103,8 @@ th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:
       <input type="hidden" id="sizing" value="fixed">
       <div class="row" style="margin-top:14px;align-items:center;">
         <label class="chk" title="Canlı paket: bileşik (kâr/zarar sermayeye eklenir) — sabit."><input type="checkbox" id="compound" checked disabled> Bileşik (sabit)</label>
+        <label class="chk" title="DENEYSEL kaldıraç: poz %5→%7.5 + +2R yarısı çıkınca slotu boşalt (boşalan sermaye yeniden konuşlanır). Getiriyi artırır AMA drawdown'ı ~%40 derinleştirir. Canlı paketi DEĞİŞTİRMEZ; yalnız backtest.">
+          <input type="checkbox" id="combo"> 🔓 Combo modu (deneysel: %7.5 + slot-serbest)</label>
         <button class="btn" id="run" onclick="runBacktest()" title="👑 Qulla-21 yöntemini seçili evren/dönemde koştur. Sonuç: metrikler + sermaye eğrisi + çıkış dağılımı + aylık tablo + işlemler.">Backtest Çalıştır</button>
       </div>
       <div class="hint" id="hint"></div>
@@ -192,6 +194,11 @@ function buildPayload(){
     compounding: true, use_earnings: false, run_grid: false,
     rr_target: 2.0, atr_stop_mult: 1.5,                                 // zararsız taban değerler
   };
+  // 🔓 Combo (deneysel kaldıraç): poz %5→%7.5 + runner slotu boşalt. Canlı paketi değiştirmez.
+  if($('combo') && $('combo').checked){
+    p.max_position_pct = 0.075;
+    p.free_runner_slots = true;
+  }
   const sy = $('symbols').value.trim();
   if(sy) p.symbols = sy.split(/[ ,]+/).filter(Boolean);
   const sd=$('start').value, ed=$('end').value;
@@ -344,7 +351,8 @@ function renderBacktest(d){
   const c=d.config, m=d.metrics;
   $('bt-cfgline').textContent = `${c.universe_n} hisse · ${c.start}→${c.end}`+(c.date_range?' (el ile aralık)':' · '+c.period)
      + ` · 👑 Qulla-21: ${c.use_rs_universe?('RS top-'+(c.rs_n||50)+' + '):''}qswing 63g kırılım + bölünmüş (A:${c.split_a||'+2R'} · B:${c.split_b||'21-EMA'})`
-     + ` · sabit %${Math.round((c.max_position_pct||0.05)*100)}/slot · 20 slot`;
+     + ` · sabit %${(((c.max_position_pct||0.05)*100).toFixed(1)).replace('.0','')}/slot · 20 slot`
+     + (c.free_runner_slots?' · 🔓 COMBO (slot-serbest)':'');
   const cls=x=>x>=0?'pos':'neg';
   $('bt-metrics').innerHTML = [
     ['ROI', Fp(m.roi), cls(m.roi), 'Toplam getiri: dönem sonu sermaye / başlangıç − 1.'],
