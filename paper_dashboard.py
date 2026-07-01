@@ -682,7 +682,7 @@ PAGE = """<!doctype html><html lang="tr"><head><meta charset="utf-8">
 
   <section class="defter d-champ">
     <h2>👑 Qulla-21</h2>
-    <span class="kural">evren: günlük RS top-50 (S&amp;P500+Nasdaq100) · giriş: 63g kırılım · çıkış (split): yarı +2R hedef · kalan yarı kapanış&lt;21-EMA runner · backtest-replay (sabit çapa 2026-05-19)</span>
+    <span class="kural">evren: günlük RS top-50 (S&amp;P500+Nasdaq100) · giriş: 63g kırılım · çıkış (split): yarı +2R hedef · kalan yarı kapanış&lt;21-EMA runner · 🔓 combo: %7.5/slot + runner slotu boşalır (boşalan sermaye yeniden konuşlanır) · gerçek defter</span>
     <div class="kpis" id="kpis"></div>
     <h3 class="alt">Sermaye Eğrisi &amp; Günlük K/Z (başlangıçtan bugüne)</h3>
     <div class="eqcharts">

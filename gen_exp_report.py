@@ -1,43 +1,63 @@
 # -*- coding: utf-8 -*-
-"""Deney karşılaştırma raporu üreticisi → dashboard_static/exp_report.html
-Canlı baz (qswing lb40 + optimized şampiyon çıkış) vs Önerilen (lb63 + atr_full 3.25×ATR).
-Salt-okur: canlı sisteme/trade mantığına dokunmaz. Grafikler yerel /static/lwc.js ile.
-Kullanım: python3 gen_exp_report.py"""
-import copy, json
+"""Strateji karşılaştırma raporu üreticisi → dashboard_static/exp_report.html
+
+İKİ EKSEN:
+ A) Giriş/Çıkış yöntemi: 🏆 ATR-trail · 📐 8/21-EMA · 💡 63G-Şamdan · 👑 Qulla-21
+    — hepsi AYNI zeminde (RS top-50 · sp500_ndx · sabit %7.5/slot · 20 slot · 5y).
+    Kurallara dokunulmaz; yalnız her yöntemin kendi giriş-lb'si + çıkış mantığı farklı.
+ B) Sermaye konuşlandırma (cash-drag): 👑 Qulla-21 %5 (baz) → COMBO (%7.5 + free_runner_slots).
+
+Salt-okur: canlı sisteme/trade mantığına dokunmaz. Kullanım: python3 gen_exp_report.py"""
+import copy, json, os
 import pandas as pd
 import swing2_backtest as s
 
 OUT = "/home/gokhan/dashboard_static/exp_report.html"
+FULL_SD, FULL_ED = "2021-05-01", "2026-06-30"
 
-# ---- veri ----
+# ---- veri (canlı Qulla-21 zemini: RS top-50 · sp500_ndx · split) ----
 cfg = s.Config()
 cfg.period = "5y"; cfg.price_source = "fmp"; cfg.disk_cache = True
 cfg.use_earnings = False; cfg.per_ticker_download = False
-market = s.download_and_align_data(cfg)
+cfg.entry_mode = "qswing_breakout"; cfg.qswing_breakout_lb = 63
+cfg.exit_mode = "split"; cfg.split_a = "target"; cfg.split_a_param = 2.0
+cfg.split_b = "ema21"; cfg.split_b_param = 0.0; cfg.split_ratio = 0.5
+cfg.use_rs_universe = True; cfg.rs_n = 50
+cfg.rs_pool = s.UNIVERSE_PRESETS["sp500_ndx"]; cfg.universe = cfg.rs_pool
+cfg.max_positions = 20; cfg.compounding = True; cfg.liquidate_at_end = True
 
-WINNER = {"entry_mode": "qswing_breakout", "qswing_breakout_lb": 63,
-          "exit_mode": "atr_full", "atr_trail_mult": 3.25}
-BASE = {"entry_mode": "qswing_breakout"}
+print("Veri + RS evreni yükleniyor (sp500_ndx ~373, 5y)...", flush=True)
+market = s.load_market(cfg)
+CAL = market["calendar"]
+NPOOL = len(market["data"])
 
 
-def run(ov):
+def _deploy_pct(bt, eq):
+    lc = pd.Series(0.0, index=CAL)
+    for t in bt.trades:
+        lc.loc[t.entry_date:t.exit_date] += t.shares * t.entry
+    e = eq.reindex(CAL).ffill()
+    return float((lc / e).reindex(eq.index).dropna().mean() * 100)
+
+
+def run(ov, sd=FULL_SD, ed=FULL_ED):
     c = copy.deepcopy(cfg)
-    for k, v in ov.items(): setattr(c, k, v)
+    for k, v in ov.items():
+        setattr(c, k, v)
+    c.start_date = sd or ""; c.end_date = ed or ""
     bt = s.Swing2Backtester(c, market=market); bt.run()
     mt = bt.metrics()
     tr = pd.DataFrame([t.__dict__ for t in bt.trades])
     tr["hold"] = (pd.to_datetime(tr["exit_date"]) - pd.to_datetime(tr["entry_date"])).dt.days
     w, l = tr[tr.pnl > 0], tr[tr.pnl <= 0]
-    stats = {
-        "roi": mt["roi"], "dd": mt["max_dd"], "pf": mt["profit_factor"],
-        "win": mt["win_rate"], "n": mt["trades"], "alpha": mt["alpha"], "spy": mt["spy_roi"],
-        "hold_med": float(tr["hold"].median()), "hold_avg": float(tr["hold"].mean()),
-        "hold_max": int(tr["hold"].max()),
-        "avgw_pct": float(w.pnl_pct.mean()), "avgl_pct": float(l.pnl_pct.mean()),
-        "maxw_pct": float(w.pnl_pct.max()), "maxl_pct": float(l.pnl_pct.min()),
-        "outcomes": tr.outcome.value_counts().to_dict(),
+    st = {
+        "roi": mt["roi"], "dd": mt["max_dd"], "pf": mt["profit_factor"], "win": mt["win_rate"],
+        "n": mt["trades"], "alpha": mt["alpha"], "spy": mt["spy_roi"], "depl": _deploy_pct(bt, mt["equity"]),
+        "hold_med": float(tr["hold"].median()), "hold_avg": float(tr["hold"].mean()), "hold_max": int(tr["hold"].max()),
+        "avgw_pct": float(w.pnl_pct.mean()) if len(w) else 0.0, "avgl_pct": float(l.pnl_pct.mean()) if len(l) else 0.0,
+        "maxw_pct": float(w.pnl_pct.max()) if len(w) else 0.0, "maxl_pct": float(l.pnl_pct.min()) if len(l) else 0.0,
     }
-    return mt["equity"], stats
+    return mt["equity"], st
 
 
 def series(eq, base=100.0):
@@ -62,43 +82,157 @@ def monthly_html(eq):
     return f"<table class='mon'><tr><th>Yıl</th>{head}</tr>{''.join(rows)}</table>"
 
 
-print("Kazanan koşuluyor...", flush=True)
-eq_w, st_w = run(WINNER)
-print("Canlı baz koşuluyor...", flush=True)
-eq_b, st_b = run(BASE)
-spy = market["spy"]["Close"].reindex(eq_w.index).ffill()
+def pf_s(x):
+    return f"{x:.2f}" if x != float("inf") else "∞"
 
-# ---- pencere/stres tabloları (deney CSV'lerinden) ----
-def row_of(csv, exp):
-    df = pd.read_csv(f"/home/gokhan/swing2_out/{csv}")
-    d = df[df.exp == exp].set_index("win")
-    return {w: d.loc[w] for w in d.index}
 
-W = row_of("exp_d_results.csv", "d_af325_lb63")
-Ws = row_of("exp_d_results.csv", "d_af325_lb63_STRESS")
-B = row_of("exp_c_results.csv", "c_qbase")
-Bs = row_of("exp_c_results.csv", "c_qbase_STRESS")
+# ===== EKSEN A: 4 giriş/çıkış yöntemi, hepsi sabit %7.5 =====
+C75 = {"max_position_pct": 0.075, "free_runner_slots": False}
+METHODS = [
+    ("champ", "🏆 ATR-trail (Şampiyon)", "#f0883e", {
+        "qswing_breakout_lb": 40, "exit_mode": "optimized",
+        "partial_tp": True, "partial_pct": 0.5, "partial_rr": 2.0,
+        "trailing_stop": True, "atr_trail_mult": 2.5, "breakeven_mode": "strict_entry", **C75}),
+    ("ema", "📐 8/21-EMA", "#a371f7", {
+        "qswing_breakout_lb": 40, "exit_mode": "split",
+        "split_a": "ema8", "split_a_param": 0.0, "split_b": "ema21", "split_b_param": 0.0,
+        "split_ratio": 0.5, "partial_tp": False, "trailing_stop": False, **C75}),
+    ("chand", "💡 63G-Şamdan", "#d29922", {
+        "qswing_breakout_lb": 63, "exit_mode": "atr_full", "atr_trail_mult": 3.25,
+        "partial_tp": False, "trailing_stop": False, **C75}),
+    ("qulla", "👑 Qulla-21 (mevcut)", "#3fb950", {
+        "qswing_breakout_lb": 63, "exit_mode": "split",
+        "split_a": "target", "split_a_param": 2.0, "split_b": "ema21", "split_b_param": 0.0,
+        "split_ratio": 0.5, "partial_tp": False, "trailing_stop": False, **C75}),
+]
 
-WIN_LABEL = {"FULL": "FULL (2020-08→2026-06)", "L2Y": "Son 2 yıl", "W1": "W1: 2021–2022 (ayı)",
-             "W2": "W2: 2023–2024", "W3": "W3: 2025–2026"}
-
-def wrow(w):
-    return (f"<tr><td>{WIN_LABEL[w]}</td>"
-            f"<td class='neg'>{B[w].roi:+.1f}% <span class='mut'>/ {B[w].dd:.1f}%</span></td>"
-            f"<td class='pos'>{W[w].roi:+.1f}% <span class='mut'>/ {W[w].dd:.1f}%</span></td>"
-            f"<td>{B[w].cagr:+.1f}% → <b>{W[w].cagr:+.1f}%</b></td></tr>")
-
-window_table = "".join(wrow(w) for w in ("FULL", "L2Y", "W1", "W2", "W3"))
-
-data = {
-    "eq_w": series(eq_w), "eq_b": series(eq_b), "eq_spy": series(spy),
-    "dd_w": dd_series(eq_w), "dd_b": dd_series(eq_b),
+DESC = {
+    "champ": "Kırılımda (40 günün tepesi) alır. Kârın <b>yarısını +2R'de</b> (aldığı riskin 2 katı) satıp "
+             "cebe koyar; kalan yarısını fiyat son tepesinden <b>2.5×ATR</b> (oynaklık payı) geri düşene kadar taşır. "
+             "Hızlı kâr alan, isabeti yüksek ama büyük trendleri erken bırakan yöntem.",
+    "ema": "Kırılımda (40 günün tepesi) alır. Sabit hedef/stop yoktur; tamamen hareketli ortalamalara güvenir: "
+           "<b>yarısını 8 günlük</b>, kalan yarısını <b>21 günlük</b> ortalamanın altına kapanınca satar. "
+           "Trend-takipçi ama yatay/testere piyasada 8-EMA sık yanıltıp erken çıkartır.",
+    "chand": "Daha <b>seçici</b> girer (63 günün / çeyreklik tepe). Kâr alma ve hedef YOK; pozisyonun tamamını "
+             "fiyat en yüksek noktasından <b>3.25×ATR</b> geri düşene kadar taşır (şamdan / chandelier stop). "
+             "Az sayıda ama çok büyük trend yakalamayı hedefler: isabet düşük, tek tek kayıplar küçük, kazançlar büyük.",
+    "qulla": "🏆'nın hızlı kâr-almasını 📐'nin trend runner'ıyla <b>birleştirir</b>: 63 günün tepesinde alır, "
+             "<b>yarısını +2R hedefte</b> satar, kalan yarısını <b>21-EMA altına kapanana</b> kadar taşır. "
+             "Hızlı kâr güvenliği ile büyük trend yakalamanın dengesi — bugünkü canlı yöntem.",
 }
 
+print("EKSEN A — giriş/çıkış yöntemleri (%7.5) FULL...", flush=True)
+A_eq, A_st = {}, {}
+for key, label, col, ov in METHODS:
+    print(f"  {label} ...", flush=True)
+    A_eq[key], A_st[key] = run(ov)
+spy = market["spy"]["Close"].reindex(A_eq["qulla"].index).ffill()
+
+# walk-forward pencereleri (her yöntem)
+WINDOWS = [
+    ("W1: 2021–22 (ayı)", "2021-05-01", "2022-12-31"),
+    ("W2: 2022–23 (ayı+topar.)", "2022-01-01", "2023-06-30"),
+    ("W3: 2023–24 (boğa)", "2023-01-01", "2024-12-31"),
+    ("W4: son 2 yıl", "2024-07-01", "2026-06-30"),
+    ("FULL: 2021–26", FULL_SD, FULL_ED),
+]
+A_win = {k: {} for k, *_ in METHODS}
+for wname, sd, ed in WINDOWS:
+    print(f"  pencere {wname} ...", flush=True)
+    for key, label, col, ov in METHODS:
+        _, st = run(ov, sd, ed)
+        A_win[key][wname] = st
+
+# ---- EKSEN A tabloları ----
+def a_full_row(key, label):
+    st = A_st[key]
+    return (f"<tr><td>{label}</td>"
+            f"<td class='{'pos' if st['roi'] >= 0 else 'neg'}'>{st['roi']:+.1f}%</td>"
+            f"<td>{st['dd']:.1f}%</td><td>{pf_s(st['pf'])}</td><td>%{st['win']:.0f}</td>"
+            f"<td>%{st['depl']:.0f}</td><td>{st['n']}</td>"
+            f"<td>{st['hold_med']:.0f}g</td></tr>")
+
+a_full_table = "".join(a_full_row(k, lbl) for k, lbl, *_ in METHODS)
+a_full_table += (f"<tr><td>📈 SPY (al-tut, kıyas)</td><td class='mut'>{A_st['qulla']['spy']:+.1f}%</td>"
+                 f"<td class='mut'>—</td><td class='mut'>—</td><td class='mut'>—</td>"
+                 f"<td class='mut'>%100</td><td class='mut'>—</td><td class='mut'>—</td></tr>")
+
+def a_win_row(wname):
+    cells = ""
+    for key, label, col, ov in METHODS:
+        st = A_win[key][wname]
+        cells += f"<td class='{'pos' if st['roi'] >= 0 else 'neg'}'>{st['roi']:+.1f}% <span class='mut'>/ {st['dd']:.0f}%</span></td>"
+    return f"<tr><td>{wname}</td>{cells}</tr>"
+
+a_win_table = "".join(a_win_row(w[0]) for w in WINDOWS)
+a_win_head = "".join(f"<th>{lbl.split(' ')[0]}</th>" for k, lbl, *_ in METHODS)
+
+# dinamik yargı
+_by_roi = sorted(METHODS, key=lambda m: A_st[m[0]]["roi"], reverse=True)
+_by_pf = sorted(METHODS, key=lambda m: A_st[m[0]]["pf"] if A_st[m[0]]["pf"] != float("inf") else 1e9, reverse=True)
+_by_dd = sorted(METHODS, key=lambda m: A_st[m[0]]["dd"], reverse=True)  # dd negatif → büyük=sığ
+top_roi, top_pf, top_dd = _by_roi[0][1], _by_pf[0][1], _by_dd[0][1]
+
+# ===== EKSEN B: cash-drag (Qulla-21 %5 baz → COMBO %7.5+slot-serbest) =====
+BASE  = {"qswing_breakout_lb": 63, "exit_mode": "split", "split_a": "target", "split_a_param": 2.0,
+         "split_b": "ema21", "split_b_param": 0.0, "split_ratio": 0.5, "partial_tp": False,
+         "trailing_stop": False, "max_position_pct": 0.05, "free_runner_slots": False}
+COMBO = dict(BASE); COMBO["max_position_pct"] = 0.075; COMBO["free_runner_slots"] = True
+
+print("EKSEN B — cash-drag (baz %5 → combo)...", flush=True)
+eq_b, st_b = run(BASE)
+eq_c, st_c = run(COMBO)
+
+# ===== EKSEN C: Qulla-21 combo — giriş boyutu × slot sayısı ısı haritası =====
+QBASE = {"qswing_breakout_lb": 63, "exit_mode": "split", "split_a": "target", "split_a_param": 2.0,
+         "split_b": "ema21", "split_b_param": 0.0, "split_ratio": 0.5, "partial_tp": False,
+         "trailing_stop": False, "free_runner_slots": True}
+GRID_SIZES = [0.05, 0.06, 0.075, 0.10]
+GRID_SLOTS = [25, 20, 16, 12]          # tabloda yukarıdan aşağı
+print("EKSEN C — boyut × slot ızgarası...", flush=True)
+grid = {}
+for _slot in GRID_SLOTS:
+    for _size in GRID_SIZES:
+        _ov = dict(QBASE); _ov["max_position_pct"] = _size; _ov["max_positions"] = _slot
+        _, grid[(_slot, _size)] = run(_ov)
+        print(f"  slot {_slot} × %{_size*100:.1f} → ROI {grid[(_slot,_size)]['roi']:+.0f}% DD {grid[(_slot,_size)]['dd']:.0f}%", flush=True)
+
+_grois = [grid[(s, z)]["roi"] for s in GRID_SLOTS for z in GRID_SIZES]
+_rmin, _rmax = min(_grois), max(_grois)
+def _cellbg(roi):
+    t = (roi - _rmin) / (_rmax - _rmin) if _rmax > _rmin else 0.5
+    return f"rgba(63,185,80,{0.06 + 0.44*t:.2f})"
+def _gcell(slot, size):
+    st = grid[(slot, size)]
+    live = (slot == 20 and abs(size - 0.075) < 1e-9)
+    style = f"background:{_cellbg(st['roi'])};text-align:center" + (";outline:2px solid #58a6ff;outline-offset:-2px" if live else "")
+    return (f"<td style='{style}'><b>{st['roi']:+.0f}%</b>{' ★' if live else ''}<br>"
+            f"<span class='mut' style='font-size:11px'>DD {st['dd']:.0f}% · PF {pf_s(st['pf'])} · %{st['depl']:.0f}</span></td>")
+heat_head = "".join(f"<th>%{z*100:g}/slot</th>" for z in GRID_SIZES)
+heat_rows = "".join("<tr><td><b>" + str(s) + " slot</b></td>" + "".join(_gcell(s, z) for z in GRID_SIZES) + "</tr>" for s in GRID_SLOTS)
+_cells = [(s, z, grid[(s, z)]) for s in GRID_SLOTS for z in GRID_SIZES]
+_bR = max(_cells, key=lambda c: c[2]["roi"])
+_bP = max(_cells, key=lambda c: c[2]["pf"] if c[2]["pf"] != float("inf") else 1e9)
+_bD = max(_cells, key=lambda c: c[2]["dd"])
+grid_best_roi = f"{_bR[0]} slot × %{_bR[1]*100:g} (ROI {_bR[2]['roi']:+.0f}%, DD {_bR[2]['dd']:.0f}%)"
+grid_best_pf = f"{_bP[0]} slot × %{_bP[1]*100:g} (PF {pf_s(_bP[2]['pf'])}, ROI {_bP[2]['roi']:+.0f}%, DD {_bP[2]['dd']:.0f}%)"
+grid_shallow = f"{_bD[0]} slot × %{_bD[1]*100:g} (DD {_bD[2]['dd']:.0f}%, ROI {_bD[2]['roi']:+.0f}%)"
+gl = grid[(20, 0.075)]
+
+data = {
+    "spy": series(spy),
+    **{f"a_{k}": series(A_eq[k]) for k, *_ in METHODS},
+    "eq_b": series(eq_b), "eq_c": series(eq_c),
+    "dd_b": dd_series(eq_b), "dd_c": dd_series(eq_c),
+}
+A_leg = " &nbsp; ".join(f"<b style='color:{col}'>■</b> {lbl}" for k, lbl, col, ov in METHODS) + " &nbsp; <b style='color:#8b949e'>■</b> SPY"
+A_lines_js = "\n".join(f"eqA.addLineSeries({{color:'{col}',lineWidth:2}}).setData(DATA.a_{k});" for k, lbl, col, ov in METHODS)
+
 fmt = lambda x: f"{x:+.1f}"
+today = pd.Timestamp.now().strftime("%d.%m.%Y")
 html = f"""<!doctype html><html lang="tr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>📊 Strateji Karşılaştırma Raporu — Swing 2.0 Deney İterasyonu</title>
+<title>📊 Strateji Karşılaştırma Raporu — 4 yöntem + Combo</title>
 <style>
  :root{{--bg:#0d1117;--card:#161b22;--bd:#30363d;--fg:#e6edf3;--mut:#8b949e;--grn:#3fb950;--red:#f85149;--blu:#58a6ff;--amb:#d29922}}
  *{{box-sizing:border-box}} body{{margin:0;background:var(--bg);color:var(--fg);font:15px/1.65 system-ui,'Segoe UI',sans-serif}}
@@ -115,189 +249,163 @@ html = f"""<!doctype html><html lang="tr"><head><meta charset="utf-8">
  .kpi{{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:10px 12px}}
  .kpi .v{{font-size:20px;font-weight:700}} .kpi .l{{font-size:12px;color:var(--mut)}}
  .chart{{height:330px;border:1px solid var(--bd);border-radius:10px;margin:10px 0}}
- .leg{{font-size:12.5px;color:var(--mut);margin:2px 0 14px}}
- .leg b{{padding:0 4px}}
+ .leg{{font-size:12.5px;color:var(--mut);margin:2px 0 14px}} .leg b{{padding:0 4px}}
  blockquote{{border-left:3px solid var(--amb);margin:10px 0;padding:4px 14px;color:#d8c690;background:#1a1f17;border-radius:0 8px 8px 0}}
- a{{color:var(--blu)}} .back{{font-size:13px}}
- ul{{margin:6px 0 6px 20px;padding:0}} li{{margin:5px 0}}
+ a{{color:var(--blu)}} .back{{font-size:13px}} ul{{margin:6px 0 6px 20px;padding:0}} li{{margin:5px 0}}
+ .mcard{{border-left:4px solid var(--bd);padding:2px 0 2px 12px;margin:12px 0}}
 </style></head><body><div class="wrap">
 <p class="back"><a href="/">← Dashboard'a dön</a></p>
 <h1>📊 Strateji Karşılaştırma Raporu</h1>
-<p class="mut">Swing 2.0 deney iterasyonu · 11 Haziran 2026 · Veri: FMP günlük (S&P-altevren, 94 hisse) ·
-Backtest motoru: <code>swing2_backtest.py</code> · 4 faz / ~95 konfigürasyon / ayrık-pencere doğrulama + slippage stres testi</p>
+<p class="mut">👑 Qulla-21 · {today} · Veri: FMP günlük · Havuz: sp500_ndx (~{NPOOL}) → günlük RS top-50 · 5 yıl ·
+Motor: <code>swing2_backtest.py</code> · Pencere bazlı doğrulama (5 dilim)</p>
 
-<h2>1) Yönetici Özeti</h2>
 <div class="card">
-<p><b>Soru:</b> Canlıda koşan strateji (qswing 40-gün kırılım girişi + "şampiyon" çıkış: %50 kısmi kâr @+2R,
-+2R hedef, 2.5×ATR trailing) iyileştirilebilir mi?</p>
-<p><b>Cevap:</b> Evet — ve iyileştirme parametre ince ayarından değil, <b>çıkış mimarisinin değiştirilmesinden</b> geliyor.
-Önerilen varyant girişte kırılım penceresini 63 güne (çeyreklik tepe) uzatıyor, çıkışta ise kısmi kâr almayı ve
-sabit hedefi tamamen kaldırıp pozisyonun tamamını <b>3.25×ATR'lik şamdan (chandelier) izleyen stopla</b> taşıyor.
-Aynı veri, aynı evren, aynı maliyet varsayımlarıyla 5.8 yıllık toplam getiri <b>+%89'dan +%273'e</b> çıkarken
-maksimum düşüş (drawdown) <b>−%27.3'ten −%18.7'ye geriliyor</b>; kâr faktörü 1.37'den 3.95'e yükseliyor.</p>
-<p>İktisadi özü tek cümlede: <i>mevcut sistem kazanan işlemlerin sağ kuyruğunu +2R'de kesip kaybedenlerin
-maliyetini yüksek işlem frekansıyla katlıyor; önerilen sistem nadir ama büyük trendleri sonuna kadar taşıyıp
-ciroyu (ve dolayısıyla sürtünme vergisini) beşte birine indiriyor.</i></p>
+<b>Bu rapor iki ayrı soruyu yanıtlar:</b>
+<ul>
+<li><b>Bölüm A — Hangi giriş/çıkış yöntemi?</b> Bugüne dek denenip bırakılan 3 yöntem (🏆 · 📐 · 💡) ile
+bugünkü 👑 Qulla-21, <b>tamamen aynı zeminde</b> (aynı evren, aynı boyut) yarıştırılır. Böylece fark yalnız
+"ne zaman al / ne zaman sat" kuralından gelir.</li>
+<li><b>Bölüm B — Sermaye ne kadar çalışsın (cash-drag)?</b> Kazanan yöntemin (Qulla-21) üstünde, sermayeyi
+daha verimli konuşlandıran <b>COMBO</b> katmanı incelenir.</li>
+</ul>
+<p class="mut">Adil olması için Bölüm A'da tüm yöntemler sabit %7.5/slot · 20 slot ile koşuldu; giriş/çıkış
+kurallarına (kırılım süresi, +2R, ATR çarpanları) dokunulmadı — her yöntem tarihsel haliyle.</p>
+</div>
+
+<h2>A) Giriş/Çıkış Yöntemleri — Basit Anlatım</h2>
+<div class="card">
+<div class="mcard" style="border-color:#f0883e"><b>🏆 ATR-trail (eski "şampiyon")</b><br>{DESC['champ']}</div>
+<div class="mcard" style="border-color:#a371f7"><b>📐 8/21-EMA</b><br>{DESC['ema']}</div>
+<div class="mcard" style="border-color:#d29922"><b>💡 63G-Şamdan (chandelier)</b><br>{DESC['chand']}</div>
+<div class="mcard" style="border-color:#3fb950"><b>👑 Qulla-21 (mevcut canlı)</b><br>{DESC['qulla']}</div>
+</div>
+
+<h3>Sonuçlar (5 yıl, aynı zemin — sabit %7.5)</h3>
+<table>
+<tr><th>Yöntem</th><th>Getiri</th><th>Maks. düşüş</th><th>Kâr faktörü</th><th>İsabet</th><th>Kullanım</th><th>İşlem</th><th>Medyan tutuş</th></tr>
+{a_full_table}
+</table>
+<p class="mut">Kâr faktörü = kazançların toplamı / kayıpların toplamı (1'in üstü kârlı; yüksek = verimli).
+Maks. düşüş = zirveden en dip noktaya kadarki en kötü geri çekilme. İsabet = kârlı işlem oranı.</p>
+
+<h3>Özsermaye eğrisi (100 = başlangıç, log ölçek)</h3>
+<div id="ch_a" class="chart"></div>
+<div class="leg">{A_leg}</div>
+
+<h3>Rejim dayanıklılığı (pencere bazlı getiri / düşüş)</h3>
+<table>
+<tr><th>Dönem</th>{a_win_head}</tr>
+{a_win_table}
+</table>
+
+<h3>Basit dille sonuç</h3>
+<div class="card">
+<p>Aynı hisselerde, aynı boyutta koşulunca yöntemler net ayrışıyor:</p>
+<ul>
+<li><b>En yüksek ham getiri:</b> {top_roi}. Ama ham getiri tek başına aldatıcıdır — yüksek getiri genelde
+daha derin düşüşle gelir.</li>
+<li><b>En verimli (kâr faktörü):</b> {top_pf} — birim risk başına en çok kâr.</li>
+<li><b>En sığ düşüş (en az sarsıntı):</b> {top_dd}.</li>
+</ul>
+<p><b>Neden 👑 Qulla-21 seçildi?</b> Çünkü uçlardan birini değil, <b>dengeyi</b> temsil ediyor.
+🏆 kârı çok erken alıp büyük trendleri kaçırır (yüksek isabet, küçük kazanç). 💡 şamdan büyük trendleri yakalar
+ama isabeti düşüktür ve uzun "düz/kayıp" dönemlere + derin tekil geri çekilmelere katlanmayı gerektirir
+(psikolojik olarak zor). 📐 saf ortalamalara güvendiği için testere piyasada sık yanılır. Qulla-21, 🏆'nın
+<b>+2R hızlı kâr güvenliğini</b> 💡/📐'nin <b>trend runner'ıyla</b> birleştirir: yarısını erken kilitler
+(moral + nakit), yarısını 21-EMA ile trende bırakır. Ham getiride mutlaka birinci olmayabilir ama
+<b>getiri–risk–taşınabilirlik üçgeninde</b> en yaşanabilir profil bu.</p>
+</div>
+
+<h2>B) Sermaye Konuşlandırma — Cash-Drag ve COMBO</h2>
+<div class="card">
+<p>Yöntem sabitlendikten (Qulla-21) sonra ikinci soru: <b>sermaye ne kadar çalışıyor?</b> Baz kurulumda
+(%5/slot) sorun şu: +2R yarısı birkaç günde çıkıp nakde dönüyor, ama kalan 21-EMA runner haftalarca
+<b>slotu işgal ediyor</b>. 20-slot tavanı pozisyon <i>sayısını</i> kısıtladığı için boşalan nakit yeniden
+konuşlanamıyor → ortalama kullanım yalnız <b>%{st_b['depl']:.0f}</b> (sermayenin yarısı boşta).</p>
+<p><b>COMBO çözümü:</b> poz boyutu %5→%7.5 <b>ve</b> +2R yarısı çıkınca kalan runner slotu boşaltsın
+(<code>free_runner_slots</code>) → boşalan sermaye yeniden konuşlanır. Kullanım %{st_b['depl']:.0f}→
+<b>%{st_c['depl']:.0f}</b>. Aynı giriş/çıkış, sadece daha çok sermaye çalışıyor.</p>
 </div>
 <div class="kpis">
- <div class="kpi"><div class="l">Toplam getiri (5.8y) — canlı → öneri</div><div class="v">{st_b['roi']:+.0f}% → <span class="pos">{st_w['roi']:+.0f}%</span></div></div>
- <div class="kpi"><div class="l">Maks. düşüş</div><div class="v">{st_b['dd']:.1f}% → <span class="pos">{st_w['dd']:.1f}%</span></div></div>
- <div class="kpi"><div class="l">Kâr faktörü</div><div class="v">{st_b['pf']:.2f} → <span class="pos">{st_w['pf']:.2f}</span></div></div>
- <div class="kpi"><div class="l">SPY'a karşı alfa</div><div class="v">{st_b['alpha']:+.0f} → <span class="pos">{st_w['alpha']:+.0f}</span> pp</div></div>
- <div class="kpi"><div class="l">İşlem sayısı</div><div class="v">{st_b['n']} → {st_w['n']}</div></div>
- <div class="kpi"><div class="l">Medyan tutuş</div><div class="v">{st_b['hold_med']:.0f} → {st_w['hold_med']:.0f} gün</div></div>
+ <div class="kpi"><div class="l">Sermaye kullanımı — baz → combo</div><div class="v">%{st_b['depl']:.0f} → <span class="pos">%{st_c['depl']:.0f}</span></div></div>
+ <div class="kpi"><div class="l">Getiri (5y)</div><div class="v">{st_b['roi']:+.0f}% → <span class="pos">{st_c['roi']:+.0f}%</span></div></div>
+ <div class="kpi"><div class="l">Maks. düşüş (bedel)</div><div class="v">{st_b['dd']:.1f}% → <span class="neg">{st_c['dd']:.1f}%</span></div></div>
+ <div class="kpi"><div class="l">Kâr faktörü</div><div class="v">{pf_s(st_b['pf'])} → {pf_s(st_c['pf'])}</div></div>
 </div>
-
-<h2>2) Giriş–Çıkış Kuralları: Mevcut Kağıt-Trade vs Öneri</h2>
-<div class="card">
-<p>Mevcut kağıt-trade sistemi <b>tek giriş + iki paralel çıkış portföyü</b> koşturuyor: girişler her iki
-portföyde birebir aynı (40 günlük kırılım taraması), yalnız çıkış kuralı ayrışıyor (🏆 ATR-trail ve 📐 8/21-EMA).
-Önerilen yöntem (💡) hem girişi hem çıkışı değiştiriyor. Aşağıdaki iki tablo farkları kural düzeyinde gösterir.</p>
-
-<h3>GİRİŞ kuralları</h3>
-<table>
-<tr><th>Bileşen</th><th>Mevcut paper (🏆 ve 📐 ortak)</th><th>💡 Önerilen</th></tr>
-<tr><td>Hisse havuzu</td><td colspan="2" style="text-align:center">AYNI — 95 ABD mega-cap (S&P-100 ağırlıklı + momentum isimleri)</td></tr>
-<tr><td>Piyasa kapısı</td><td colspan="2" style="text-align:center">AYNI — SPY &gt; SMA200 değilse yeni alım yok (ayı rejiminde nakit)</td></tr>
-<tr><td>Trend ön-filtresi</td><td colspan="2" style="text-align:center">AYNI — Kapanış &gt; SMA20/50/200 + SMA200 eğimi pozitif (Stage-2)</td></tr>
-<tr><td><b>Kırılım eşiği</b></td><td>Önceki <b>40 günün</b> tepesi kırılınca</td><td class="pos">Önceki <b>63 günün</b> (çeyreklik) tepesi kırılınca — daha nadir, daha seçici sinyal</td></tr>
-<tr><td>Zirve yakınlığı</td><td colspan="2" style="text-align:center">AYNI — Fiyat ≥ 52-hafta zirvesinin %75'i</td></tr>
-<tr><td>Momentum / görece güç</td><td colspan="2" style="text-align:center">AYNI — 60g getiri &gt; 0 ve ≥ SPY 60g getirisi</td></tr>
-<tr><td>Sıralama</td><td colspan="2" style="text-align:center">AYNI — 0–100 öncelik puanı (canlı tarayıcı formülü)</td></tr>
-<tr><td>Boyutlama</td><td>Eşit-ağırlık: o günkü TÜM sinyaller alınır, nakit aralarında bölünür (poz. tavanı yok)</td><td>Backtest'te maks. 5 pozisyon × sermayenin %20'si; doluysa sinyal pas geçilir</td></tr>
-<tr><td>Giriş anı / fiyatı</td><td>15:45 ET tarama fiyatı +3bps kayma</td><td>Kapanış (≈15:45 kanıtlı eşdeğer) +8bps kayma — aynı pratik, daha muhafazakâr maliyet varsayımı</td></tr>
-</table>
-
-<h3>ÇIKIŞ kuralları</h3>
-<table>
-<tr><th>Bileşen</th><th>🏆 ATR-trail (şampiyon)</th><th>📐 8/21-EMA varyantı</th><th>💡 Önerilen (şamdan)</th></tr>
-<tr><td>İlk koruma stopu</td><td>max(10-gün dip, giriş−1.5×ATR) — <b>gün-içi</b> değince çıkar</td><td class="amb">YOK (ortak felaket stopu yok)</td><td>Örtük: giriş−3.25×ATR (şamdanın başlangıç seviyesi) — yalnız kapanışta</td></tr>
-<tr><td>Kısmi kâr alma</td><td>%50 @ +2R (limit emir)</td><td>%50 kapanış &lt; 8-EMA olunca</td><td class="pos">YOK — pozisyon bölünmez</td></tr>
-<tr><td>Sabit hedef</td><td>+2R (kısmiyle aynı seviye → pratikte tam pozisyon +2R'de kapanır)</td><td>YOK</td><td class="pos">YOK — tavan koymaz, trend ne verirse</td></tr>
-<tr><td>Trailing</td><td>+1R sonrası stop = kapanış−2.5×ATR (yalnız yukarı)</td><td>Kalan %50 kapanış &lt; 21-EMA olunca çıkar</td><td class="pos">Stop = TEPE fiyat−3.25×ATR (kapanışa değil tepeye bağlı, yalnız yukarı)</td></tr>
-<tr><td>Breakeven kuralı</td><td>Kısmi sonrası stop girişe çekilir</td><td>YOK</td><td>YOK (şamdan doğal olarak kilitler)</td></tr>
-<tr><td>Değerlendirme anı</td><td>Stop gün-içi (iğne), kısmi/hedef gün-içi limit</td><td>Yalnız kapanış teyidi</td><td>Yalnız kapanış teyidi</td></tr>
-<tr><td>Tipik tutuş</td><td>Medyan ~11 gün</td><td>Daha uzun (runner 21-EMA'da)</td><td>Medyan ~46 gün</td></tr>
-<tr><td>Karakter</td><td>Yüksek isabet (%52), küçük asimetri (+8.1/−3.7) — kuyruk +2R'de kesilir</td><td>Trend-takip ama EMA'lar testereye duyarlı</td><td>Düşük isabet (%46), büyük asimetri (+20.9/−5.1 ≈ 4:1) — kuyruk taşınır</td></tr>
-</table>
-
-<p><b>Ekonomist okuması:</b> Üç çıkış aslında üç farklı "kuyruk politikası"dır. 🏆 sağ kuyruğu +2R'de satar
-(gelirini bugün alır, opsiyon satıcısı gibi); 📐 kuyruğu EMA'lara emanet eder ama 8-EMA bacağı testere
-piyasada sık tetiklenir; 💡 kuyruğu sonuna kadar taşır ve bunun bedelini düşük isabet oranı + derin tekil
-geri çekilmelerle öder. Backtest'in söylediği: bu evrende (momentum mega-cap) kuyruğu taşımanın primi,
-bedelinden belirgin biçimde büyük. Ayrıca dikkat: önerilen backtest 5×%20 boyutlamayla koşuldu; mevcut paper'ın
-"tüm sinyaller eşit-ağırlık" kuralıyla birebir aynı değil — kağıt-trade'e alınırsa bu fark da ölçülmüş olacak.</p>
-</div>
-
-<h2>3) Özsermaye Eğrisi (100 = başlangıç, log ölçek)</h2>
-<div id="ch_eq" class="chart"></div>
-<div class="leg"><b style="color:#3fb950">■</b> Önerilen (lb63 + 3.25×ATR şamdan) &nbsp;
-<b style="color:#f85149">■</b> Canlı baz (lb40 + optimized) &nbsp; <b style="color:#8b949e">■</b> SPY</div>
-<p>Eğrinin anlattığı: 2021–22'nin yatay/ayı rejiminde iki strateji de SPY&gt;SMA200 kapısı sayesinde büyük ölçüde
-nakitte bekliyor (eğriler düz). Ayrışma 2023'ten itibaren trendlerin uzamasıyla başlıyor ve 2024 ile 2026'nın
-güçlü momentum dönemlerinde açılıyor. Dikkat çekici nokta: canlı baz bu dönemde <b>SPY'ın bile altında</b>
-({fmt(st_b['roi'])}% vs SPY {fmt(st_b['spy'])}%) — yani mevcut çıkış mimarisi, üstlendiği hisse-özgü riske karşılık
-endeks üstü getiri üretmiyor. Bu, "pasif endekse karşı fırsat maliyeti" ölçütünde ciddi bir bulgudur.</p>
-
-<h2>4) Drawdown Profili</h2>
+<h3>Özsermaye & Drawdown — baz vs COMBO</h3>
+<div id="ch_b" class="chart"></div>
+<div class="leg"><b style="color:#3fb950">■</b> COMBO (%7.5 + slot-serbest) &nbsp; <b style="color:#f85149">■</b> Qulla-21 baz (%5) &nbsp; <b style="color:#8b949e">■</b> SPY</div>
 <div id="ch_dd" class="chart"></div>
-<div class="leg"><b style="color:#3fb950">■</b> Önerilen &nbsp; <b style="color:#f85149">■</b> Canlı baz</div>
-<p>Sezgiye aykırı sonuç: <b>daha az müdahale eden çıkış, daha sığ drawdown üretiyor.</b> Nedeni mekanik:
-canlı baz dar stoplarla (1.5×ATR) sık sık küçük kayıplar alıp yeniden giriyor; testere piyasada bu kayıplar
-birikiyor (ölüm bin kesikle). Şamdan trail ise pozisyona geniş nefes payı bırakıp <i>tepe fiyattan</i> izlediği için
-trend bozulmadan çıkmıyor; testereye hiç girmeyen (daha seçici, 63g kırılım) girişlerle birleşince
-toplam zarar havuzu küçülüyor.</p>
+<div class="leg"><b style="color:#3fb950">■</b> COMBO &nbsp; <b style="color:#f85149">■</b> baz — <span class="mut">daha yüksek kullanım = daha derin düşüş (kaldıraç bedeli)</span></div>
+<p class="mut"><b>Önemli:</b> COMBO bir kaldıraçtır — getiriyi de riski de büyütür (düşüş {st_b['dd']:.1f}%→{st_c['dd']:.1f}%).
+Ve slot-serbest yalnız <b>split çıkışta</b> (Qulla-21/📐) çalışır; 🏆 ve 💡 bölünmez olduğu için onlara uygulanamaz —
+combo bu yüzden Bölüm A'nın değil, Qulla-21'e özgü bir konuşlandırma katmanıdır.</p>
 
-<h2>5) Pencere Bazlı Dayanıklılık (out-of-sample tasarımı)</h2>
+<h2>C) Giriş Miktarı × Slot Sayısı — Isı Haritası</h2>
 <div class="card">
-<p>Tek dönemlik backtest'ler "şanslı pencere" yanılgısına açıktır. Bu çalışmada parametreler hiçbir alt-pencereye
-göre seçilmedi; adaylar <b>üç ayrık (örtüşmeyen) dilimde</b> ayrı ayrı sınandı ve sıralama ölçütü
-"en kötü dilimdeki yıllıklandırılmış getiri" oldu — yani strateji en zayıf rejimine göre yargılandı
-(maximin / Rawls'çu seçim kriteri).</p>
-<table>
-<tr><th>Pencere</th><th>Canlı baz ROI / DD</th><th>Önerilen ROI / DD</th><th>CAGR değişimi</th></tr>
-{window_table}
+<p>Yöntem (👑 Qulla-21) ve konuşlandırma (combo) sabitlendi. Son ayar: her pozisyona sermayenin
+<b>yüzde kaçı</b> girsin (giriş miktarı) ve aynı anda <b>kaç pozisyon</b> tutulsun (slot sayısı)?
+İkisi birlikte "ne kadar kaldıraç" demektir. Aşağıdaki ızgara, canlı combo zemininde (RS top-50 · sp500_ndx · 5y)
+her kombinasyonun 5 yıllık getirisini gösterir — <b>koyu yeşil = yüksek getiri</b>. Mavi çerçeveli ★ =
+<b>şu anki canlı ayar (20 slot × %7.5)</b>.</p>
+</div>
+<table style="text-align:center">
+<tr><th>slot ↓ / boyut →</th>{heat_head}</tr>
+{heat_rows}
 </table>
-<p>Önerilen varyant <b>her dilimde pozitif</b> — 2022 ayı piyasası dahil. Canlı baz ise W1'de negatif.
-İktisatçı diliyle: getiri serisinin rejimler-arası varyansı düşmüş, yani performans tek bir makro ortama
-(düşük faiz / yüksek momentum) koşullu değil.</p>
+<p class="mut">Her hücre: büyük sayı = 5y getiri · altında <b>DD</b> (maks. düşüş) · <b>PF</b> (kâr faktörü) · <b>%</b> (ort. sermaye kullanımı).</p>
+<h3>Basit dille sonuç</h3>
+<div class="card">
+<ul>
+<li><b>Boyutu büyütmek (tabloda sağa):</b> getiriyi artırır ama düşüşü de derinleştirir — saf kaldıraç.
+Belli bir noktadan sonra sermaye zaten dolduğu için (kullanım ~%100) getiri artışı <b>doygunlaşır</b>;
+o noktadan sonrası çoğunlukla sadece daha fazla risktir, daha fazla getiri değil.</li>
+<li><b>Slot sayısını artırmak (tabloda yukarı):</b> aynı boyutta daha çok slot = daha çok çeşitlendirme ve
+daha çok konuşlanmış sermaye; ama slot başına pay küçüldüğü için tek bir ismin katkısı azalır. Çok az slot =
+yoğunlaşma (yüksek getiri, yüksek risk); çok fazla slot = seyrelme.</li>
+<li><b>En yüksek ham getiri:</b> {grid_best_roi}.</li>
+<li><b>En iyi risk-ayarlı (kâr faktörü):</b> {grid_best_pf}.</li>
+<li><b>En sığ düşüş (en sakin):</b> {grid_shallow}.</li>
+<li><b>Şu anki canlı (20 slot × %7.5):</b> ROI {gl['roi']:+.0f}% · DD {gl['dd']:.0f}% · PF {pf_s(gl['pf'])} ·
+kullanım %{gl['depl']:.0f}.</li>
+</ul>
+<p><b>Karar okuması:</b> En yüksek getirili hücre genelde en derin düşüşe de sahiptir; "en iyi" tanımın
+(getiri mi, sakinlik mi) hücreyi belirler. Canlı ayar (20×%7.5) getiriyi kovalayan uçta değil, kullanımı
+neredeyse tam (%{gl['depl']:.0f}) yapan ama düşüşü hâlâ makul tutan dengeli bir noktada. Daha yüksek getiri
+isteyen boyutu/sloti artırabilir — ama tablo gösteriyor ki bunun bedeli doğrudan daha derin drawdown; getiri
+tarafı ise doygunluğa yaklaştığı için sınırlı.</p>
 </div>
 
-<h2>6) Getirinin Kaynağı — Ekonomik Ayrıştırma</h2>
-<h3>a) Ciro vergisi (turnover tax)</h3>
-<p>Canlı baz yılda ~105 işlem yapıyor; her işlem çifti tahmini 13–23 baz puan sürtünme (spread + kayma + komisyon)
-ödüyor. Bu, sermaye üzerinde yıllık <b>~%2.5–3'lük görünmez bir vergi</b> demektir. Önerilen varyant cironun
-beşte biriyle (~20 işlem/yıl) aynı piyasaya maruz kalıyor. Stres testi bunu doğruluyor: kayma maliyetleri
-<b>iki katına</b> çıkarıldığında canlı bazın getirisi +%89→+%56'ya çökerken (−%38 duyarlılık), önerilen
-+%273→+%254'te kalıyor (−%7). Düşük ciro = maliyet şoklarına karşı doğal sigorta.</p>
-<h3>b) Pozitif çarpıklık: kuyruğu satmak yerine kuyruğu taşımak</h3>
-<p>Mevcut çıkış (+2R'de kısmi + hedef) davranışsal olarak rahatlatıcıdır ama finansal olarak
-<b>örtük bir alım opsiyonu satışıdır</b>: her kazananın getirisi +2R'de tavanlanır, kaybedenler ise tam stop yer.
-Kazanç dağılımının sağ kuyruğu — momentum stratejilerinde getirinin asıl kaynağı — sistematik biçimde
-karşı tarafa devredilir. Önerilen varyantta dağılım tersine çevriliyor: isabet oranı düşüyor
-(%{st_b['win']:.0f} → %{st_w['win']:.0f}) ama ortalama kazanç/kayıp oranı <b>{abs(st_w['avgw_pct']/st_w['avgl_pct']):.1f}:1</b>'e
-çıkıyor (ort. kazanç {fmt(st_w['avgw_pct'])}%, ort. kayıp {fmt(st_w['avgl_pct'])}%; en büyük tekil kazanç
-{fmt(st_w['maxw_pct'])}%). Bu, klasik trend-takip iktisadıdır: çok sayıda küçük yanlış, az sayıda çok büyük doğru.</p>
-<h3>c) Beta zamanlaması</h3>
-<p>Her iki strateji de SPY&gt;SMA200 kapısıyla ayı rejiminde alım yapmıyor; fark, kapı açıldığında ne yapıldığında.
-63 günlük (çeyreklik) tepe kırılımı, 40 günlüğe göre daha nadir ve daha "kanıtlanmış" trend sinyali üretiyor —
-sinyal başına bilgi içeriği artıyor, gürültü/sinyal oranı düşüyor.</p>
-
-<h2>7) İşlem Karakteri</h2>
-<table>
-<tr><th></th><th>Canlı baz</th><th>Önerilen</th></tr>
-<tr><td>İşlem sayısı (5.8y)</td><td>{st_b['n']}</td><td>{st_w['n']}</td></tr>
-<tr><td>Medyan / ort. / maks. tutuş (gün)</td><td>{st_b['hold_med']:.0f} / {st_b['hold_avg']:.0f} / {st_b['hold_max']}</td><td>{st_w['hold_med']:.0f} / {st_w['hold_avg']:.0f} / {st_w['hold_max']}</td></tr>
-<tr><td>İsabet oranı</td><td>%{st_b['win']:.1f}</td><td>%{st_w['win']:.1f}</td></tr>
-<tr><td>Ort. kazanç / ort. kayıp</td><td>{fmt(st_b['avgw_pct'])}% / {fmt(st_b['avgl_pct'])}%</td><td>{fmt(st_w['avgw_pct'])}% / {fmt(st_w['avgl_pct'])}%</td></tr>
-<tr><td>En büyük kazanç / kayıp (tekil)</td><td>{fmt(st_b['maxw_pct'])}% / {fmt(st_b['maxl_pct'])}%</td><td>{fmt(st_w['maxw_pct'])}% / {fmt(st_w['maxl_pct'])}%</td></tr>
-<tr><td>Kâr faktörü</td><td>{st_b['pf']:.2f}</td><td>{st_w['pf']:.2f}</td></tr>
-</table>
-<p class="mut">Önerilen varyant "swing trade"den çok "pozisyon trade"dir: medyan {st_w['hold_med']:.0f} gün tutuş,
-sinyal sıklığı ayda ~2. Davranışsal maliyeti aşağıda (Bölüm 9) tartışılıyor.</p>
-
-<h2>8) Aylık Getiri Tabloları</h2>
-<h3 class="pos">Önerilen — lb63 + 3.25×ATR şamdan</h3>
-{monthly_html(eq_w)}
-<h3 class="neg">Canlı baz — lb40 + optimized şampiyon çıkış</h3>
+<h2>D) Aylık Getiri — baz vs COMBO</h2>
+<h3 class="pos">COMBO (%7.5 + slot-serbest)</h3>
+{monthly_html(eq_c)}
+<h3 class="neg">Qulla-21 baz (%5)</h3>
 {monthly_html(eq_b)}
 
-<h2>9) Riskler ve Sınırlamalar — Dürüst Okuma</h2>
-<blockquote><b>Bu bölüm raporun en önemli kısmıdır.</b> Hiçbir backtest gelecek getiri vaadi değildir;
-aşağıdaki maddeler önerinin hangi koşullarda <i>başarısız olabileceğini</i> tanımlar.</blockquote>
+<h2>E) Riskler ve Dürüst Okuma</h2>
+<blockquote>Hiçbir backtest gelecek vaadi değildir. Aşağıdaki maddeler bu karşılaştırmanın hangi koşullarda
+yanıltabileceğini tanımlar.</blockquote>
 <ul>
-<li><b>Gün-içi sert stop yok:</b> Şamdan çıkışı yalnız <i>kapanışta</i> değerlendirilir. Sert gap'lerde tekil işlem
-kaybı büyüyebilir; gözlenen en kötü işlem {fmt(st_w['maxl_pct'])}% (pozisyon %20 olduğundan portföye etkisi ~−%4.5).
-Mevcut sistemin gün-içi stopu bu kuyruğu kısmen keser — bunun bedelini de getiriyle öder.</li>
-<li><b>İstatistiksel güç:</b> {st_w['n']} işlem, 614'e kıyasla küçük örneklem; güven aralıkları geniştir.
-Karşı denge: trail çarpanı 2.75–3.5 aralığının tamamı güçlü sonuç veriyor (parametre <i>platosu</i>) ve
-lb40 versiyonu da +%217 üretiyor — sonuç tek bir parametre noktasına bağlı değil.</li>
-<li><b>Seçim yanlılığı:</b> ~95 konfigürasyon tarandı; en iyinin bir kısmı şanstır. Ayrık pencereler ve stres testi
-bu yanlılığı azaltır ama sıfırlamaz. İhtiyatlı beklenti, rapor edilen rakamların altıdır.</li>
-<li><b>Dönem katkısı:</b> 2026 H1 (+%91) toplam getirinin önemli parçası. Gerçi 2023–24 dilimi de bağımsız olarak
-+%36 CAGR veriyor; yine de momentum stratejileri uzun "düz" dönemler yaşar (örn. 2025: −%0.6 — koca yıl sıfır).</li>
-<li><b>Davranışsal yük:</b> 46 gün medyan tutuş, tepeden %15–20 geri çekilmeyi "çıkmadan izlemeyi" gerektirir
-(şamdan tasarımı gereği). Kâğıt üzerinde kolay, gerçek parayla zordur; disiplin kırılırsa backtest geçersizleşir.</li>
-<li><b>Veri notları:</b> FMP fiyatları temettü-ayarsızdır (split-ayarlı); temettü dahil edilse iki strateji de
-hafif daha iyi görünürdü. Evren bugünün S&P bileşenlerinden türetildiği için sınırlı <i>survivorship</i> yanlılığı
-içerir — bu yanlılık <b>iki stratejiye de eşit</b> uygulanır, dolayısıyla <i>göreli</i> karşılaştırmayı bozmaz.</li>
-<li><b>Kapasite/likidite:</b> Mevcut portföy ölçeğinde ($10k–100k) ihmal edilebilir; strateji büyük ölçekte de
-likit hisselerde çalışır, ancak kayma varsayımları kurumsal boyutta yeniden kalibre edilmelidir.</li>
+<li><b>Ham getiri ≠ en iyi:</b> Bölüm A'da en yüksek getirili yöntem genelde en derin düşüşe de sahiptir.
+"Kazanan" tanımın (getiri mi, sakinlik mi, taşınabilirlik mi) sonucu belirler; Qulla-21 denge için seçildi.</li>
+<li><b>COMBO = kaldıraç:</b> Getiri {st_b['roi']:+.0f}%→{st_c['roi']:+.0f}% çıkarken düşüş {st_b['dd']:.1f}%→{st_c['dd']:.1f}%
+derinleşir; sert ayıda combo bazdan daha çok kaybeder. Risk-iştahı kararıdır.</li>
+<li><b>Havuz derinliği:</b> COMBO'nun kazancı boşalan sermayeyi kaliteli RS top-50 adaylarıyla doldurmaya dayanır;
+sp500_ndx (~{NPOOL}) derinliği bu yüzden şart (dar havuzda etki zayıflar).</li>
+<li><b>Küçük örneklem + seçim yanlılığı:</b> Sınırlı işlem sayısı; parametreler az sayıda varyant denenerek seçildi.
+İhtiyatlı beklenti rapor edilen rakamların altındadır.</li>
+<li><b>Veri:</b> FMP fiyatları split-ayarlı, temettü-ayarsız. Evren bugünün endeks bileşenlerinden türetildiği için
+sınırlı <i>survivorship</i> yanlılığı içerir — tüm yöntemlere <b>eşit</b> uygulandığından göreli sıralamayı bozmaz.</li>
 </ul>
 
-<h2>10) Sonuç ve Tavsiye</h2>
+<h2>F) Durum</h2>
 <div class="card">
-<p><b>Tavsiye: kademeli geçiş, ani değişim değil.</b> Önerilen varyantı canlı sinyal akışına paralel
-<b>üçüncü kağıt-trade portföyü</b> olarak eklemek (🏆 ATR-trail ve 📐 8/21-EMA'nın yanına), 2–3 ay gerçek-zamanlı
-gözlemden sonra sermaye tahsisi kararı vermek. Bu, backtest ile canlı icra arasındaki boşluğu (gerçek kayma,
-sinyal zamanlaması, davranışsal uyum) ölçmenin en ucuz yoludur.</p>
-<p>Karar çerçevesi (ekonomist gözüyle): mevcut sistemin alternatif maliyeti yüksek — aynı risk bütçesiyle endeksin
-altında getiri. Önerilen varyantın beklenen değeri belirgin biçimde yüksek, riski <i>farklı</i> (daha az ama daha
-derin tekil kayıplar, uzun düz dönemler). İkisi davranışsal olarak farklı ürünlerdir; geçiş kararı yalnız getiri
-beklentisine değil, taşıyıcının drawdown ve sabır toleransına göre verilmelidir.</p>
+<p>Giriş/çıkış olarak <b>👑 Qulla-21</b> canlıda; sermaye konuşlandırması <b>2026-07-01'de COMBO'ya</b> alındı
+(defter aynı çapadan, 2026-05-27, baştan combo ile kuruldu). Bırakılan 3 yöntem (🏆/📐/💡) bu raporda
+referans/karşılaştırma amacıyla korunur; canlıda kullanılmıyor. Geri dönüş kolay:
+<code>qulla_paper._cfg</code>'deki iki satır (poz%7.5 + free_runner_slots) eski değerlere çevrilir.</p>
 </div>
-<p class="mut">Üretim: <code>gen_exp_report.py</code> · Deney altyapısı: <code>exp_swing2*.py</code>, sonuçlar
-<code>swing2_out/exp_{{a,b,c,d}}_results.csv</code> · Bu sayfa salt-okur bir rapordur; canlı trade mantığına etkisi yoktur.</p>
+<p class="mut">Üretim: <code>gen_exp_report.py</code> · Bu sayfa salt-okur bir rapordur; canlı trade mantığına etkisi yoktur.</p>
 </div>
 <script src="/static/lwc.js"></script>
 <script>
@@ -312,18 +420,21 @@ function mkChart(id, logScale){{
   new ResizeObserver(()=>ch.applyOptions({{width:el.clientWidth}})).observe(el);
   return ch;
 }}
-const eq = mkChart('ch_eq', true);
-eq.addLineSeries({{color:'#3fb950',lineWidth:2}}).setData(DATA.eq_w);
-eq.addLineSeries({{color:'#f85149',lineWidth:2}}).setData(DATA.eq_b);
-eq.addLineSeries({{color:'#8b949e',lineWidth:1}}).setData(DATA.eq_spy);
-eq.timeScale().fitContent();
+const eqA = mkChart('ch_a', true);
+{A_lines_js}
+eqA.addLineSeries({{color:'#8b949e',lineWidth:1}}).setData(DATA.spy);
+eqA.timeScale().fitContent();
+const eqB = mkChart('ch_b', true);
+eqB.addLineSeries({{color:'#3fb950',lineWidth:2}}).setData(DATA.eq_c);
+eqB.addLineSeries({{color:'#f85149',lineWidth:2}}).setData(DATA.eq_b);
+eqB.addLineSeries({{color:'#8b949e',lineWidth:1}}).setData(DATA.spy);
+eqB.timeScale().fitContent();
 const dd = mkChart('ch_dd', false);
-dd.addAreaSeries({{lineColor:'#3fb950',topColor:'rgba(63,185,80,.25)',bottomColor:'rgba(63,185,80,0)',lineWidth:2}}).setData(DATA.dd_w);
+dd.addAreaSeries({{lineColor:'#3fb950',topColor:'rgba(63,185,80,.25)',bottomColor:'rgba(63,185,80,0)',lineWidth:2}}).setData(DATA.dd_c);
 dd.addAreaSeries({{lineColor:'#f85149',topColor:'rgba(248,81,73,.25)',bottomColor:'rgba(248,81,73,0)',lineWidth:2}}).setData(DATA.dd_b);
 dd.timeScale().fitContent();
 </script></body></html>"""
 
-import os
 os.makedirs(os.path.dirname(OUT), exist_ok=True)
 with open(OUT, "w", encoding="utf-8") as f:
     f.write(html)
