@@ -966,6 +966,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         self._send(200, fh.read(), "text/html; charset=utf-8")
                 else:
                     self._send(404, "Rapor henüz üretilmedi (python3 gen_exp_report.py)", "text/plain; charset=utf-8")
+            elif path == "/lab":
+                # Deney laboratuvarı sayfası (statik, gen_lab_report.py üretir) — salt-okur
+                rp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dashboard_static", "exp_lab.html")
+                if os.path.exists(rp):
+                    with open(rp, "rb") as fh:
+                        self._send(200, fh.read(), "text/html; charset=utf-8")
+                else:
+                    self._send(404, "Lab sayfası henüz üretilmedi (python3 gen_lab_report.py)", "text/plain; charset=utf-8")
             elif path.startswith("/api/candles/"):
                 sym = path[len("/api/candles/"):].upper()
                 q = urllib.parse.parse_qs(self.path.split("?", 1)[1]) if "?" in self.path else {}

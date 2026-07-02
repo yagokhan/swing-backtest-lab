@@ -167,6 +167,31 @@ def a_win_row(wname):
 a_win_table = "".join(a_win_row(w[0]) for w in WINDOWS)
 a_win_head = "".join(f"<th>{lbl.split(' ')[0]}</th>" for k, lbl, *_ in METHODS)
 
+# ---- SPY karşısında: trailing dönemler (5y/2y/1y/6ay/1ay, bugüne kadar) ----
+TRAIL = [("5 yıl", "2021-05-01"), ("2 yıl", "2024-07-01"), ("1 yıl", "2025-07-01"),
+         ("6 ay", "2026-01-01"), ("1 ay", "2026-06-01")]
+print("EKSEN A — SPY karşısında trailing dönemler...", flush=True)
+A_trail = {k: {} for k, *_ in METHODS}
+trail_spy = {}
+for tname, sd in TRAIL:
+    for key, label, col, ov in METHODS:
+        _, st = run(ov, sd, FULL_ED)
+        A_trail[key][tname] = st
+    trail_spy[tname] = A_trail["qulla"][tname]["spy"]
+
+def trail_row(tname):
+    spyv = trail_spy[tname]
+    cells = ""
+    for key, label, col, ov in METHODS:
+        roi = A_trail[key][tname]["roi"]
+        beat = roi >= spyv
+        cells += (f"<td class='{'pos' if roi >= 0 else 'neg'}'>{'<b>' if beat else ''}{roi:+.1f}%{'</b>' if beat else ''}</td>")
+    cells += f"<td class='mut'>{spyv:+.1f}%</td>"
+    return f"<tr><td>{tname}</td>{cells}</tr>"
+
+trail_table = "".join(trail_row(t[0]) for t in TRAIL)
+trail_head = "".join(f"<th>{lbl.split(' ')[0]}</th>" for k, lbl, *_ in METHODS) + "<th>📈 SPY</th>"
+
 # dinamik yargı
 _by_roi = sorted(METHODS, key=lambda m: A_st[m[0]]["roi"], reverse=True)
 _by_pf = sorted(METHODS, key=lambda m: A_st[m[0]]["pf"] if A_st[m[0]]["pf"] != float("inf") else 1e9, reverse=True)
@@ -254,7 +279,7 @@ html = f"""<!doctype html><html lang="tr"><head><meta charset="utf-8">
  a{{color:var(--blu)}} .back{{font-size:13px}} ul{{margin:6px 0 6px 20px;padding:0}} li{{margin:5px 0}}
  .mcard{{border-left:4px solid var(--bd);padding:2px 0 2px 12px;margin:12px 0}}
 </style></head><body><div class="wrap">
-<p class="back"><a href="/">← Dashboard'a dön</a></p>
+<p class="back"><a href="/">← Dashboard'a dön</a> &nbsp;·&nbsp; <a href="/lab">🧪 Deney Laboratuvarı →</a></p>
 <h1>📊 Strateji Karşılaştırma Raporu</h1>
 <p class="mut">👑 Qulla-21 · {today} · Veri: FMP günlük · Havuz: sp500_ndx (~{NPOOL}) → günlük RS top-50 · 5 yıl ·
 Motor: <code>swing2_backtest.py</code> · Pencere bazlı doğrulama (5 dilim)</p>
@@ -297,6 +322,22 @@ Maks. düşüş = zirveden en dip noktaya kadarki en kötü geri çekilme. İsab
 <tr><th>Dönem</th>{a_win_head}</tr>
 {a_win_table}
 </table>
+
+<h3>SPY karşısında — kısa & uzun vade (bugüne kadar)</h3>
+<p class="mut">Her hücre o dönemin toplam getirisi; <b>kalın</b> = o dönemde SPY'ı geçti. Son sütun SPY (al-tut, aynı dönem). Hepsi bugüne (2026-06-30) kadar geriye trailing.</p>
+<table>
+<tr><th>Dönem</th>{trail_head}</tr>
+{trail_table}
+</table>
+<div class="card">
+<p><b>Basit dille:</b> Uzun vadede (5y/2y) yöntemler SPY'ı ham getiride genelde geriden takip eder — bu tasarım gereği
+(RS top-50 + kapanış&lt;SMA200 kapısı ayı dönemlerinde nakde geçer, boğanın tamamına binmez). Kısa/yakın vadede
+tablo değişir: 👑 Qulla-21 son <b>1 yıl</b> {A_trail['qulla']['1 yıl']['roi']:+.0f}% (SPY {trail_spy['1 yıl']:+.0f}%),
+<b>6 ay</b> {A_trail['qulla']['6 ay']['roi']:+.0f}% (SPY {trail_spy['6 ay']:+.0f}%),
+<b>1 ay</b> {A_trail['qulla']['1 ay']['roi']:+.0f}% (SPY {trail_spy['1 ay']:+.0f}%).</p>
+<p class="mut">⚠️ Kısa pencereler (6 ay, özellikle 1 ay) <b>çok az işlem</b> içerir → gürültülüdür, tek tek sonuçlar
+şansa açıktır; trend/istatistik için 2y+ pencerelere bakın. Kısa vade sadece "şu an nabız" göstergesidir.</p>
+</div>
 
 <h3>Basit dille sonuç</h3>
 <div class="card">

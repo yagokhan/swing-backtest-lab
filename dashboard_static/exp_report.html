@@ -22,7 +22,7 @@
  a{color:var(--blu)} .back{font-size:13px} ul{margin:6px 0 6px 20px;padding:0} li{margin:5px 0}
  .mcard{border-left:4px solid var(--bd);padding:2px 0 2px 12px;margin:12px 0}
 </style></head><body><div class="wrap">
-<p class="back"><a href="/">← Dashboard'a dön</a></p>
+<p class="back"><a href="/">← Dashboard'a dön</a> &nbsp;·&nbsp; <a href="/lab">🧪 Deney Laboratuvarı →</a></p>
 <h1>📊 Strateji Karşılaştırma Raporu</h1>
 <p class="mut">👑 Qulla-21 · 01.07.2026 · Veri: FMP günlük · Havuz: sp500_ndx (~373) → günlük RS top-50 · 5 yıl ·
 Motor: <code>swing2_backtest.py</code> · Pencere bazlı doğrulama (5 dilim)</p>
@@ -65,6 +65,22 @@ Maks. düşüş = zirveden en dip noktaya kadarki en kötü geri çekilme. İsab
 <tr><th>Dönem</th><th>🏆</th><th>📐</th><th>💡</th><th>👑</th></tr>
 <tr><td>W1: 2021–22 (ayı)</td><td class='neg'>-18.6% <span class='mut'>/ -20%</span></td><td class='neg'>-10.8% <span class='mut'>/ -18%</span></td><td class='neg'>-14.3% <span class='mut'>/ -21%</span></td><td class='neg'>-7.3% <span class='mut'>/ -14%</span></td></tr><tr><td>W2: 2022–23 (ayı+topar.)</td><td class='neg'>-3.8% <span class='mut'>/ -15%</span></td><td class='neg'>-1.7% <span class='mut'>/ -15%</span></td><td class='pos'>+0.6% <span class='mut'>/ -18%</span></td><td class='pos'>+1.5% <span class='mut'>/ -12%</span></td></tr><tr><td>W3: 2023–24 (boğa)</td><td class='neg'>-4.8% <span class='mut'>/ -18%</span></td><td class='pos'>+2.6% <span class='mut'>/ -16%</span></td><td class='pos'>+6.1% <span class='mut'>/ -18%</span></td><td class='pos'>+28.4% <span class='mut'>/ -11%</span></td></tr><tr><td>W4: son 2 yıl</td><td class='pos'>+44.2% <span class='mut'>/ -9%</span></td><td class='pos'>+31.7% <span class='mut'>/ -14%</span></td><td class='pos'>+84.6% <span class='mut'>/ -13%</span></td><td class='pos'>+48.9% <span class='mut'>/ -14%</span></td></tr><tr><td>FULL: 2021–26</td><td class='pos'>+12.0% <span class='mut'>/ -30%</span></td><td class='pos'>+21.8% <span class='mut'>/ -26%</span></td><td class='pos'>+64.8% <span class='mut'>/ -26%</span></td><td class='pos'>+62.7% <span class='mut'>/ -16%</span></td></tr>
 </table>
+
+<h3>SPY karşısında — kısa & uzun vade (bugüne kadar)</h3>
+<p class="mut">Her hücre o dönemin toplam getirisi; <b>kalın</b> = o dönemde SPY'ı geçti. Son sütun SPY (al-tut, aynı dönem). Hepsi bugüne (2026-06-30) kadar geriye trailing.</p>
+<table>
+<tr><th>Dönem</th><th>🏆</th><th>📐</th><th>💡</th><th>👑</th><th>📈 SPY</th></tr>
+<tr><td>5 yıl</td><td class='pos'>+12.0%</td><td class='pos'>+21.8%</td><td class='pos'>+64.8%</td><td class='pos'>+62.7%</td><td class='mut'>+78.6%</td></tr><tr><td>2 yıl</td><td class='pos'><b>+44.2%</b></td><td class='pos'>+31.7%</td><td class='pos'><b>+84.6%</b></td><td class='pos'><b>+48.9%</b></td><td class='mut'>+36.9%</td></tr><tr><td>1 yıl</td><td class='pos'><b>+32.1%</b></td><td class='pos'><b>+30.1%</b></td><td class='pos'><b>+66.8%</b></td><td class='pos'><b>+33.0%</b></td><td class='mut'>+20.9%</td></tr><tr><td>6 ay</td><td class='pos'><b>+30.7%</b></td><td class='pos'><b>+35.3%</b></td><td class='pos'><b>+51.2%</b></td><td class='pos'><b>+36.4%</b></td><td class='mut'>+9.3%</td></tr><tr><td>1 ay</td><td class='neg'>-3.3%</td><td class='neg'><b>-0.4%</b></td><td class='pos'><b>+4.9%</b></td><td class='pos'><b>+7.1%</b></td><td class='mut'>-1.6%</td></tr>
+</table>
+<div class="card">
+<p><b>Basit dille:</b> Uzun vadede (5y/2y) yöntemler SPY'ı ham getiride genelde geriden takip eder — bu tasarım gereği
+(RS top-50 + kapanış&lt;SMA200 kapısı ayı dönemlerinde nakde geçer, boğanın tamamına binmez). Kısa/yakın vadede
+tablo değişir: 👑 Qulla-21 son <b>1 yıl</b> +33% (SPY +21%),
+<b>6 ay</b> +36% (SPY +9%),
+<b>1 ay</b> +7% (SPY -2%).</p>
+<p class="mut">⚠️ Kısa pencereler (6 ay, özellikle 1 ay) <b>çok az işlem</b> içerir → gürültülüdür, tek tek sonuçlar
+şansa açıktır; trend/istatistik için 2y+ pencerelere bakın. Kısa vade sadece "şu an nabız" göstergesidir.</p>
+</div>
 
 <h3>Basit dille sonuç</h3>
 <div class="card">
