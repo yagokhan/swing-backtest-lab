@@ -3,8 +3,8 @@
 """👑 Qulla-21 canlı paper-track — GERÇEK DEFTER (kalıcı durum, geçmiş kilitli).
 
 Test edilen yöntemin BİREBİR aynısı: RS top-50 sistematik evren (sp500+ndx) +
-qswing 63g kırılım girişi + split çıkış (yarı +2R hedef / kalan yarı 21-EMA runner).
-$10k · %5/slot · 20-slot · bileşik (test $20k'ydı; %5/slot bileşik ölçek-bağımsız).
+qswing 63g kırılım girişi + split çıkış (%60 +2R hedef / %40 21-EMA runner — 60/40, 2026-07-02).
+$10k · %7.5/slot (combo) · 20-slot · bileşik.
 
 DEFTER MİMARİSİ (önceki "durumsuz replay" değiştirildi):
   • İlk çalıştırma → defter yoksa backtest ile SABİT çapa START → bugün BİR KEZ doldurulur
@@ -49,10 +49,13 @@ DAILY_STORE = os.path.expanduser("~/.swing_daily_store.pkl")
 def _cfg(asof=None):
     c = s.Config()
     c.entry_mode = "qswing_breakout"; c.qswing_breakout_lb = 63
-    c.exit_mode = "split"                  # yarı +2R hedef / kalan yarı 21-EMA runner
+    c.exit_mode = "split"                  # %60 +2R hedef / %40 21-EMA runner
     c.split_a = "target"; c.split_a_param = 2.0
     c.split_b = "ema21";  c.split_b_param = 0.0
-    c.split_ratio = 0.5
+    # ⭐ 60/40 (2026-07-02): +2R bacağına %60 — lab 5/5 walk-forward penceresinde bazı geçti
+    # (/lab bölüm 2b/4). Defter kullanıcı isteğiyle GEÇMİŞE DÖNÜK yeniden kuruldu (bootstrap,
+    # START'tan itibaren combo+60/40 tek konfig); eski 50/50 defter .bak.20260702-0954'te.
+    c.split_ratio = 0.6
     c.initial_capital = INITIAL; c.compounding = True
     # 🔓 COMBO (2026-07-01): cash-drag düzeltmesi — poz %5→%7.5 + runner slotu boşalt.
     # Artımlı defter YALNIZ yeni günleri işler → kilitli geçmiş DEĞİŞMEZ; combo bugünden ileri geçerli.
@@ -393,7 +396,7 @@ def qulla_summary(r):
     if n:
         L.append("🏆 " + " · ".join(html.escape(p.symbol) for p in r["opened"]))
     L.append("\n<i>Yöntem: RS top-50 sistematik evren + 63g kırılım girişi · split çıkış "
-             "(yarı +2R hedef / kalan yarı 21-EMA runner). Sinyal 15:45 anlık fiyatına göre. "
+             "(%60 +2R hedef / %40 21-EMA runner). Sinyal 15:45 anlık fiyatına göre. "
              "Eğitim amaçlı kağıt-trade.</i>")
     return "\n".join(L)
 
@@ -434,7 +437,7 @@ def chart_caption(c):
            f"🎯 Giriş <code>${c['entry']}</code> · Stop <code>${c['stop']}</code>"
            + (f" (risk %{c['risk_pct']})" if c.get('risk_pct') else "") + "\n"
            f"📈 63g tepe <code>${c.get('high40','—')}</code> aşıldı · RS <b>+{c['rs']}</b>\n"
-           f"📤 Çıkış (split): yarı <b>+2R</b> <code>${c.get('partial_target','—')}</code> hedef · "
+           f"📤 Çıkış (split): %60 <b>+2R</b> <code>${c.get('partial_target','—')}</code> hedef · "
            f"kalan yarı <b>kapanış &lt; 21-EMA</b> runner (ATR <code>${c.get('atr','—')}</code>)")
     return cap
 
@@ -552,7 +555,7 @@ def qulla_message(r, tag="👑 Qulla-21"):
     L.append(f"<b>Genel K/Z: {'+' if tot_pl>=0 else ''}{tot_pl:.0f}$ "
              f"({tot_pl/INITIAL*100:+.1f}%)</b> · SPY {r['spy_roi']:+.1f}% · "
              f"win %{r['win_rate']:.0f} · PF {pf_s} · MaxDD {r['max_dd']:.1f}%")
-    L.append(f"<i>Yöntem: RS top-50 + 63g kırılım + split (yarı +2R / kalan 21-EMA runner). "
+    L.append(f"<i>Yöntem: RS top-50 + 63g kırılım + split (%60 +2R / %40 21-EMA runner). "
              f"Başlangıç {r['started']} (backtest ile dolduruldu). Havuz güncel endeks → "
              f"kalıntı survivorship. Eğitim amaçlı kağıt-trade.</i>")
     return "\n".join(L)
