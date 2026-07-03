@@ -223,9 +223,20 @@ def main():
 
     # 👑 Qulla-21 (TEK yöntem): backtest-replay 2026-06-04→asof
     #    RS top-50 sistematik evren + 63g kırılım girişi + split çıkış (yarı +2R / kalan 21-EMA runner)
+    auto = asof is None                                   # cron modu: asof otomatik çözülür
+    prev_locked = (qp.load_ledger() or {}).get("last_date")
     qr = qp.run_qulla(asof)
     market = qr["market"]
     asof = qr["asof"]
+
+    # YAYIN KAPISI: otomatik modda yeni bar yoksa (ABD tatili / FMP'de bar gecikmesi) asof
+    # defterde zaten kilitli güne çözülür → aynı gün-sonu raporu İKİNCİ kez yayınlanır ve
+    # "bugün işlem yapılmış" izlenimi verir (2026-07-03, 4 Temmuz tatili olayı). Defter
+    # zaten ilerlemez; yayını da kes. Bilinçli tekrar için --asof ver (kapıya takılmaz).
+    if auto and prev_locked and asof <= prev_locked:
+        print(f"[atlandı] yeni bar yok (asof {asof} defterde zaten kilitli) — "
+              f"tatil ya da veri gecikmesi; yayın yok")
+        return
     summ = qp.qulla_summary(qr)
     cands = qp.chart_cands(qr)       # bugün açılan Qulla girişleri (grafik)
     msg = qp.qulla_message(qr)       # portföy gün-sonu
