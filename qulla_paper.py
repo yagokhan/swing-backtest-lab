@@ -308,6 +308,46 @@ def commit_ledger(r):
     os.replace(tmp, path)
 
 
+def _fix_split_scale(bt):
+    """BÖLÜNME KORUMASI — kilitli pozisyonu yenilenen veri ölçeğine getir (CRWD 4:1, 02.07.2026).
+
+    Depo bölünmeyi yakalayıp SERİYİ geriye dönük ayarlıyor ama defterdeki açık pozisyon eski
+    ölçekte kalıyordu → sahte dev zarar + hedef/stop erişilmez. Burada her açık pozisyonun giriş
+    fiyatı, verinin giriş günündeki (ayarlı) kapanışıyla karşılaştırılır; oran depo dedektörüyle
+    aynı eşiğin (0.6-1.4) dışındaysa pozisyon ölçeklenir: fiyat alanları ÷oran, adetler ×oran —
+    MALİYET DEĞİŞMEZ. Oran temiz tam-sayı bölünmeye (4:1, 1:5...) %8 tolerans içinde oturuyorsa
+    tam orana yuvarlanır (girişteki 15:45-kapanış farkı korunur), oturmuyorsa gözlenen oran."""
+    for sym, p in list(bt.positions.items()):
+        df = bt.data.get(sym)
+        if df is None or not len(df):
+            continue
+        ed = pd.Timestamp(p.entry_date).normalize()
+        sub = df.loc[:ed]
+        if not len(sub):
+            continue
+        close_ed = float(sub["Close"].iloc[-1])
+        if close_ed <= 0 or p.entry <= 0:
+            continue
+        f = p.entry / close_ed
+        if 0.6 <= f <= 1.4:
+            continue
+        big = f if f > 1 else 1.0 / f
+        k = round(big)
+        ratio = (float(k) if k >= 2 and abs(big - k) <= 0.08 * k else big)
+        if f < 1:
+            ratio = 1.0 / ratio
+        old_entry, old_shares = p.entry, p.shares
+        p.entry /= ratio; p.stop /= ratio; p.target /= ratio
+        p.risk0 /= ratio; p.atr_peak /= ratio
+        p.shares *= ratio
+        for leg in (p.legs or []):
+            leg["shares"] = leg.get("shares", 0.0) * ratio
+            if leg.get("peak"):
+                leg["peak"] = leg["peak"] / ratio
+        print(f"[defter] {sym} bölünme ayarı ×{ratio:g}: {old_shares:.3f}×${old_entry:.2f} → "
+              f"{p.shares:.3f}×${p.entry:.2f} (maliyet korunur)", flush=True)
+
+
 def run_qulla(asof=None, market=None, ledger_path=PAPER_QULLA_LEDGER):
     """Defter-tabanlı ilerletme. İlk kez defter yoksa backtest ile START→asof bir kez doldurur
     (bootstrap); sonra ARTIMLI: defteri motora yükler, YALNIZ yeni günleri işler (geçmiş kilitli).
@@ -331,6 +371,7 @@ def run_qulla(asof=None, market=None, ledger_path=PAPER_QULLA_LEDGER):
         bt.positions = {d["symbol"]: _d_to_pos(d) for d in led["positions"]}
         bt.trades = [_d_to_trade(t) for t in led["trades"]]
         bt.equity_curve = [(pd.Timestamp(dt), v) for dt, v in led["equity_curve"]]
+        _fix_split_scale(bt)   # BÖLÜNME KORUMASI: seri yenilendiyse pozisyonu aynı ölçeğe getir
         last_done = pd.Timestamp(led["last_date"]).normalize()
         new_dates = [d for d in cal if last_done < d <= asof_ts]
         for date in new_dates:
