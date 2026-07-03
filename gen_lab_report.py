@@ -23,7 +23,13 @@ cfg.max_positions = 20; cfg.compounding = True; cfg.liquidate_at_end = True
 cfg.max_position_pct = 0.075; cfg.free_runner_slots = True
 
 print("Veri yükleniyor (cache)...", flush=True)
-market = s.load_market(cfg)
+# SABİT cache: sayfadaki TÜM deney tabloları bu veri setinden üretildi (373 hisse · 1543 bar).
+# load_market bugünün tarihiyle anahtarlayıp TAZE indirmeye gider; FMP rate-limit sembol
+# budarsa (03.07'de 9 sembol düştü) sayfanın kendi grafikleri sessizce kayar. O yüzden pin.
+import pickle
+with open("swing2_cache/market_5y_152dab0ec647.pkl", "rb") as _fh:
+    market = pickle.load(_fh)
+market = s.attach_watchlist(market, cfg)
 NPOOL = len(market["data"])
 
 def run(ov, sd="2021-05-01", ed=""):
@@ -629,7 +635,8 @@ tuzağı — bilinçli olarak denenmedi, fikir olarak kayıtta.</li>
 <li><b>Hacim eşiği hikayesi tamamlandı:</b> ≥1.4× (O'Neil) neredeyse kazanıyordu, ≥1.5× orta,
 <b>≥2× (Weinstein) ayıda felaket</b> (-10.7, PF 0.64). Eşik yükseldikçe ayı-kırılganlığı monoton
 artıyor: dev hacimli kırılımlar ayıda kapitülasyon/squeeze. Fikir havuzundaki hacim dosyasının
-sınırı netleşti: 1.3-1.45 bandı dışına çıkma.</li>
+sınırı netleşti: 1.3-1.45 bandı dışına çıkma. <b>Güncelleme (03.07):</b> bant komşu-eşik taramasıyla
+sınandı → plato çıkmadı, dosya elendi (bölüm 11).</li>
 <li><b>Sektör teyidi nötr kaldı</b> ama testin gücü düşük (kapsam %40) — tam GICS haritasıyla
 yeniden denemek "gelecek deney" listesinde.</li>
 <li><b>Soy ağacının kökü kapandı:</b> Weinstein (1988) → O'Neil → Minervini → Qullamaggie → Qulla-21.
@@ -638,7 +645,53 @@ detayları (stop, taban, hacim, MA periyodu) taşımak ya nötr ya zararlı. Can
 </ul>
 </div>
 
-<h2>11) Elenenler — kısa mezarlık</h2>
+<h2>11) 🔊 Hacim eşiği komşu-taraması (1.25–1.50) — fikir havuzu #1'in plato testi (03.07 ek)</h2>
+<div class="card">
+Fikir havuzunun başındaki dosyaydı: O'Neil kıyasında <b>kırılım hacmi ≥1.4×</b> getiride 4 pencere üstün
++ 1 eşitti (şimdiye kadarki en güçlü meydan okuyucu); Weinstein'ın ≥2× felaketiyle birlikte "çalışma bandı
+1.3–1.45" hipotezi doğmuştu. Burada o bant komşu-eşik taramasıyla sınandı: <b>6 eşik × 5 pencere</b>,
+kapı önceki bataryalarla birebir aynı (giriş günü hacim ≥ eşik × 50g ortalama), veri aynı cache
+(373 hisse — baz ve 1.40/1.50 çapaları önceki koşularla birebir tuttu, kıyas geçerli).
+Aday standardı: 5/5 pencerede ROI <b>ve</b> PF üstün + <b>komşu eşikler de iyi</b> (geniş plato).
+</div>
+
+<h3>Sonuçlar (hücre: ROI · PF — yeşil: ikisi de bazdan iyi, kırmızı: ikisi de kötü)</h3>
+<table>
+<tr><th>Varyant</th><th>5y tam</th><th>Ayı 21-23</th><th>Topar 23-25</th><th>Son 2y</th><th>Son 1y</th></tr>
+<tr><td><b>Baz (canlı 60/40)</b></td><td>+74.7 · 2.52</td><td>+5.9 · 1.21</td><td>+29.5 · 2.00</td><td>+70.9 · 3.65</td><td>+46.6 · 3.04</td></tr>
+<tr><td>hacim ≥1.25×</td><td class="neg">+71.9 · 2.43</td><td class="neg">+2.6 · 1.11</td><td class="neg">+20.8 · 1.57</td><td class="neg">+62.4 · 2.85</td><td class="neg">+38.9 · 2.58</td></tr>
+<tr><td>hacim ≥1.30×</td><td class="neg">+64.2 · 2.15</td><td class="neg">-1.2 · 0.96</td><td class="neg">+27.1 · 1.78</td><td class="neg">+37.5 · 1.83</td><td class="neg">+43.9 · 2.72</td></tr>
+<tr><td>hacim ≥1.35×</td><td class="neg">+67.3 · 2.23</td><td class="neg">+3.7 · 1.15</td><td>+32.7 · 1.87</td><td class="neg">+35.4 · 1.81</td><td class="neg">+45.0 · 2.79</td></tr>
+<tr><td><b>hacim ≥1.40×</b></td><td class="pos">+109.8 · 2.81</td><td class="pos">+6.6 · 1.29</td><td class="pos">+34.3 · 2.04</td><td>+78.1 · 3.18</td><td>+46.6 · 2.72</td></tr>
+<tr><td>hacim ≥1.45×</td><td class="pos">+93.9 · 2.53</td><td class="pos">+7.1 · 1.27</td><td class="pos">+35.6 · 2.23</td><td class="neg">+37.9 · 1.95</td><td class="neg">+39.7 · 2.39</td></tr>
+<tr><td>hacim ≥1.50×</td><td class="pos">+100.6 · 3.06</td><td class="neg">+4.0 · 1.15</td><td>+33.5 · 1.98</td><td class="neg">+63.4 · 2.85</td><td class="neg">+43.4 · 2.66</td></tr>
+</table>
+
+<h3>Okuma: 1.40× plato değil, İZOLE TEPE</h3>
+<p><b>Bant hipotezi çürüdü.</b> 1.40×'ın solu (1.25–1.35) neredeyse her pencerede bazın altında
+(1.30× ayıda negatife bile dönüyor); sağı (1.45×) son 2 yılda çöküyor (+78.1 → +37.9). Yani "iyi bölge"
+tek eşiğe sıkışmış durumda. Son 2y sütununun zikzakı (62 → 38 → 35 → <b>78</b> → 38 → 63) ayrıca öğretici:
+eşikteki minicik oynama hangi işlemlerin alınacağını yeniden karıyor ve bileşik getiri patikası savruluyor —
+bu, sinyal değil <b>gürültüye uyum</b> imzası. Ayı zirvesi 1.40–1.45'te gerçek görünüyor ama etrafı desteksiz;
+"eşik büyüdükçe ayı kırılganlığı artar" hikayesi kaba ölçekte (1.4→1.5→2×) doğru, ince ölçekte düz değil.
+Hiçbir eşik 5/5 standardını geçemedi → <b>hacim dosyası fikir havuzundan ELENENLERE taşındı.</b>
+Canlı 60/40, 7. değerlendirmede de yenilmedi.</p>
+
+<div class="card">
+<b>Görüşler</b>
+<ul>
+<li><b>1.40'ın parlaklığı komşusuz kaldı:</b> tek noktada 5y +109.8 gibi çarpıcı bir sayı, iki komşusu
+bazın altındayken ancak şans/yeniden-dizilim olabilir. 60/40'ı aday yapan "geniş plato" standardı bu
+taramayla üçüncü fikri eledi (30-hafta girişi, ATR% filtresi, şimdi hacim eşiği) — standart işliyor.</li>
+<li><b>Hacim bilgisi çöp değil, filtre değil:</b> 🧬 DNA bulgusu duruyor — hacim patlaması "sıcaklık"
+ailesinin üyesi ve büyük kazananlarda ortak. Ama zorunlu giriş kapısına çevrilecek istikrarlı bir eşik yok;
+bilgi belki sıralama/önceliklendirmede (skor bileşeni) işe yarar — o ayrı ve daha zayıf bir iddia, denenmedi.</li>
+<li><b>Fikir havuzunun yeni sırası:</b> başa 30-hafta "ayı korkusu" dosyası (150–170g kapı) geçti;
+onun ardında Market Monitor rejimi, fundamental katman, tam-harita sektör teyidi ve ayrı-proje EP duruyor.</li>
+</ul>
+</div>
+
+<h2>12) Elenenler — kısa mezarlık</h2>
 <ul>
 <li><b>+2R yarısına 21-EMA stopu:</b> işlem sayısı 4×, kâr faktörü 2.25→1.22. Stopsuz +2R bacağı,
 CNC örneğindeki gibi geri çekilmeye dayanıp hedefe ulaşıyor — <b>stopsuzluk koruyor.</b></li>
@@ -648,9 +701,11 @@ CNC örneğindeki gibi geri çekilmeye dayanıp hedefe ulaşıyor — <b>stopsuz
 <li><b>RS top-30 / top-75:</b> top-30 = kaldıraçlı konsantrasyon (ayıda çöker), top-75 sulandırıyor.</li>
 <li><b>Kombinasyonlar (60/40 + 50-MA, 60/40 + top-30):</b> tek tek iyi görünen parçalar birleşince
 en az bir rejimde bozuluyor → üst üste iyileştirme yığmak overfit tuzağı.</li>
+<li><b>Kırılım hacmi eşiği (1.25–1.50 taraması, 03.07):</b> 1.40× izole tepe — sol komşular her yerde
+bazın altında, sağ komşu son 2y'de çöküyor → plato yok, aşırı-uyum (bölüm 11).</li>
 </ul>
 
-<h2>12) Dürüst uyarılar</h2>
+<h2>13) Dürüst uyarılar</h2>
 <blockquote>
 <b>1.</b> Bütün deneyler AYNI 5 yıllık veri üzerinde yapıldı; kazananı sonuçlara bakarak seçtik.
 Bu her zaman bir miktar "geçmişe uydurma" riski taşır. 5 pencerede tutarlılık + geniş plato
@@ -662,14 +717,14 @@ biraz küçülür; 60/40'ın ekstra getirisi bunu tarihsel olarak fazlasıyla te
 kuyruklara daha bağımlı bir dönem gelirse fark daralabilir.
 </blockquote>
 
-<h2>13) Durum</h2>
+<h2>14) Durum</h2>
 <div class="card">
 <b>Canlı:</b> 👑 Qulla-21 COMBO (poz %7,5 + slot-serbest) + <b class="pos">⭐ 60/40 split — 02.07.2026'da
 CANLIYA ALINDI</b> (<code>split_ratio 0.6</code>). Defter kullanıcı isteğiyle <b>geçmişe dönük</b> yeniden
 kuruldu: START'tan (27.05) itibaren combo+60/40 tek konfig çalışmış gibi (20 pozisyon, +6.9%). ·
 <b>Geri alma:</b> <code>split_ratio 0.5</code> + eski defter yedeği (<code>.bak.20260702-0954</code>) geri kopyalanır.
 </div>
-<p class="mut">Üretim: <code>gen_lab_report.py</code> · Deney scriptleri: scratch (lab_battery.py, lab_iter2.py, ema_guard.py, winner_dna 1-3, qm/mv/sb/oneil/ws_battery.py) ·
+<p class="mut">Üretim: <code>gen_lab_report.py</code> · Deney scriptleri: scratch (lab_battery.py, lab_iter2.py, ema_guard.py, winner_dna 1-3, qm/mv/sb/oneil/ws/vol_battery.py) ·
 Bu sayfa salt-okur; canlı trade mantığına etkisi yoktur.</p>
 </div>
 <script src="/static/lwc.js"></script>
