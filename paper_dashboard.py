@@ -674,6 +674,7 @@ PAGE = """<!doctype html><html lang="tr"><head><meta charset="utf-8">
   <div class="refresh">
     <span class="muted" id="upd"></span>
     <button onclick="window.open('/rapor','_blank')" title="Deney iterasyonu: canlı baz vs önerilen varyant — ekonomist gözüyle detaylı karşılaştırma">📊 Rapor</button>
+    <button onclick="window.open('/adaylar','_blank')" title="Canlı sistemin yanına çıkan aday alternatifler — basit dille karşılaştırma">🏁 Adaylar</button>
     <button onclick="loadAll()">↻ Yenile</button>
   </div>
 </header>
@@ -974,6 +975,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         self._send(200, fh.read(), "text/html; charset=utf-8")
                 else:
                     self._send(404, "Lab sayfası henüz üretilmedi (python3 gen_lab_report.py)", "text/plain; charset=utf-8")
+            elif path == "/static/adaylar_curves.js":
+                # /adaylar özsermaye eğrileri (gen_adaylar_curves.py üretir) — diskten okunur, restart gerekmez
+                rp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dashboard_static", "adaylar_curves.js")
+                if os.path.exists(rp):
+                    with open(rp, "rb") as fh:
+                        self._send(200, fh.read(), "application/javascript; charset=utf-8")
+                else:
+                    self._send(404, "const CURVES=null;", "application/javascript; charset=utf-8")
+            elif path == "/adaylar":
+                # Aday alternatifler sayfası (statik, basit dil) — salt-okur
+                rp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dashboard_static", "adaylar.html")
+                if os.path.exists(rp):
+                    with open(rp, "rb") as fh:
+                        self._send(200, fh.read(), "text/html; charset=utf-8")
+                else:
+                    self._send(404, "Adaylar sayfası henüz üretilmedi", "text/plain; charset=utf-8")
             elif path.startswith("/api/candles/"):
                 sym = path[len("/api/candles/"):].upper()
                 q = urllib.parse.parse_qs(self.path.split("?", 1)[1]) if "?" in self.path else {}

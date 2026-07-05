@@ -1,0 +1,249 @@
+<!DOCTYPE html><html lang="tr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>🏁 Aday Alternatifler — Basit Anlatım</title>
+<style>
+ :root{--bg:#0d1117;--card:#161b22;--bd:#30363d;--fg:#e6edf3;--mut:#8b949e;--grn:#3fb950;--red:#f85149;--blu:#58a6ff;--amb:#d29922;
+       --s-baz:#8b949e;--s-atr:#3987e5;--s-tavan:#199e70;--s-blend:#c98500}
+ *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.65 system-ui,'Segoe UI',sans-serif}
+ .wrap{max-width:1060px;margin:0 auto;padding:18px 20px 60px}
+ h1{font-size:22px;margin:14px 0 4px} h2{font-size:18px;margin:34px 0 10px;border-bottom:1px solid var(--bd);padding-bottom:6px}
+ .mut{color:var(--mut)} .pos{color:var(--grn)} .amb{color:var(--amb)}
+ .card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:14px 16px;margin:12px 0}
+ a{color:var(--blu)} .back{font-size:13px} ul{margin:6px 0 6px 20px;padding:0} li{margin:5px 0}
+ table{border-collapse:collapse;width:100%;font-size:13px;margin:8px 0}
+ th,td{border:1px solid var(--bd);padding:5px 8px;text-align:right;font-variant-numeric:tabular-nums}
+ th{background:#1c2128;font-weight:600} td:first-child,th:first-child{text-align:left;font-variant-numeric:normal}
+ .tblwrap{overflow-x:auto}
+ /* yarışmacı kartları */
+ .who{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;margin:12px 0}
+ .who .card{margin:0} .who h3{font-size:14.5px;margin:0 0 6px;display:flex;align-items:center;gap:8px}
+ .who p{margin:4px 0;font-size:13.5px;color:#c9d1d9}
+ .sw{display:inline-block;width:11px;height:11px;border-radius:3px;flex:0 0 auto}
+ /* grafik */
+ .leg{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:12.5px;color:var(--mut);margin:6px 0 10px}
+ .leg span{display:inline-flex;align-items:center;gap:6px}
+ .grp{margin:16px 0 18px} .gt{font-size:13px;color:var(--mut);font-weight:600;margin:0 0 5px}
+ .row{display:flex;align-items:center;gap:0;min-height:24px;margin:2px 0;border-radius:5px;outline:none;cursor:default}
+ .row:hover,.row:focus{background:rgba(139,148,158,.08)}
+ .nm{width:212px;flex:0 0 auto;font-size:12.5px;color:var(--mut);text-align:right;padding-right:10px;
+     white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ .nm .sw{width:9px;height:9px;margin-right:6px;vertical-align:-1px}
+ .trk{flex:1;display:flex;align-items:center;border-left:1px solid var(--bd);padding:4px 0}
+ .bar{height:15px;border-radius:0 4px 4px 0;flex:0 0 auto}
+ .val{font-size:12px;color:var(--fg);margin-left:7px;white-space:nowrap;font-variant-numeric:tabular-nums}
+ .val.best{font-weight:700}
+ .note{font-size:12.5px;color:var(--mut);margin:2px 0 0}
+ @media (max-width:560px){.nm{width:118px;font-size:11px}}
+ /* tooltip */
+ #tip{position:fixed;z-index:10;display:none;background:#1c2128;border:1px solid var(--bd);border-radius:8px;
+      padding:8px 11px;font-size:12.5px;line-height:1.5;pointer-events:none;max-width:260px;box-shadow:0 4px 16px rgba(0,0,0,.5)}
+ #tip b{display:block;margin-bottom:2px}
+ blockquote{border-left:3px solid var(--amb);margin:10px 0;padding:4px 14px;color:#d8c690;background:#1a1f17;border-radius:0 8px 8px 0}
+</style></head><body><div class="wrap">
+
+<p class="back"><a href="/">← Seans Masası</a> · <a href="/lab">🧪 Deney Laboratuvarı (teknik detay: bölüm 12 ve 12b)</a></p>
+<h1>🏁 Aday Alternatifler — Basit Anlatım</h1>
+<p class="mut">Son büyük karşılaştırma turunda (~135 ayrı test) canlı sistemin yanına üç aday çıktı.
+Bu sayfa o adayları jargonsuz anlatır. <b>Canlı sistem değişmedi</b> — adaylar rafta, karar sende.</p>
+
+<div class="card">
+<b>Sayfayı okumak için gereken üç kelime:</b>
+<ul>
+<li><b>Getiri</b> — dönem sonunda paranın yüzde kaç arttığı (10.000$ ile başlanıp bileşik büyütülüyor).</li>
+<li><b>En derin çukur</b> — dönem içinde en kötü anda paranın tepeden yüzde kaç geri geldiği. Küçük olması iyidir.</li>
+<li><b>Kazanç/kayıp dengesi</b> — her 1 liralık kayba karşılık kaç lira kazanıldığı. 3.0 demek: 1 lira kaybederken 3 lira kazanmışsın.</li>
+</ul>
+<p class="note">Bütün rakamlar aynı sabit veri setinde (373 hisse · 5 yıl) ve aynı kurallarla hesaplandı; kimseye özel avantaj yok.</p>
+</div>
+
+<h2>Yarışmacılar</h2>
+<div class="who">
+<div class="card"><h3><span class="sw" style="background:var(--s-baz)"></span>Baz — şu an canlıda</h3>
+<p>Mevcut sistem: en güçlü 50 hissenin listesinden, son 3 ayın zirvesini kıranları alır.
+Pozisyonun %60'ı hedefte satılır, %40'ı trend bozulana kadar tutulur.</p>
+<p class="mut" style="font-size:12.5px">Adayların hepsi bu sistemin üzerine bir-iki küçük dokunuştur; giriş-çıkış kuralları aynıdır.</p></div>
+
+<div class="card"><h3><span class="sw" style="background:var(--s-atr)"></span>Aday 1 · Hareketliye öncelik</h3>
+<p><b>Tek fark:</b> Gün sonunda alınabilecek hisse boş yerden fazlaysa, sıra "puanı en yüksek" olana değil
+<b>fiyatı gün içinde en çok hareket eden</b> hisseye verilir. Kimse elenmez, sadece sıra değişir.</p>
+<p class="mut" style="font-size:12.5px">Bu tek satırlık değişiklik 5 yıllık getiriyi +%75'ten +%182'ye taşıdı; en derin çukur aynı kaldı.</p></div>
+
+<div class="card"><h3><span class="sw" style="background:var(--s-tavan)"></span>Aday 2 · En çok kazandıran</h3>
+<p>Aday 1 + iki ekleme: <b>(a) hareketlilik sınırı</b> — günlük hareketi %4'ü aşan hisse "%4" sayılır,
+aşırı oynak hisse sırf oynak diye öne geçemez; <b>(b) piyasa sağlık kapısı</b> — havuzdaki hisselerin
+en az yarısı kendi 200 günlük ortalamasının üzerinde değilse o gün yeni alım yapılmaz.</p>
+<p class="mut" style="font-size:12.5px">5 yılda +%208 ile en yüksek kazanç bu adayda.</p></div>
+
+<div class="card"><h3><span class="sw" style="background:var(--s-blend)"></span>Aday 3 · En dengeli</h3>
+<p>Sıralama tamamen hareketliliğe bırakılmaz: esas ölçü yine <b>kalite puanı</b>, hareketlilik küçük bir ek
+katkı verir. Yanına Aday 2'deki sağlık kapısı eklenir.</p>
+<p class="mut" style="font-size:12.5px">Zor dönemde (2021-23 düşüşü) ve son 1 yılda en iyi sonuçlar bunda —
+kazanç ile sarsıntı arasında en iyi denge.</p></div>
+</div>
+
+<h2>Dönem dönem getiri (%)</h2>
+<div class="leg" id="leg1"></div>
+<div class="card" id="chartRoi"></div>
+
+<h2>Paranın gün gün seyri — SPY ile karşılaştırma</h2>
+<p class="note">Her grafik, dönem başında yatırılan <b>100 birimin</b> gün gün nereye gittiğini gösterir.
+Kesikli mor çizgi <b>SPY</b>: aynı para, Amerika'nın 500 büyük şirketini içeren endeks fonuna yatırılıp
+hiç dokunulmasaydı ne olurdu. Dikey eksen logaritmiktir (eşit yüzde değişimi eşit adım görünür);
+fareyle üzerinde gezinince günlük değerler açılır.</p>
+<div class="leg" id="leg2"></div>
+<div id="lcharts"><p class="note">Eğri verisi yükleniyor…</p></div>
+
+<h2>En derin çukur (%)</h2>
+<p class="note">Kısa çubuk daha iyi: dönem içinde en kötü anda tepeden ne kadar geri gelindi.</p>
+<div class="card" id="chartDd"></div>
+
+<h2>Kazanç/kayıp dengesi</h2>
+<p class="note">1 liralık kayba karşılık kaç lira kazanıldı — uzun çubuk daha "temiz" kazanç demek.</p>
+<div class="card" id="chartPf"></div>
+
+<h2>Tam sayı tablosu</h2>
+<div class="card tblwrap" id="tbl"></div>
+
+<h2>Neden hemen canlıya geçmedik?</h2>
+<div class="card">
+<ul>
+<li><b>Yakın geçmişte baz hâlâ daha temiz kazanıyor.</b> Son 1 yılda kazanç/kayıp dengesi bazda 3.0;
+adaylarda 2.5–2.9. Adaylar daha çok kazanıyor ama kazanırken biraz daha çok da kaybediyor.</li>
+<li><b>Yolculuk biraz daha sarsıntılı.</b> Son 1 yılın en derin çukuru bazda −%9.3, adaylarda −%13 civarı.
+"Daha çok getiri" ile "daha rahat uyku" arasında gerçek bir takas var.</li>
+<li><b>Dürüstlük notu.</b> "Hareketli hisseye öncelik işe yarıyor" bulgusunu bu 5 yıllık veride bulduk ve yine
+aynı veride test ettik. Dört sağlama testinden geçti (doz değişse de çalışıyor, benzer ölçülerle de çalışıyor,
+tersi — sakine öncelik — çöküyor, hacimle sıralama çalışmıyor) ama gelecekte aynen tekrarlayacağının garantisi yok.
+Nihai kanıt ancak canlıda izlemekle olur.</li>
+</ul>
+</div>
+
+<h2>Karar rafta</h2>
+<blockquote>
+Sistem şu an olduğu gibi çalışmaya devam ediyor; buradaki adaylar hazır bekliyor.
+"Evet" dersen değişiklik küçüktür: sıralama kuralı + günlük bir piyasa-sağlığı ölçümü eklenir,
+defter ve geçmiş aynen korunur, yeni kural o günden ileriye çalışır.
+<b>En yüksek kazanç</b> isteyene Aday 2 (En çok kazandıran), <b>kazanç-sarsıntı dengesi</b> isteyene Aday 3 (En dengeli) önerilir.
+</blockquote>
+
+<p class="mut" style="font-size:12.5px">Kaynak: 3 turda yapılan ~135 geçmiş-veri karşılaştırma testi, sabit veri seti 373 hisse · 5 yıl,
+5 Temmuz 2026. Teknik ayrıntı ve sağlama testleri: <a href="/lab">🧪 /lab</a> bölüm 12 ve 12b.</p>
+
+</div>
+<div id="tip" role="tooltip"></div>
+<script>
+const SERIES=[
+ {k:'baz',  n:'Baz — şu an canlıda',      c:'var(--s-baz)'},
+ {k:'atr',  n:'Aday 1 · Hareketliye öncelik', c:'var(--s-atr)'},
+ {k:'tavan',n:'Aday 2 · En çok kazandıran',   c:'var(--s-tavan)'},
+ {k:'blend',n:'Aday 3 · En dengeli',          c:'var(--s-blend)'},
+];
+const WINS=['5 yıl (tümü, 2021→2026)','Düşüş dönemi 2021-23 (zor dönem)','Toparlanma 2023-25','Son 2 yıl','Son 1 yıl'];
+const ROI={baz:[74.7,5.9,29.5,70.9,46.6], atr:[181.5,10.6,43.8,80.2,50.9], tavan:[208.1,16.4,46.6,92.2,47.7], blend:[166.3,21.3,43.3,81.3,57.4]};
+const DD ={baz:[-17.2,-17.2,-19.3,-15.7,-9.3], atr:[-17.0,-13.9,-18.0,-17.3,-13.2], tavan:[-18.2,-11.2,-17.2,-17.2,-13.2], blend:[-19.6,-17.2,-18.4,-16.5,-12.5]};
+const PF ={baz:[2.52,1.21,2.00,3.65,3.04], atr:[3.63,1.36,2.32,2.94,2.51], tavan:[3.62,1.57,2.47,3.40,2.57], blend:[3.67,1.93,2.48,3.23,2.89]};
+const N  ={baz:[397,179,266,289,206], atr:[480,182,277,283,197], tavan:[533,188,286,292,190], blend:[482,187,273,302,215]};
+const WR ={baz:[64,59,61,66,64], atr:[66,54,60,65,63], tavan:[67,55,61,66,64], blend:[66,59,60,67,64]};
+
+// paylaşılan lejant (üç grafik de aynı dört seriyi kullanır)
+document.getElementById('leg1').innerHTML = SERIES.map(s=>
+ `<span><span class="sw" style="background:${s.c}"></span>${s.n}</span>`).join('') +
+ `<span class="mut">— tüm grafikler aynı renkleri kullanır · çubuğun/çizginin üstüne gel: detay</span>`;
+
+const tip=document.getElementById('tip');
+function showTip(ev,s,i){
+ tip.innerHTML=`<b>${s.n}</b><span class="mut">${WINS[i]}</span><br>`+
+  `getiri <b>%${ROI[s.k][i].toFixed(1).replace('.',',')}</b> · çukur %${DD[s.k][i].toFixed(1).replace('.',',')}<br>`+
+  `denge: 1'e karşı ${PF[s.k][i].toFixed(2).replace('.',',')} · ${N[s.k][i]} işlem · isabet %${WR[s.k][i]}`;
+ tip.style.display='block';
+ const r=(ev.currentTarget||ev.target).getBoundingClientRect();
+ let x=(ev.clientX||r.left+60)+14, y=(ev.clientY||r.top)+14;
+ if(x+270>innerWidth) x=innerWidth-274; if(y+90>innerHeight) y=y-104;
+ tip.style.left=x+'px'; tip.style.top=y+'px';
+}
+function hideTip(){tip.style.display='none';}
+
+function buildChart(elId, data, opt){
+ const el=document.getElementById(elId);
+ const max=opt.max;
+ let h='';
+ for(let i=0;i<WINS.length;i++){
+  const vals=SERIES.map(s=>data[s.k][i]);
+  const bestVal=opt.best(vals);
+  h+=`<div class="grp"><div class="gt">${WINS[i]}</div>`;
+  for(const s of SERIES){
+   const v=data[s.k][i], w=Math.max(0.6, Math.abs(v)/max*100);
+   const best=(v===bestVal)?' best':'';
+   h+=`<div class="row" tabindex="0" data-k="${s.k}" data-i="${i}">`+
+      `<span class="nm"><span class="sw" style="background:${s.c}"></span>${s.n}</span>`+
+      `<span class="trk"><span class="bar" style="width:${w}%;background:${s.c}"></span>`+
+      `<span class="val${best}">${opt.fmt(v)}</span></span></div>`;
+  }
+  h+=`</div>`;
+ }
+ el.innerHTML=h;
+ el.querySelectorAll('.row').forEach(r=>{
+  const s=SERIES.find(x=>x.k===r.dataset.k), i=+r.dataset.i;
+  r.addEventListener('mousemove',ev=>showTip(ev,s,i));
+  r.addEventListener('mouseleave',hideTip);
+  r.addEventListener('focus',ev=>showTip(ev,s,i));
+  r.addEventListener('blur',hideTip);
+ });
+}
+const tr=v=>v.toFixed(1).replace('.',',');
+buildChart('chartRoi', ROI, {max:250, fmt:v=>'+%'+tr(v),           best:a=>Math.max(...a)});
+buildChart('chartDd',  DD,  {max:24,  fmt:v=>'−%'+tr(Math.abs(v)), best:a=>Math.max(...a)});
+buildChart('chartPf',  PF,  {max:4.4, fmt:v=>v.toFixed(2).replace('.',','), best:a=>Math.max(...a)});
+
+// tam tablo (erişilebilirlik: her değer tabloda da var)
+let t='<table><tr><th>Dönem · Sistem</th><th>Getiri %</th><th>En derin çukur %</th><th>Denge (1\'e karşı)</th><th>İşlem</th><th>İsabet %</th></tr>';
+for(let i=0;i<WINS.length;i++){
+ for(const s of SERIES){
+  t+=`<tr><td>${WINS[i]} · ${s.n}</td><td>${'+%'+tr(ROI[s.k][i])}</td>`+
+     `<td>${'−%'+tr(Math.abs(DD[s.k][i]))}</td><td>${PF[s.k][i].toFixed(2).replace('.',',')}</td>`+
+     `<td>${N[s.k][i]}</td><td>${WR[s.k][i]}</td></tr>`;
+ }
+}
+t+='</table>';
+document.getElementById('tbl').innerHTML=t;
+</script>
+<script src="/static/lwc.js"></script>
+<script src="/static/adaylar_curves.js"></script>
+<script>
+(function(){
+ const box=document.getElementById('lcharts');
+ if(typeof LightweightCharts==='undefined' || typeof CURVES==='undefined' || !CURVES){
+  box.innerHTML='<p class="note">Eğri verisi henüz üretilmedi (gen_adaylar_curves.py).</p>'; return;
+ }
+ // çizgi serileri: SPY altta (kesikli mor), baz gri, adaylar çubuk grafiklerle aynı renkte
+ const LSER=[
+  {k:'spy',  n:'SPY — endeks fonu (piyasanın kendisi)', c:'#9085e9', st:2},
+  {k:'baz',  n:'Baz — şu an canlıda',                   c:'#8b949e', st:0},
+  {k:'atr',  n:'Aday 1 · Hareketliye öncelik',          c:'#3987e5', st:0},
+  {k:'tavan',n:'Aday 2 · En çok kazandıran',            c:'#199e70', st:0},
+  {k:'blend',n:'Aday 3 · En dengeli',                   c:'#c98500', st:0},
+ ];
+ document.getElementById('leg2').innerHTML = LSER.map(s=>
+  `<span><span style="display:inline-block;width:18px;border-top:2.5px ${s.st?'dashed':'solid'} ${s.c};vertical-align:3px"></span>${s.n}</span>`).join('');
+ box.innerHTML='';
+ for(let i=0;i<WINS.length;i++){
+  const cur=CURVES['w'+i]; if(!cur) continue;
+  const card=document.createElement('div'); card.className='card';
+  card.innerHTML=`<div class="gt">${WINS[i]} <span class="mut" style="font-weight:400">· başlangıç = 100</span></div><div class="lc" style="height:290px"></div>`;
+  box.appendChild(card);
+  const el=card.querySelector('.lc');
+  const ch=LightweightCharts.createChart(el,{
+   layout:{background:{color:'#161b22'},textColor:'#8b949e'},
+   grid:{vertLines:{color:'#21262d'},horzLines:{color:'#21262d'}},
+   rightPriceScale:{borderColor:'#30363d',mode:1},
+   timeScale:{borderColor:'#30363d'}, height:290, width:el.clientWidth});
+  new ResizeObserver(()=>ch.applyOptions({width:el.clientWidth})).observe(el);
+  for(const s of LSER){
+   ch.addLineSeries({color:s.c,lineWidth:2,lineStyle:s.st,lastValueVisible:false,priceLineVisible:false})
+     .setData(cur.d.map((d,j)=>({time:d,value:cur[s.k][j]})));
+  }
+  ch.timeScale().fitContent();
+ }
+})();
+</script>
+</body></html>
