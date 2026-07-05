@@ -22,7 +22,7 @@
 </style></head><body><div class="wrap">
 <p class="back"><a href="/">← Dashboard'a dön</a> &nbsp;·&nbsp; <a href="/rapor">📊 Ana rapora dön</a></p>
 <h1>🧪 Deney Laboratuvarı — İyileştirme Denemeleri</h1>
-<p class="mut">👑 Qulla-21 COMBO · deney günleri 2026-07-01/02 · sayfa üretimi 2026-07-03 · Havuz: sp500_ndx (~373) → RS top-50 ·
+<p class="mut">👑 Qulla-21 COMBO · deney günleri 2026-07-01/02 · sayfa üretimi 2026-07-04 · Havuz: sp500_ndx (~373) → RS top-50 ·
 Motor: <code>swing2_backtest.py</code> (deneyler geçici kopyada; <b>canlı sistem değiştirilmedi</b>)</p>
 
 <div class="card">
@@ -103,7 +103,7 @@ runner'a %40 kalsın. Kural, gösterge, zamanlama — <b>hiçbir şey değişmiy
 <div id="ch_dd" class="chart"></div>
 <p class="leg">Tepeden düşüş (%) — <b style="color:#3fb950">■</b> aday <b style="color:#f85149">■</b> baz</p>
 
-<h3>Güncel-veri sağlaması (2026-07-03 verisiyle yeniden hesap)</h3>
+<h3>Güncel-veri sağlaması (2026-07-04 verisiyle yeniden hesap)</h3>
 <p>Bölüm 2-3'teki tablolar deney gününün (2026-06-30 kapanış) snapshot'ı. Aşağıdaki tablo ise bu sayfa
 her üretildiğinde <b>güncel veriyle yeniden</b> hesaplanır — aday hâlâ önde mi diye kalıcı bir sağlama:</p>
 <table><tr><th>Pencere</th><th>Mevcut canlı</th><th>⭐ 60/40 aday</th><th>Sonuç</th></tr><tr><td><b>5 yıl</b></td><td style='text-align:center'>+64.5%<br><span class='mut'>DD -20.1 · PF 2.25</span></td><td style='text-align:center'>+74.7%<br><span class='mut'>DD -17.2 · PF 2.52</span></td><td style='text-align:center'><b class=pos>✓ aday önde</b></td></tr><tr><td><b>Son 2 yıl</b></td><td style='text-align:center'>+65.8%<br><span class='mut'>DD -14.4 · PF 2.89</span></td><td style='text-align:center'>+70.9%<br><span class='mut'>DD -15.7 · PF 3.65</span></td><td style='text-align:center'><b class=pos>✓ aday önde</b></td></tr><tr><td><b>Son 1 yıl</b></td><td style='text-align:center'>+32.1%<br><span class='mut'>DD -8.8 · PF 2.37</span></td><td style='text-align:center'>+46.6%<br><span class='mut'>DD -9.3 · PF 3.04</span></td><td style='text-align:center'><b class=pos>✓ aday önde</b></td></tr></table>
@@ -533,7 +533,165 @@ onun ardında Market Monitor rejimi, fundamental katman, tam-harita sektör teyi
 </ul>
 </div>
 
-<h2>12) Elenenler — kısa mezarlık</h2>
+<h2>12) 🔥 Kombinasyon seferi — fikir havuzunun geniş taraması (04.07 ek)</h2>
+<div class="card">
+Havuzdaki kalan notların tamamı 3 turda, ~135 backtest ile tarandı (baz = canlı 60/40 · 5 pencere ·
+sabit cache): <b>① breadth/Market-Monitor rejimi</b> (StockBee notu; ±%4 mum sayımı MM10 ve havuzun
+SMA200-üstü yüzdesi A200; SPY kapısıyla VE/VEYA sarımları), <b>② tam-harita sektör teyidi</b>
+(Weinstein notu; FMP profillerinden <b>373/373 sembol</b> GICS haritası kuruldu — eski %25 kapsam sorunu
+kapandı; ETF Aşama-2 ve üye-genişliği iki biçim), <b>③ sıcaklık-SIRALAMASI</b> (🧬 DNA'nın denenmemiş
+iddiası: kapı değil, slot yarışında öncelik), <b>④ kombinasyonlar</b> (kapı × sıralama × 150g).
+</div>
+
+<h3>Tur 1 — tekiller: iki dosya kapandı, bir kapı aralandı</h3>
+<table>
+<tr><th>Varyant</th><th>5y tam</th><th>Ayı 21-23</th><th>Topar 23-25</th><th>Son 2y</th><th>Son 1y</th></tr>
+<tr><td><b>Baz (canlı 60/40)</b></td><td>+74.7 · 2.52</td><td>+5.9 · 1.21</td><td>+29.5 · 2.00</td><td>+70.9 · 3.65</td><td>+46.6 · 3.04</td></tr>
+<tr><td>MM10 VE / VEYA</td><td class="neg">+69.0 / +61.4</td><td>+0.3 / <b>+10.1</b></td><td><b>+42.6</b> / +28.7</td><td class="neg">+64.4 / +52.2</td><td>+41.7 / =</td></tr>
+<tr><td>A200≥50 VE</td><td class="neg">+64.2 · 2.15</td><td class="pos">+12.0 · 1.46</td><td class="neg">+20.4 · 1.71</td><td class="neg">+59.0 · 3.01</td><td class="pos">+51.3 · 3.22</td></tr>
+<tr><td>Sektör ETF Aşama-2 (TAM harita)</td><td class="neg">+28.6 · 1.59</td><td class="neg">-8.2 · 0.75</td><td class="pos">+33.0 · 2.27</td><td class="neg">+65.3</td><td class="neg">+43.7</td></tr>
+<tr><td>Sektör üye-genişliği ≥%50</td><td class="neg">+46.3 · 1.94</td><td class="neg">+0.5 · 1.02</td><td class="neg">+23.8 · 1.86</td><td class="neg">+40.7</td><td class="neg">+23.5</td></tr>
+<tr><td><b>Sıralama: ATR% sıcaklık</b></td><td class="pos"><b>+181.5 · 3.63</b></td><td class="pos">+10.6 · 1.36</td><td class="pos">+43.8 · 2.32</td><td>+80.2 · 2.94</td><td>+50.9 · 2.51</td></tr>
+<tr><td>Sıralama: qscore+ATR karışım</td><td class="pos">+130.0 · 3.14</td><td class="pos">+14.3 · 1.57</td><td class="pos">+34.7 · 2.17</td><td>+72.1 · 2.94</td><td>+49.1 · 2.68</td></tr>
+</table>
+<p><b>Sektör teyidi dosyası kesin KAPANDI:</b> Weinstein bölümündeki "nötr" sonuç kısmi kapsamın (%25)
+maskesiymiş — tam haritayla iki biçim de her yerde zararlı (ETF biçimi ayıda PF 0.75, DD -28'e derinleşiyor).
+Sektör momentumu RS-top-50'nin zaten yakaladığı bilgiyi bozarak geç teyit veriyor. <b>Breadth tek başına
+elenmelik:</b> A200-VE ayıyı güzelleştirip (+12.0, PF 1.46) toparlanmayı öldürüyor (+20.4) — bilinen
+gecikme ödünleşimi. <b>Ama sıcaklık-SIRALAMASI patladı:</b> aynı adaylar, aynı kurallar, sadece slot
+yarışında sıcak isim önce → 5y getirisi 2.4 katına çıkıyor, DD AYNI (-17.0 vs -17.2).</p>
+
+<h3>Tur 2 — sıcaklık merceği: plato + aile + NEGATİF KONTROL</h3>
+<table>
+<tr><th>Varyant</th><th>5y tam</th><th>Ayı 21-23</th><th>Topar 23-25</th><th>Son 2y</th><th>Son 1y</th></tr>
+<tr><td><b>Baz</b></td><td>+74.7 · 2.52</td><td>+5.9 · 1.21</td><td>+29.5 · 2.00</td><td>+70.9 · 3.65</td><td>+46.6 · 3.04</td></tr>
+<tr><td>Saf ATR</td><td class="pos">+181.5 · 3.63</td><td class="pos">+10.6 · 1.36</td><td class="pos">+43.8 · 2.32</td><td>+80.2 · 2.94</td><td>+50.9 · 2.51</td></tr>
+<tr><td>Karışım zayıf/orta/güçlü (ATR/10 /5 /2.5)</td><td class="pos">+168 / +130 / +150</td><td class="pos">+18.1 / +14.3 / <b>+28.4</b></td><td class="pos">+32.7 / +34.7 / +39.8</td><td>+61.0 / +72.1 / +65.5</td><td><b>+56.5</b> / +49.1 / +44.3</td></tr>
+<tr><td>Aile: RET60 sıralama</td><td class="pos">+147.2 · 3.32</td><td class="pos">+18.5 · 1.81</td><td class="pos">+34.4 · 2.06</td><td class="neg">+64.7</td><td>+46.0</td></tr>
+<tr><td>Aile: hacim-oranı sıralama</td><td class="pos">+89.8 · 2.80</td><td class="neg">-3.1 · 0.90</td><td class="pos">+34.1 · 2.31</td><td class="neg">+54.7</td><td class="neg">+38.5</td></tr>
+<tr><td><b>NEGATİF KONTROL: soğuk (ters ATR)</b></td><td class="neg">+50.0 · 1.94</td><td>+7.9 · 1.36</td><td>+28.9 · 2.42</td><td class="neg"><b>+15.0</b> · 1.58</td><td class="neg"><b>+17.3</b> · 1.84</td></tr>
+<tr><td>ATR + A200≥50 VE</td><td class="pos"><b>+206.5 · 3.40</b></td><td class="pos">+16.0 · 1.56 · DD-11</td><td class="pos">+45.4 · 2.36</td><td>+90.1 · 3.31</td><td>+50.9 · 2.51</td></tr>
+<tr><td>ATR + 150g kapı</td><td class="pos">+171.8 · 3.27</td><td class="pos">+14.9 · 1.52</td><td class="pos"><b>+53.8 · 2.67</b></td><td>+78.3 · 2.90</td><td>+47.9 · 2.63</td></tr>
+</table>
+<p><b>Yön her testten geçti:</b> dört ağırlık da, RET60 ailesi de ROI'de bazı eziyor (saf ATR ve orta
+karışım 5/5); <b>soğuk-sıralama negatif kontrolü tam beklendiği gibi çöktü</b> (son 2y +15.0, son 1y +17.3)
+— DNA'nın "kâr sıcak isimlerde, sakin girişler en kötü dilim" mekanizması sıralama düzeyinde doğrulandı.
+Hacim-oranı yine zayıf (hacim ailesinin 4. başarısız biçimi — artık kesin). Kombolar bu kez yıkılmadı:
+kapılar yalnız giriş süzüyor, sıralama yalnız öncelik değiştiriyor → uyumlu katmanlar.</p>
+
+<h3>Tur 3 — son-pencere PF açığı kapanır mı?</h3>
+<table>
+<tr><th>Varyant</th><th>5y tam</th><th>Ayı 21-23</th><th>Topar 23-25</th><th>Son 2y</th><th>Son 1y</th></tr>
+<tr><td><b>Baz</b></td><td>+74.7 · 2.52</td><td>+5.9 · 1.21</td><td>+29.5 · 2.00</td><td>+70.9 · 3.65</td><td>+46.6 · 3.04</td></tr>
+<tr><td>ATR tavan 4.0 / 5.0</td><td class="pos">+167 / +179</td><td class="pos">+10.0 / +10.6</td><td class="pos">+45.1 / +43.8</td><td>+77.9 / +83.1</td><td>+47.7 / +44.5</td></tr>
+<tr><td>ÜÇLÜ: ATR+A200+150g</td><td class="pos">+162.0 · 2.79</td><td class="pos">+16.4 · 1.57 · DD<b>-10.8</b></td><td class="pos">+49.1 · 2.37</td><td>+80.6 · 2.92</td><td>+47.9 · 2.63</td></tr>
+<tr><td>🔶 Zayıf karışım + A200 VE</td><td class="pos">+166.3 · <b>3.67</b></td><td class="pos">+21.3 · <b>1.93</b></td><td class="pos">+43.3 · 2.48</td><td>+81.3 · 3.23</td><td><b>+57.4</b> · 2.89</td></tr>
+<tr><td>🔶 ATR tavan4 + A200 VE</td><td class="pos"><b>+208.1 · 3.62</b></td><td class="pos">+16.4 · 1.57 · DD-11.2</td><td class="pos">+46.6 · 2.47</td><td>+92.2 · 3.40</td><td>+47.7 · 2.57</td></tr>
+</table>
+<p>ATR tavanı tek başına açığı kapatmadı (sorun aşırı-oynak kuyruk değil); üçlü yığma 5y PF'i 2.79'a
+yedi (yığma cezası sınırı: 2 katman tamam, 3 fazla). En dengeli iki profil: <b>tavan4+A200</b>
+(getiri şampiyonu: 5y +208, son 2y +92) ve <b>zayıf karışım+A200</b> (kalite şampiyonu: ayı PF 1.93,
+son 1y +57.4 · PF 2.89 — bazla açık yalnız -0.15).</p>
+
+<h3>🔶 Karar: güçlü ADAY-ADAYI — ödünleşimli, 5/5 PF standardını tam tutturamadı</h3>
+<p>ROI'de 5/5 üstünlük birden çok varyantta var; ama son 2y/1y kâr faktörü bazın hafif altında kalıyor
+ve son 1y DD ~3-4pp daha derin (-12.5/-13.2 vs -9.3). Mekanik neden: sıcak isimler kazancı da kaybı da
+büyütüyor — getiri motoru güçleniyor, yolculuk biraz oynaklaşıyor. 60/40'ı aday yapan "5/5 hem ROI hem PF"
+çıtasını geçemediği için <b>otomatik canlıya alınmadı</b>; karar kullanıcının: "daha yüksek beklenen getiri +
+biraz daha oynak seyir" kabul ediliyorsa zayıf karışım+A200 en dengeli profil. <b>Dürüstlük şerhi:</b>
+DNA bulgusu bu veriden çıktı, sıralama da aynı veride test edildi — negatif kontrol ve monotonluk mekanizmaya
+güven veriyor ama bir miktar geçmişe-uydurma riski kalıcıdır; canlıda ilk aylar beklentiyi doğrulamalı.</p>
+
+<div class="card">
+<b>Görüşler + fikir havuzunun yeni hali</b>
+<ul>
+<li><b>Seferin ana dersi:</b> aynı bilgi kapı olarak İŞE YARAMAZKEN sıralama olarak ALTIN olabilir.
+Hacim eşiği kapıyken elendi (bölüm 11), sıcaklık kapıyken elenmişti (ATR≥2.5, bölüm 5) — ama sıcaklık
+SIRALAMASI tüm testlerden geçti. Kapı işlem SETİNİ değiştirir (kırılgan), sıralama yalnız ÖNCELİĞİ
+değiştirir (dayanıklı, işlem sayısı korunur).</li>
+<li><b>Sektör teyidi dosyası kapandı</b> (tam haritayla iki biçim de zararlı — "gelecek deney" notu
+mezarlığa taşındı). <b>Breadth tek başına kapandı</b>; yalnız sıcaklık-sıralamasının yanında A200≥50-VE
+biçiminde yaşıyor (ayı DD'sini -17'den -11'e çekiyor, boğada pasif).</li>
+<li><b>Hacim ailesi 4. kez ve kesin olarak elendi</b> (eşik 1.25-2.0 + sıralama biçimi).</li>
+<li><b>Havuzun yeni sıralaması:</b> 1) 🔶 sıcaklık-sıralaması (+A200 kapısı) — aday-adayı, kullanıcı
+kararı bekliyor; 2) 30-hafta "ayı korkusu" dosyası (150-170g, değişmedi); 3) ayrı projeler (gerçek EP,
+fundamental katman).</li>
+<li><b>Uygulama notu:</b> canlıya alınırsa değişiklik tek satırlık sıralama anahtarı (15:45 taraması
+adayları zaten ATR% ile tanıyor) + A200 breadth serisinin günlük hesabı. Defter geçmişi yeniden kurulmaz
+(sıralama geçmişi değiştirmez, yalnız bugünden ileriye slot önceliğini değiştirir) — 60/40 geçişinden
+daha basit bir operasyon.</li>
+</ul>
+</div>
+
+<h2>12b) 🗣️ Aynı bulgular, basit dille — jargonsuz tam anlatım</h2>
+<div class="card">
+<p><b>Ne yaptık?</b> Fikir defterimizde bekleyen bütün fikirleri sınadık. Üç turda yaklaşık 135 deneme
+yapıldı. Her denemede kural aynı: mevcut sistemi al, İÇİNDE TEK BİR ŞEYİ değiştir, sonra 5 farklı dönemde
+sına — son 5 yılın tamamı, kötü dönem (2021-23 ayı piyasası), toparlanma (2023-25), son 2 yıl ve son 1 yıl.
+Bir fikrin "kazandı" sayılması için her dönemde hem daha çok kazandırması hem de kazanç/kayıp dengesinin
+bozulmaması gerekiyor. Tek dönemde parlayan fikir kabul edilmez — çünkü gelecekte hangi dönemin geleceğini
+bilemeyiz.</p>
+
+<p><b>Fikir 1 — "Piyasanın genişliğine bak" (kısmen işe yaradı ama tek başına yetmedi).</b>
+Şu an sistem, piyasa sağlıklı mı diye tek bir şeye bakıyor: SPY endeksi 200 günlük ortalamasının üstünde mi?
+Denenen fikir: bunun yerine (veya yanına) "373 hissenin kaçı yükselişte?" sorusunu koymak. İki ölçü denedik
+(son 10 günde %4+ sıçrayan hisse sayısı; hisselerin yüzde kaçı 200 günlük ortalamasının üstünde) ve iki
+bağlama biçimi (ikisi birden şart olsun / ikisinden biri yetsin). Sonuç: kötü dönemde gerçekten koruyor
+(kayıp yumuşuyor) AMA toparlanma başlarken de geç kalıyor — 2023-25 döneminde kazancın üçte birini yedi.
+Yani tek başına: hayır. Ama birazdan geleceği gibi, başka bir fikrin YANINDA işe yaradı.</p>
+
+<p><b>Fikir 2 — "Hissenin sektörü de yükselişte olsun" (kesin çöp, dosya kapandı).</b>
+Daha önce bu fikri denediğimizde elimizde hisselerin ancak dörtte birinin sektör bilgisi vardı ve sonuç
+"ne iyi ne kötü" çıkmıştı. Bu kez 373 hissenin TAMAMININ sektörünü çektik ve yeniden denedik. Gerçek ortaya
+çıktı: zararlı. Hem de iki farklı biçimde denedik (sektör fonu yükseliş trendinde olsun / sektördeki
+hisselerin yarısı yükselişte olsun) — ikisi de her dönemde sistemin gerisinde kaldı; kötü dönemde kayıpları
+derinleştirdi. Neden? Bizim sistem zaten "en güçlü 50 hisse" listesiyle çalışıyor — bir sektör güçlenmeye
+başladığında o sektörün hisseleri listeye kendiliğinden giriyor. Sektör onayı aynı bilginin GEÇ KALMIŞ
+kopyası; geç onay da fırsat kaçırtıyor.</p>
+
+<p><b>Fikir 3 — 🔥 "Sıcak hisseye öncelik ver" (seferin büyük keşfi).</b>
+Daha önceki analizde şunu görmüştük: sistemin bütün büyük kazançları "hareketli" hisselerden geliyor —
+günlük salınımı yüksek, son aylarda güçlü koşmuş, kırılım günü sert hareket etmiş olanlardan. Sakin,
+sönük hisseler ise en kötü grup. Bu bilgiyi daha önce FİLTRE olarak denemiştik: "sakinleri hiç alma" —
+işe yaramadı, çünkü dönem değişince eşik şaşıyor. Bu kez farklı bir şey yaptık: <b>kimseyi eleme; ama aynı
+gün boş yerden çok sinyal varsa, önce sıcak olanı al.</b> Küçücük bir değişiklik — ve sonuç: 5 yıllık
+kazanç +%75'ten +%182'ye çıktı, en derin düşüş AYNI kaldı (yaklaşık -%17). Kötü dönemde de, toparlanmada
+da, son yıllarda da daha çok kazandırdı.</p>
+
+<p><b>Bu bir tesadüf mü? Dört sağlama yaptık:</b>
+1) Ayarı değiştirdik (sıcaklığın ağırlığını azalttık/artırdık, 4 farklı doz) — hepsinde kazandı; yani
+"tek bir sihirli ayar" değil, geniş bir bölge çalışıyor. 2) "Sıcaklık" ölçüsünü değiştirdik (günlük salınım
+yerine son 60 günün getirisi) — yine kazandı; yani aile olarak sağlam. 3) <b>TERSİNİ denedik: önce sakin
+hisseyi al</b> — tam beklediğimiz gibi berbat sonuç verdi (son 1 yılda +%17'ye düştü; sistemin normali +%47).
+Ters yön bozuyorsa doğru yönün şans olma ihtimali ciddi azalır. 4) Hacimle sıralamayı denedik — çalışmadı;
+hacim fikri böylece 4. kez ve artık kesin olarak elendi.</p>
+
+<p><b>Kombinasyon:</b> sıcaklık önceliğinin yanına Fikir 1'deki genişlik ölçüsünü KAPI olarak koyduk
+("hisselerin en az yarısı 200 günlük ortalamasının üstünde değilse yeni alım yapma"). Kötü dönem kaybı
+-%17'den -%11'e yumuşadı, kazanç korundu. İki güzel karışım öne çıktı:
+<b>getiri şampiyonu</b> (sıcaklık tavanlı + genişlik kapısı): 5 yılda +%208, son 2 yılda +%92;
+<b>kalite şampiyonu</b> (sıcaklığa az ağırlık + genişlik kapısı): kötü dönemde bile +%21, son 1 yılda +%57.
+Üçüncü bir katman (150 günlük ortalama şartı) eklemeyi de denedik — fazla geldi, sonuçlar bozulmaya başladı.
+İki katman tamam, üç katman fazla.</p>
+
+<p><b>Peki neden hemen canlıya almadık? İki pürüz + bir dürüstlük notu.</b>
+Birinci pürüz: son 1-2 yılda "kazanç/kayıp dengesi" (kazanılan her 1 liraya karşı kaybedilen) mevcut
+sistemin birazcık gerisinde — mevcut sistem son 1 yılda 1'e karşı 3.0 kazanıyor, yeni fikir 1'e karşı
+2.5-2.9 kazanıyor. İkinci pürüz: son 1 yılın en derin düşüşü -%9 yerine -%13 civarı. Yani yeni fikir
+<b>daha çok kazandırıyor ama yolculuk biraz daha sarsıntılı.</b> Dürüstlük notu: bu fikir bu verinin
+içinden çıktı ve yine aynı veride test edildi — dört sağlamaya rağmen "geçmişe uydurma" riski hiçbir
+zaman sıfır olmaz. Bizim kuralımız "her dönemde her iki ölçüde de üstünlük" — bu çıtayı tam geçemediği
+için otomatik almadık.</p>
+
+<p><b>Özet ve karar:</b> Sektör onayı ve tek başına genişlik dosyaları kapandı; hacim kesin elendi.
+Seferin ana dersi: <b>aynı bilgi YASAK koyarken işe yaramıyor, ÖNCELİK verirken altın oluyor</b> —
+yasak işlem listesini değiştirir (kırılgan), öncelik sadece sırayı değiştirir (dayanıklı).
+Sıcaklık önceliği şu an rafta hazır bekliyor: "getiri artsın, sarsıntıyı kabul ederim" denirse tek
+küçük değişiklikle canlıya alınır; mevcut kağıt-defter kayıtlarına dokunulmaz, sadece o günden sonraki
+alımların sırası değişir.</p>
+</div>
+
+<h2>13) Elenenler — kısa mezarlık</h2>
 <ul>
 <li><b>+2R yarısına 21-EMA stopu:</b> işlem sayısı 4×, kâr faktörü 2.25→1.22. Stopsuz +2R bacağı,
 CNC örneğindeki gibi geri çekilmeye dayanıp hedefe ulaşıyor — <b>stopsuzluk koruyor.</b></li>
@@ -545,9 +703,14 @@ CNC örneğindeki gibi geri çekilmeye dayanıp hedefe ulaşıyor — <b>stopsuz
 en az bir rejimde bozuluyor → üst üste iyileştirme yığmak overfit tuzağı.</li>
 <li><b>Kırılım hacmi eşiği (1.25–1.50 taraması, 03.07):</b> 1.40× izole tepe — sol komşular her yerde
 bazın altında, sağ komşu son 2y'de çöküyor → plato yok, aşırı-uyum (bölüm 11).</li>
+<li><b>Sektör teyidi — TAM haritayla (04.07):</b> ETF Aşama-2 ayıda PF 0.75/DD -28, üye-genişliği her
+yerde geride → Weinstein'daki "nötr" kısmi kapsamın maskesiymiş; dosya kesin kapandı (bölüm 12).</li>
+<li><b>Breadth rejimi tek başına (04.07):</b> MM10/A200 hangi sarımda olursa olsun ya ayıyı ya toparlanmayı
+bozuyor; yalnız sıcaklık-sıralamasının yanında A200≥50-VE olarak yaşıyor (bölüm 12).</li>
+<li><b>Hacim-oranı SIRALAMASI (04.07):</b> ayıda PF 0.90 — hacim ailesinin 4. ve son eleme biçimi.</li>
 </ul>
 
-<h2>13) Dürüst uyarılar</h2>
+<h2>14) Dürüst uyarılar</h2>
 <blockquote>
 <b>1.</b> Bütün deneyler AYNI 5 yıllık veri üzerinde yapıldı; kazananı sonuçlara bakarak seçtik.
 Bu her zaman bir miktar "geçmişe uydurma" riski taşır. 5 pencerede tutarlılık + geniş plato
@@ -559,14 +722,14 @@ biraz küçülür; 60/40'ın ekstra getirisi bunu tarihsel olarak fazlasıyla te
 kuyruklara daha bağımlı bir dönem gelirse fark daralabilir.
 </blockquote>
 
-<h2>14) Durum</h2>
+<h2>15) Durum</h2>
 <div class="card">
 <b>Canlı:</b> 👑 Qulla-21 COMBO (poz %7,5 + slot-serbest) + <b class="pos">⭐ 60/40 split — 02.07.2026'da
 CANLIYA ALINDI</b> (<code>split_ratio 0.6</code>). Defter kullanıcı isteğiyle <b>geçmişe dönük</b> yeniden
 kuruldu: START'tan (27.05) itibaren combo+60/40 tek konfig çalışmış gibi (20 pozisyon, +6.9%). ·
 <b>Geri alma:</b> <code>split_ratio 0.5</code> + eski defter yedeği (<code>.bak.20260702-0954</code>) geri kopyalanır.
 </div>
-<p class="mut">Üretim: <code>gen_lab_report.py</code> · Deney scriptleri: scratch (lab_battery.py, lab_iter2.py, ema_guard.py, winner_dna 1-3, qm/mv/sb/oneil/ws/vol_battery.py) ·
+<p class="mut">Üretim: <code>gen_lab_report.py</code> · Deney scriptleri: scratch (lab_battery.py, lab_iter2.py, ema_guard.py, winner_dna 1-3, qm/mv/sb/oneil/ws/vol_battery.py, build_infra.py + combo_battery 1-3) ·
 Bu sayfa salt-okur; canlı trade mantığına etkisi yoktur.</p>
 </div>
 <script src="/static/lwc.js"></script>
