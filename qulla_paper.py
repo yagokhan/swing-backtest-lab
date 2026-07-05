@@ -6,6 +6,12 @@ Test edilen yöntemin BİREBİR aynısı: RS top-50 sistematik evren (sp500+ndx)
 qswing 63g kırılım girişi + split çıkış (%60 +2R hedef / %40 21-EMA runner — 60/40, 2026-07-02).
 $10k · %7.5/slot (combo) · 20-slot · bileşik.
 
+⭐ ADAY 3 "EN DENGELİ" (2026-07-05, kullanıcı kararı): bazdan İKİ fark —
+  1) SIRALAMA: kalabalık günde denge karışımı = puan/100 + ATR%/10 (blend10)
+  2) FREN: SPY>SMA200'e EK A200≥%50 (havuzun en az yarısı kendi SMA200 üstünde, VE bağlacı)
+Defter kullanıcı isteğiyle AYNI çapadan (START) Aday-3 konfigüle yeniden kuruldu
+(bootstrap); eski baz defter .bak.20260705'te. Batarya kanıtı: /adaylar ve /lab §12-12b.
+
 DEFTER MİMARİSİ (önceki "durumsuz replay" değiştirildi):
   • İlk çalıştırma → defter yoksa backtest ile SABİT çapa START → bugün BİR KEZ doldurulur
     (bootstrap), sonra DONDURULUR.
@@ -67,6 +73,76 @@ def _cfg(asof=None):
     c.liquidate_at_end = False         # canlı snapshot: açık pozisyonları kapatma
     c.start_date = START; c.end_date = asof or ""
     return c
+
+
+# =========================================================================
+# ⭐ ADAY 3 MOTORU — baz motordan iki fark: denge sıralaması + A200 piyasa freni.
+# _step gövdesi bataryadaki (combo_battery3 KX) blend yolunun BİREBİR kopyası;
+# eşdeğerlik sabit cache'te 5 pencere batarya sonuçlarıyla doğrulanır (canlıya
+# alma ön şartı). A200 canlıda statik pkl yerine motor verisinden hesaplanır —
+# formül build_infra ile aynı: (Close>SMA200) sembol başına (NaN→False, çünkü
+# tüm çerçeveler SPY takvimine hizalı), gün ortalaması ×100.
+# =========================================================================
+class DengeBacktester(s.Swing2Backtester):
+    A200_MIN = 50.0
+
+    def _a200(self, date):
+        if not hasattr(self, "_a200_series"):
+            uni = set(self.cfg.universe)
+            cols = {sym: (df["Close"] > df["SMA200"]).astype("float32")
+                    for sym, df in self.data.items() if sym in uni}
+            self._a200_series = pd.DataFrame(cols).mean(axis=1) * 100.0
+        try:
+            v = self._a200_series.get(date)
+        except Exception:
+            v = None
+        return float(v) if v is not None and not pd.isna(v) else None
+
+    def _common(self, date):
+        c = super()._common(date)
+        if c.get("spy_above_sma200"):
+            v = self._a200(date)
+            if v is not None:
+                c["spy_above_sma200"] = bool(v >= self.A200_MIN)
+        return c
+
+    def _rank_key(self, qscore, row):
+        a = row.get("ATR_PCT")
+        a = float(a) if a is not None and not pd.isna(a) else 0.0
+        return qscore / 100.0 + a / 10.0
+
+    def _step(self, date):
+        cfg = self.cfg
+        self._manage(date)
+        common = self._common(date)
+        if (common["spy_above_sma200"] and not self._vol_regime_locked(common)
+                and self._slot_count() < cfg.max_positions and self.cash >= self._size(date)):
+            cands = []
+            spy_ret60 = self.spy.loc[date, "RET60"]
+            for sym, df in self.data.items():
+                if sym in self.positions: continue
+                if not self._in_watchlist(sym, date): continue
+                row = df.loc[date]
+                if (pd.isna(row["Close"]) or pd.isna(row["SMA200"]) or row["Close"] <= row["SMA200"]
+                        or row["Close"] <= row["SMA50"] or row["Close"] <= row["SMA20"]
+                        or pd.isna(row["SLOPE200"]) or row["SLOPE200"] <= 0): continue
+                plan = s.compute_trade_plan(row, cfg)
+                dist = (row["Close"] - row["SMA20"]) / row["SMA20"]
+                rs = self._qswing_entry_ok(row, spy_ret60)
+                if rs is None: continue
+                _risk = plan["entry"] - plan["stop"]
+                _rec = {"rs": rs,
+                        "dist_52h_pct": (row["Close"] / row["HIGH52"] - 1) * 100,
+                        "dist_sma20_pct": dist * 100,
+                        "risk_pct": (_risk / plan["entry"] * 100) if plan["entry"] else None}
+                qscore, _ = s._qswing_priority_score(_rec)
+                if cfg.qswing_min_score > 0 and qscore < cfg.qswing_min_score: continue
+                cands.append((self._rank_key(qscore, row), -dist, sym, row, plan))
+            cands.sort(key=lambda x: (x[0], x[1]), reverse=True)
+            for total, _nd, sym, row, plan in cands:
+                if self._slot_count() >= cfg.max_positions or self.cash < self._size(date): break
+                self._open(sym, date, row, plan, total)
+        self.equity_curve.append((date, self._equity(date)))
 
 
 # =========================================================================
@@ -357,7 +433,7 @@ def run_qulla(asof=None, market=None, ledger_path=PAPER_QULLA_LEDGER):
     if market is None:
         # ARTIMLI ham veri deposu → 5y her gün indirilmez (yalnız yeni günler çekilir).
         market = load_market_incremental(asof)
-    bt = s.Swing2Backtester(cfg, market=market)
+    bt = DengeBacktester(cfg, market=market)   # ⭐ Aday 3: denge sıralaması + A200 freni
     cal = bt.calendar
     asof_ts = pd.Timestamp(asof).normalize() if asof else cal[-1]
 
@@ -399,7 +475,9 @@ def run_qulla(asof=None, market=None, ledger_path=PAPER_QULLA_LEDGER):
         except Exception:
             return None
     spy_close, spy_sma200, spy_ret60 = _spy("Close"), _spy("SMA200"), _spy("RET60")
-    regime_open = bool(spy_close and spy_sma200 and spy_close > spy_sma200)
+    spy_gate = bool(spy_close and spy_sma200 and spy_close > spy_sma200)
+    a200 = bt._a200(last)                          # havuz genişliği (Aday 3 freni)
+    regime_open = spy_gate and (a200 is None or a200 >= bt.A200_MIN)
     wl = market.get("watchlist") or {}
     watch_n = len(wl.get(last, set()))
 
@@ -415,7 +493,7 @@ def run_qulla(asof=None, market=None, ledger_path=PAPER_QULLA_LEDGER):
         "max_dd": m["max_dd"], "n_closed": len(bt.trades),
         "closed_all": list(bt.trades),
         "started": START,
-        "market": market, "regime_open": regime_open,
+        "market": market, "regime_open": regime_open, "a200": a200,
         "spy_close": spy_close, "spy_ret60": spy_ret60, "watch_n": watch_n,
         "rs_n": cfg.rs_n, "pool_n": len([s for s in POOL]),
         # GÜNCEL DEFTER (henüz diske yazılmadı) — commit_ledger(r) ile kalıcılaşır.
@@ -428,17 +506,19 @@ def qulla_summary(r):
     flag = "🟢 AÇIK" if r["regime_open"] else "🔴 KAPALI"
     n = len(r["opened"])
     spc = f"${r['spy_close']:.2f}" if r["spy_close"] else "—"
+    a2 = f" · A200 %{r['a200']:.0f}" if r.get("a200") is not None else ""
     L = [f"<b>👑 Qulla-21 Tarayıcı ({r['asof']})</b>",
-         f"🕒 15:45 ET · Rejim: {flag} · SPY {spc} · havuz {r['pool_n']} → RS top-{r['rs_n']}"]
+         f"🕒 15:45 ET · Rejim: {flag} · SPY {spc}{a2} · havuz {r['pool_n']} → RS top-{r['rs_n']}"]
     if not r["regime_open"]:
-        L.append("\n⚠️ <b>Rejim KAPALI</b> (SPY&lt;SMA200) → momentum stratejisinde yeni alım YOK.")
+        L.append("\n⚠️ <b>Rejim KAPALI</b> (SPY&lt;SMA200 ya da A200&lt;%50) → yeni alım YOK; "
+                 "açık pozisyonların çıkışları normal işler.")
     L.append(f"\n🚀 <b>BUGÜN GİRİŞ: {n}</b>" +
              (" — aşağıda grafik+detay 👇" if n else " (bugün yeni Qulla-21 sinyali yok)"))
     if n:
         L.append("🏆 " + " · ".join(html.escape(p.symbol) for p in r["opened"]))
-    L.append("\n<i>Yöntem: RS top-50 sistematik evren + 63g kırılım girişi · split çıkış "
-             "(%60 +2R hedef / %40 21-EMA runner). Sinyal 15:45 anlık fiyatına göre. "
-             "Eğitim amaçlı kağıt-trade.</i>")
+    L.append("\n<i>Yöntem (Aday 3 · En dengeli): RS top-50 sistematik evren + 63g kırılım girişi · "
+             "split çıkış (%60 +2R hedef / %40 21-EMA runner) · denge sıralaması (kalite+hareket) · "
+             "A200≥%50 piyasa freni. Sinyal 15:45 anlık fiyatına göre. Eğitim amaçlı kağıt-trade.</i>")
     return "\n".join(L)
 
 
@@ -596,7 +676,8 @@ def qulla_message(r, tag="👑 Qulla-21"):
     L.append(f"<b>Genel K/Z: {'+' if tot_pl>=0 else ''}{tot_pl:.0f}$ "
              f"({tot_pl/INITIAL*100:+.1f}%)</b> · SPY {r['spy_roi']:+.1f}% · "
              f"win %{r['win_rate']:.0f} · PF {pf_s} · MaxDD {r['max_dd']:.1f}%")
-    L.append(f"<i>Yöntem: RS top-50 + 63g kırılım + split (%60 +2R / %40 21-EMA runner). "
+    L.append(f"<i>Yöntem (Aday 3 · En dengeli): RS top-50 + 63g kırılım + split (%60 +2R / %40 "
+             f"21-EMA runner) + denge sıralaması (kalite+hareket) + A200≥%50 freni. "
              f"Başlangıç {r['started']} (backtest ile dolduruldu). Havuz güncel endeks → "
              f"kalıntı survivorship. Eğitim amaçlı kağıt-trade.</i>")
     return "\n".join(L)

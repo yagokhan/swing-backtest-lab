@@ -682,8 +682,8 @@ PAGE = """<!doctype html><html lang="tr"><head><meta charset="utf-8">
   <div class="race" id="race"></div>
 
   <section class="defter d-champ">
-    <h2>👑 Qulla-21</h2>
-    <span class="kural">evren: günlük RS top-50 (S&amp;P500+Nasdaq100) · giriş: 63g kırılım · çıkış (split): yarı +2R hedef · kalan yarı kapanış&lt;21-EMA runner · 🔓 combo: %7.5/slot + runner slotu boşalır (boşalan sermaye yeniden konuşlanır) · gerçek defter</span>
+    <h2>👑 Qulla-21 · Aday 3 "En dengeli"</h2>
+    <span class="kural">evren: günlük RS top-50 (S&amp;P500+Nasdaq100) · giriş: 63g kırılım · çıkış (split): %60 +2R hedef · %40 kapanış&lt;21-EMA runner · 🔓 combo: %7.5/slot + runner slotu boşalır · ⭐ Aday 3 (2026-07-05): kalabalık günde denge sıralaması (kalite+hareket) + A200≥%50 piyasa freni (<a href="/adaylar" style="color:inherit">neden?</a>) · gerçek defter</span>
     <div class="kpis" id="kpis"></div>
     <h3 class="alt">Sermaye Eğrisi &amp; Günlük K/Z (başlangıçtan bugüne)</h3>
     <div class="eqcharts">
