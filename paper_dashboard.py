@@ -436,6 +436,9 @@ def portfolio_json():
     out = _portfolio_payload(st, prices)
     out["market"] = market_status()
     out["slippage"] = ""
+    # ⭐ Aday 3 rejim bilgisi (son taramadan; A200 = havuzun SMA200-üstü %'si)
+    out["a200"] = st.get("a200")
+    out["regime_open"] = st.get("regime_open")
     # --- SPY al-tut kıyası (başlangıç tarihinden) ---
     spy_now = prices.get("SPY")
     hist = _spy_history()
@@ -806,6 +809,9 @@ function renderKpis(p,el,other){
   const k=[['Özsermaye','$'+f(p.equity)],['Genel K/Z',sign(p.total_pl)+'$ ('+sign(p.total_pl_pct)+'%)',cls(p.total_pl)],
    ['Gerçekleşmemiş',sign(p.unrealized)+'$',cls(p.unrealized)],['Gerçekleşen',sign(p.realized)+'$',cls(p.realized)],
    ['Nakit','$'+f(p.cash)],['Pozisyon',p.n_open+' açık · '+p.n_closed+' kapanan']];
+  if(p.a200!=null){
+   k.push(['🚦 Yeni alım freni (son tarama)',(p.regime_open?'🟢 AÇIK':'🔴 KAPALI')+' · A200 %'+f(p.a200),
+           p.regime_open?'pos':'neg']);}
   if(p.spy_pct!=null){
    k.push(['📈 SPY (kıyas)',sign(p.spy_pct)+'%',cls(p.spy_pct)]);
    k.push(['⚖️ Alpha (SPY üstü)',sign(p.alpha)+'%',cls(p.alpha)]);}

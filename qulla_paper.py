@@ -589,6 +589,8 @@ def state_dict(r):
                 "outcome": str(t.outcome)}
     return {"start_capital": INITIAL, "per_position": 0, "max_positions": 20,
             "cash": round(r["cash"], 2), "variant": "qulla", "started": r.get("started", START),
+            "asof": r["asof"], "regime_open": r["regime_open"],
+            "a200": (round(r["a200"], 1) if r.get("a200") is not None else None),
             "positions": [pos_d(p) for p in r["positions"]],
             "closed": [tr_d(t) for t in r["closed_all"]]}
 
