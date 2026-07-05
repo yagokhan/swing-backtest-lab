@@ -13,10 +13,12 @@
  table{border-collapse:collapse;width:100%;font-size:13px;margin:8px 0}
  th,td{border:1px solid var(--bd);padding:5px 8px;text-align:right;font-variant-numeric:tabular-nums}
  th{background:#1c2128;font-weight:600} td:first-child,th:first-child{text-align:left;font-variant-numeric:normal}
+ .rules td,.rules th{text-align:left;font-variant-numeric:normal;vertical-align:top}
+ .rules td:first-child{font-weight:600;white-space:nowrap}
  .tblwrap{overflow-x:auto}
  /* yarışmacı kartları */
  .who{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;margin:12px 0}
- .who .card{margin:0} .who h3{font-size:14.5px;margin:0 0 6px;display:flex;align-items:center;gap:8px}
+ .who .card{margin:0} .who h3,.card>h3{font-size:14.5px;margin:0 0 6px;display:flex;align-items:center;gap:8px}
  .who p{margin:4px 0;font-size:13.5px;color:#c9d1d9}
  .sw{display:inline-block;width:11px;height:11px;border-radius:3px;flex:0 0 auto}
  /* grafik */
@@ -81,6 +83,162 @@ katkı verir. Yanına Aday 2'deki sağlık kapısı eklenir.</p>
 kazanç ile sarsıntı arasında en iyi denge.</p></div>
 </div>
 
+<h2>Adım adım: her sistem tam olarak ne yapıyor?</h2>
+
+<div class="card">
+<b>Önce ortak zemin — dördünde de birebir aynı olanlar:</b>
+<ul>
+<li><b>Havuz ve liste:</b> Amerika'nın en büyük ~370 şirketi (S&amp;P 500 + Nasdaq-100) izlenir; her gün bunların
+içinden son ~3 ayda piyasaya karşı en güçlü gitmiş <b>50 hisse</b> izleme listesini oluşturur.</li>
+<li><b>Alım sinyali:</b> Listedeki bir hisse son 3 ayın (63 işlem günü) en yüksek fiyatını kırarsa ve fiyatı
+20, 50 ve 200 günlük ortalamalarının üstündeyse o gün kapanışta alınır.</li>
+<li><b>Pozisyon büyüklüğü:</b> Bir hisseye portföyün en fazla %7.5'i bağlanır; aynı anda en fazla 20 pozisyon tutulur.</li>
+<li><b>Satış:</b> Alınan payın %60'ı, kâr "başta göze alınan riskin 2 katına" ulaşınca satılır
+(örnek: 100$'a alınıp stopu 95$ konduysa risk 5$'dır, hedef 110$'dır). Kalan %40, fiyat 21 günlük ortalamasının
+altına kapanana kadar tutulur — trend sürerse aylarca elde kalabilir.</li>
+<li><b>Ana fren:</b> Piyasa endeksi SPY kendi 200 günlük ortalamasının altındaysa hiçbir sistem yeni alım yapmaz;
+eldeki pozisyonlar normal satış kurallarıyla yönetilmeye devam eder.</li>
+</ul>
+<p>Dört sistem arasındaki <b>bütün fark iki soruda</b> toplanır:
+<b>① Sinyal veren hisse sayısı boş yerden fazlaysa hangisi önce alınır?</b>
+<b>② Hangi günler yeni alım serbesttir?</b>
+Giriş şartları, satış kuralları ve para yönetimi dördünde de aynıdır.</p>
+</div>
+
+<div class="card"><h3><span class="sw" style="background:var(--s-baz)"></span>Baz — bugün canlıda olan</h3>
+<p><b>Sıra kalite puanına göre.</b> Sistem her sinyale 0-100 arası bir puan verir; puan dört ölçüden oluşur:
+piyasaya karşı güç, 52 haftalık zirveye yakınlık, 20 günlük ortalamadan açılma miktarı ve riskin darlığı
+(stopun girişe yakınlığı). Kalabalık günde en yüksek puanlı hisse önce alınır. Alım günleri için tek fren
+SPY frenidir — başka kapı yoktur. Puanın tam hesabı bir alttaki kartta.</p></div>
+
+<div class="card">
+<h3>🧮 Kalite puanı tam olarak nasıl hesaplanır? (0–100)</h3>
+<p>Sinyal veren her hisse dört ölçüden puan toplar; dördünün toplamı 100'dür.
+En büyük ağırlık piyasaya karşı güçtedir — sistemin felsefesi "lider hisseyi al"dır.</p>
+<ul>
+<li><b>① Piyasaya karşı güç — 45 puana kadar.</b> Hissenin son 60 gündeki (≈3 ay) getirisi ile SPY'nin aynı
+dönemdeki getirisi karşılaştırılır. Fark büyüdükçe puan artar; SPY'yi 60 yüzde puanı geçen hisse tam 45 alır.
+<span class="mut">Örnek: hisse %35 yükselmiş, SPY %5 → fark 30 → 45'in yarısı ≈ 22.5 puan.</span></li>
+<li><b>② Zirveye yakınlık — 20 puana kadar.</b> Fiyat 52 haftalık zirvesinin neresinde? Tam zirvedeyse 20;
+zirvenin %10 altındaysa 0; arası doğrusal. <span class="mut">Mantık: zirvedeki hissenin üstünde "zararım
+kapansın da satayım" diye bekleyen eski alıcı yoktur — yol dirençsizdir.</span></li>
+<li><b>③ Tazelik — 20 puana kadar.</b> Fiyat 20 günlük ortalamasından ne kadar açılmış? %5 ve altındaysa
+tam 20; açıldıkça azalır, %25'e açılmışsa 0. <span class="mut">Mantık: yeni kalkan trene binmeyi ödüllendirmek,
+kaçmış treni kovalamayı cezalandırmak.</span></li>
+<li><b>④ Riskin darlığı — 15 puana kadar.</b> Girişle referans stop arasındaki mesafe fiyatın yüzde kaçı?
+%3 ve altıysa tam 15; %9 ve üstüyse 0. <span class="mut">Mantık: dar risk, aynı kâr hedefi için daha az şey
+göze almak demektir.</span></li>
+</ul>
+<p><b>Uçtan uca örnek:</b> SPY'yi 30 puan geçmiş (→22.5), zirvesinin %2 altında (→16), ortalamasından %6
+açılmış (→19), riski %4 (→12.5) bir hissenin kalite puanı ≈ <b>70</b> olur.</p>
+<p class="note">Bu puan hiçbir sistemde eleme yapmaz (baraj kapalı) — yalnızca kalabalık günde sırayı belirler.
+Baz'da sıralamanın kendisidir; Aday 3'te 100'e bölünüp hareketlilik bonusuyla toplanır;
+Aday 1 ve 2'de sıralamada kullanılmaz.</p>
+</div>
+
+<div class="card"><h3><span class="sw" style="background:var(--s-atr)"></span>Aday 1 · Hareketliye öncelik</h3>
+<p><b>"Günlük hareketlilik" nedir?</b> Hissenin son haftalardaki tipik günlük salınımının fiyatına oranıdır.
+Her gün aşağı-yukarı ortalama %3 oynayan bir hissenin hareketliliği 3'tür; %1.5 oynayanınki 1.5.</p>
+<p><b>Kural:</b> Kalabalık günde sıra puana göre değil hareketliliğe göre kurulur — en hareketli önce alınır.
+Puan barajı, elemeler ve satışlar aynen yerinde durur; sinyal sayısı boş yerden azsa zaten hepsi alınır,
+yani fark yalnızca kalabalık günlerde ortaya çıkar.</p>
+<p><b>Neden işe yarıyor?</b> Hareketli hisse kâr hedefine daha hızlı ulaşır → yer daha çabuk boşalır →
+aynı para yıl içinde daha çok tur atar (5 yılda 397 yerine 480 işlem). Risk büyümez, çünkü hareketli hissede
+stop mesafesi de o hareketle orantılı geniş tutulur ve daha az adet alınır — her işlemde göze alınan para aynıdır.
+En derin çukurun 5 yılda değişmemesi (−%17) bundandır.</p></div>
+
+<div class="card"><h3><span class="sw" style="background:var(--s-tavan)"></span>Aday 2 · En çok kazandıran</h3>
+<p>Aday 1'in "en hareketli önce" kuralıyla başlar, üstüne iki ayar ekler:</p>
+<p><b>① Hareketlilik tavanı (%4):</b> Sıralamada %4'ün üstü sayılmaz — günde %6 oynayan da %4.5 oynayan da
+sıraya "4" olarak yazılır. Böylece aşırı uçtaki hisseler sırf daha çılgın diye birbirinin önüne geçemez.
+Tavanda eşitlenenler arasında sırayı ikinci ölçü belirler: fiyatı 20 günlük ortalamasına <b>en yakın</b> olan
+(yani henüz aşırı yükselip açılmamış olan) önce alınır. Amaç, çoğu zaman haber ya da spekülasyon kaynaklı
+en çılgın hisselerin sırayı sürekli kapmasını önlemektir.</p>
+<p><b>② Piyasa sağlık kapısı:</b> Her gün, havuzdaki ~370 hissenin kaçının kendi 200 günlük ortalamasının
+üstünde olduğu sayılır. <b>Yarıdan azsa o gün yeni alım yapılmaz</b> — sinyal gelse de alınmaz; eldeki
+pozisyonların satış kuralları aynen işler. Bu, SPY freninin üstüne ikinci bir frendir ve farklı bir şeyi ölçer:
+endeks birkaç dev şirket sayesinde ayakta görünürken hisselerin çoğu düşüş trendindeyse (2022'de aylarca
+böyleydi) kırılım sinyallerinin çoğu tuzak çıkar; sistem o günlerde kenarda bekler. Zor dönem çukurunun
+−%17'den −%11'e inmesi bu kapının işidir.</p>
+<p><b>Bedeli:</b> Dip dönüşünde kapı geç açılır — hisselerin yarısının 200 günlük ortalamasını geri kırması
+zaman alır — bu yüzden toparlanmanın ilk fırsatları kaçabilir. Son 1 yılda Aday 3'ün gerisinde kalmasının
+nedeni budur.</p></div>
+
+<div class="card"><h3><span class="sw" style="background:var(--s-blend)"></span>Aday 3 · En dengeli</h3>
+<p><b>Sıra puanı = kalite puanı + hareketlilik bonusu.</b> Kalite puanı 0-1 aralığına çevrilir (85 puan → 0.85),
+üstüne hareketliliğin onda biri eklenir (%3 oynayan hisse → +0.30 bonus). Direksiyon kalitededir, hareketlilik
+sadece küçük bir gaz pedalıdır: yakın kalitede olanlardan sıcak olan öne geçer, ama büyük kalite farkını
+sıcaklık kapatamaz.</p>
+<p>Yanında Aday 2'deki <b>sağlık kapısı</b> aynen vardır. Tavana burada gerek yoktur — hareketliliğin katkısı
+zaten küçük olduğu için tek bir çılgın hisse sırayı tek başına domine edemez.</p>
+<p><b>Karakteri:</b> Kalite direksiyonda kaldığı için savruk günlerde daha az yanlış yapar: zor dönemde
+adayların en iyisi (+%21.3) ve son 1 yılda en iyisi (+%57.4) budur.</p></div>
+
+<div class="card">
+<b>Kalabalık gün örneği — dördü aynı gün nasıl farklı seçer?</b>
+<p class="note">Diyelim 3 boş yer var ve 5 hisse aynı gün sinyal verdi:</p>
+<div class="tblwrap"><table>
+<tr><th>Hisse</th><th>Kalite puanı</th><th>Günlük hareketlilik</th><th>20 günlük ortalamaya uzaklık</th></tr>
+<tr><td>A</td><td>92</td><td>%1.8</td><td>%4</td></tr>
+<tr><td>B</td><td>88</td><td>%3.2</td><td>%6</td></tr>
+<tr><td>C</td><td>80</td><td>%5.6</td><td>%8</td></tr>
+<tr><td>D</td><td>62</td><td>%4.2</td><td>%3</td></tr>
+<tr><td>E</td><td>70</td><td>%2.4</td><td>%5</td></tr>
+</table></div>
+<ul>
+<li><b>Baz alır: A, B, C</b> — en yüksek üç kalite puanı.</li>
+<li><b>Aday 1 alır: C, D, B</b> — en hareketli üçü. Dikkat: en kaliteli hisse A dışarıda kaldı, çünkü en az oynayan o.</li>
+<li><b>Aday 2 alır: D, C, B</b> — C (%5.6) ile D (%4.2) tavanın üstünde olduğundan ikisi de "4" sayılır;
+eşitliği 20 günlük ortalamasına daha yakın olan D kazanır (%3 &lt; %8). Ve bu alımlar ancak sağlık kapısı
+yeşilse yapılır — kapalıysa o gün üçü de alınmaz.</li>
+<li><b>Aday 3 alır: C, B, A</b> — sıra puanları: C 0.80+0.56=<b>1.36</b>, B 0.88+0.32=<b>1.20</b>,
+A 0.92+0.18=<b>1.10</b>, D 0.62+0.42=1.04, E 0.70+0.24=0.94. Hareket bonusu C ile B'yi öne taşıdı ama
+kalitesi düşük D, kaliteli A'nın önüne geçemedi. (Sağlık kapısı burada da geçerli.)</li>
+</ul>
+<p class="note">E hiçbirinde ilk üçe giremedi. Aynı beş sinyal, dört farklı seçim — bütün performans farkı
+bu seçim sırasından ve sağlık kapısının kapattığı günlerden doğar.</p>
+</div>
+
+<div class="card">
+<b>Tek bakışta: giriş-çıkış kuralları tablosu</b>
+<p class="note">Her yöntemin pozisyona neye göre girip neye göre çıktığı, kural kural. "Dördünde aynı"
+yazan satırlar tek hücrede birleştirildi.</p>
+<div class="tblwrap"><table class="rules">
+<tr><th>Kural</th><th>⚪ Baz</th><th>🔵 Aday 1</th><th>🟢 Aday 2</th><th>🟡 Aday 3</th></tr>
+<tr><td>Girişi tetikleyen sinyal</td>
+<td colspan="4"><b>Dördünde aynı:</b> "En güçlü 50" izleme listesindeki hisse, son 63 işlem gününün
+(≈3 ay) en yüksek fiyatını kapanışta kırarsa o günün kapanış fiyatından alınır.</td></tr>
+<tr><td>Girişin ön-şartları</td>
+<td colspan="4"><b>Dördünde aynı:</b> Fiyat 20, 50 ve 200 günlük ortalamalarının üstünde ·
+200 günlük ortalama yükseliyor · son 60 günde hisse hem artıda hem en az SPY kadar güçlü ·
+fiyat 52 haftalık zirvesinin en az %75'i seviyesinde.</td></tr>
+<tr><td>Kalabalık günde öncelik</td>
+<td>Kalite puanı en yüksek olan önce</td>
+<td>Günlük hareketliliği en yüksek olan önce</td>
+<td>Hareketlilik, ama %4 tavanlı; tavanda eşitlenenlerde 20 günlük ortalamasına en yakın olan önce</td>
+<td>Kalite puanı (0-1) + hareketlilik÷10 toplamı en yüksek olan önce</td></tr>
+<tr><td>Yeni alımı durduran fren</td>
+<td>SPY 200 günlük ortalamasının altındaysa alım yok</td>
+<td>Aynı SPY freni</td>
+<td>SPY freni <b>+ sağlık kapısı:</b> havuzun yarısından azı kendi 200 günlük ortalamasının üstündeyse alım yok</td>
+<td>SPY freni <b>+ aynı sağlık kapısı</b></td></tr>
+<tr><td>Çıkış — payın %60'ı</td>
+<td colspan="4"><b>Dördünde aynı:</b> Kâr hedefine değince satılır. Hedef = giriş + 2×risk
+(risk = giriş − referans stop). Fiyat gün içinde hedefe dokunduğu an satış gerçekleşir;
+hedefe gelmezse bu dilim beklemeye devam eder.</td></tr>
+<tr><td>Çıkış — payın %40'ı</td>
+<td colspan="4"><b>Dördünde aynı:</b> Fiyat 21 günlük üstel ortalamanın (EMA21) altında kapanınca satılır.
+Trend aylarca sürerse bu dilim aylarca elde kalır; trendin bittiğini ilan eden kural budur.</td></tr>
+<tr><td>Zarar-kes (stop) emri</td>
+<td colspan="4"><b>Dördünde aynı: sabit zarar-kes emri YOKTUR.</b> Girişte hesaplanan "referans stop"
+(son 10 günün dibi; kapanıştan en fazla 1.5×günlük-oynama aşağıda) yalnızca riski ölçmek ve kâr hedefini
+hesaplamak içindir. Aşağı yönlü korumayı %40'lık dilimin 21 günlük ortalama kuralı sağlar.</td></tr>
+<tr><td>Frenler eldeki pozisyonu etkiler mi?</td>
+<td colspan="4"><b>Dördünde aynı: hayır.</b> SPY freni ve sağlık kapısı yalnızca yeni alımı durdurur;
+eldeki pozisyonların satış kuralları her gün aynen işlemeye devam eder.</td></tr>
+</table></div>
+</div>
+
 <h2>Dönem dönem getiri (%)</h2>
 <div class="leg" id="leg1"></div>
 <div class="card" id="chartRoi"></div>
@@ -100,6 +258,13 @@ fareyle üzerinde gezinince günlük değerler açılır.</p>
 <h2>Kazanç/kayıp dengesi</h2>
 <p class="note">1 liralık kayba karşılık kaç lira kazanıldı — uzun çubuk daha "temiz" kazanç demek.</p>
 <div class="card" id="chartPf"></div>
+
+<h2>İşlem sayısı</h2>
+<p class="note">Dönem boyunca yapılan alım-satım turu. Hareketliye öncelik veren sistemlerde hisse kâr hedefine
+daha hızlı ulaşıp yerini boşalttığı için aynı para daha çok tur atar (5 yılda 397'ye karşı 480-533) —
+getiri farkının önemli bir kaynağı budur. Tek başına iyi/kötü ölçüsü olmadığı için bu grafikte
+"en iyi" kalın gösterilmez.</p>
+<div class="card" id="chartN"></div>
 
 <h2>Tam sayı tablosu</h2>
 <div class="card tblwrap" id="tbl"></div>
@@ -169,7 +334,7 @@ function buildChart(elId, data, opt){
  let h='';
  for(let i=0;i<WINS.length;i++){
   const vals=SERIES.map(s=>data[s.k][i]);
-  const bestVal=opt.best(vals);
+  const bestVal=opt.best?opt.best(vals):null;
   h+=`<div class="grp"><div class="gt">${WINS[i]}</div>`;
   for(const s of SERIES){
    const v=data[s.k][i], w=Math.max(0.6, Math.abs(v)/max*100);
@@ -194,6 +359,7 @@ const tr=v=>v.toFixed(1).replace('.',',');
 buildChart('chartRoi', ROI, {max:250, fmt:v=>'+%'+tr(v),           best:a=>Math.max(...a)});
 buildChart('chartDd',  DD,  {max:24,  fmt:v=>'−%'+tr(Math.abs(v)), best:a=>Math.max(...a)});
 buildChart('chartPf',  PF,  {max:4.4, fmt:v=>v.toFixed(2).replace('.',','), best:a=>Math.max(...a)});
+buildChart('chartN',   N,   {max:600, fmt:v=>String(v)});
 
 // tam tablo (erişilebilirlik: her değer tabloda da var)
 let t='<table><tr><th>Dönem · Sistem</th><th>Getiri %</th><th>En derin çukur %</th><th>Denge (1\'e karşı)</th><th>İşlem</th><th>İsabet %</th></tr>';
