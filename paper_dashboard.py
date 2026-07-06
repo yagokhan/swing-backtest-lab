@@ -769,13 +769,14 @@ PAGE = """<!doctype html><html lang="tr"><head><meta charset="utf-8">
     <div id="scan" class="scanbox">…</div>
   </section>
 
-  <p class="ipucu">Bir <b>açık</b> ya da <b>kapanan</b> pozisyon satırına tıkla → <b>etkileşimli</b> mum grafiği açılır: tekerlekle <b>zoom</b>, sürükleyerek <b>kaydır</b>, üstten <b>zaman dilimi</b> (15m·30m·1h·2h·4h·1d) seç. <span class="pos">AL ▲</span> / <span class="neg">SAT ▼</span> işaretleri <b>tarih + fiyatla</b> etiketli; grafik altında AL→SAT özeti (tarih · fiyat · K/Z%) + giriş/stop/+2R çizgileri.</p>
+  <p class="ipucu">Bir <b>açık</b> ya da <b>kapanan</b> pozisyon satırına tıkla → <b>etkileşimli</b> mum grafiği açılır: <b>tekerlek</b>=zaman(X) zoom, <b>fiyat ekseninde (sağ kenar) sürükle</b>=fiyat(Y) zoom, gövdeyi sürükle=kaydır, <b>⤢ Sığdır</b>=sıfırla, üstten <b>zaman dilimi</b> (15m·30m·1h·2h·4h·1d) seç. <span class="pos">AL ▲</span> / <span class="neg">SAT ▼</span> işaretleri <b>tarih + fiyatla</b> etiketli; grafik altında AL→SAT özeti (tarih · fiyat · K/Z%) + giriş/stop/+2R çizgileri.</p>
 </div>
 <div class="modal" id="modal" onclick="if(event.target===this)closeChart()">
   <div class="modal-inner">
     <div class="modal-head">
       <div><b id="modalTitle">—</b> <span class="mktmini" id="chartMkt"></span> <span class="mktmini muted" id="chartCd" title="otomatik veri tazelemeye kalan süre"></span></div>
       <div class="tfbar" id="tfbar"></div>
+      <button class="x" onclick="resetZoom()" title="Zoom'u sıfırla: zamanı sığdır + fiyat eksenini otomatik ölçeğe döndür">⤢ Sığdır</button>
       <button class="x" onclick="closeChart()">✕ Kapat</button>
     </div>
     <div id="chart"></div>
@@ -988,6 +989,11 @@ function closeChart(){
   if(_chartTimer){clearInterval(_chartTimer);_chartTimer=null;}
   if(_cdTimer){clearInterval(_cdTimer);_cdTimer=null;}
 }
+function resetZoom(){                                   // zoom'dan çıkış: X sığdır + Y otomatik ölçek
+  if(!_chart)return;
+  try{_chart.priceScale('right').applyOptions({autoScale:true});}catch(e){}
+  _chart.timeScale().fitContent();
+}
 function ensureChart(){
   if(_chart)return;
   const el=$('chart');el.innerHTML='';
@@ -997,7 +1003,13 @@ function ensureChart(){
     grid:{vertLines:{color:'rgba(174,188,214,.06)'},horzLines:{color:'rgba(174,188,214,.06)'}},
     timeScale:{timeVisible:true,secondsVisible:false,borderColor:'rgba(174,188,214,.20)'},
     rightPriceScale:{borderColor:'rgba(174,188,214,.20)'},
-    crosshair:{mode:0}});
+    crosshair:{mode:0},
+    // her iki eksende de zoom/kaydırma açık: tekerlek=zaman(X) zoom, fiyat ekseninde
+    // sürükle=fiyat(Y) zoom, zaman ekseninde sürükle=X ölçek, eksene çift-tık=sıfırla
+    handleScale:{mouseWheel:true,pinch:true,
+      axisPressedMouseMove:{time:true,price:true},
+      axisDoubleClickReset:{time:true,price:true}},
+    handleScroll:{mouseWheel:true,pressedMouseMove:true,horzTouchDrag:true,vertTouchDrag:true}});
   _series=_chart.addCandlestickSeries({upColor:'#16a34a',downColor:'#dc2626',
     wickUpColor:'#16a34a',wickDownColor:'#dc2626',borderVisible:false});
   _sma=_chart.addLineSeries({color:'#f59e0b',lineWidth:1,priceLineVisible:false,lastValueVisible:false});
@@ -1039,7 +1051,7 @@ async function drawChart(keep){
       else if(i.open&&!sells.length){trade+=' &nbsp;·&nbsp; <span class="muted">açık pozisyon'+(i.exit_plan?' · çıkış: '+i.exit_plan:'')+'</span>';}
       trade+=' <span class="muted">· işlemler 15:45 ET seans kapanışında (günlük bar)</span><br>';
     }
-    $('chartNote').innerHTML=trade+(d.intraday?'🕒 saatler ET · ':'')+((d.candles||[]).length)+' bar · tekerlek=zoom, sürükle=kaydır · <span style="color:#f59e0b">SMA50</span>'+(d.intraday?'':' · <span style="color:#38bdf8">21-EMA (runner çıkışı)</span>')+' · giriş/ref-stop/+2R çizgileri · AL▲/SAT▼';
+    $('chartNote').innerHTML=trade+(d.intraday?'🕒 saatler ET · ':'')+((d.candles||[]).length)+' bar · <b>tekerlek</b>=zaman(X) zoom · <b>fiyat ekseninde sürükle</b>=fiyat(Y) zoom · gövdeyi sürükle=kaydır · <b>⤢ Sığdır</b>=sıfırla · <span style="color:#f59e0b">SMA50</span>'+(d.intraday?'':' · <span style="color:#38bdf8">21-EMA (runner çıkışı)</span>')+' · giriş/ref-stop/+2R çizgileri · AL▲/SAT▼';
   }
 }
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeChart();});
