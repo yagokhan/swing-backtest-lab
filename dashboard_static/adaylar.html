@@ -272,6 +272,103 @@ getiri farkının önemli bir kaynağı budur. Tek başına iyi/kötü ölçüs�
 <h2>Tam sayı tablosu</h2>
 <div class="card tblwrap" id="tbl"></div>
 
+<h2>⛳ 20 kişilik yer sınırı hiç doldu mu? — kapasite darboğazı analizi</h2>
+<p class="note">Sistemde aynı anda en fazla <b>20 pozisyon</b> kuralı var. Soru: 5 yılda bu sınıra gerçekten
+dayanıldı mı, sinyaller yer yokluğundan kaçtı mı? Dört sistem aynı 5 yıllık veriyle yeniden koşuldu; bu kez
+her gün "kaç sinyal geldi, kaçı alındı, alınamayanlar neden alınamadı" tek tek sayıldı. Sayaçlar davranışı
+değiştirmedi — dört koşunun getirisi yukarıdaki tablolarla birebir aynı çıktı (4/4 doğrulandı).</p>
+
+<div class="card">
+<b>Cevap: evet — hem de arada bir değil, neredeyse sürekli.</b>
+<div class="tblwrap"><table>
+<tr><th>5 yıl · 1297 işlem günü</th><th>⚪ Baz</th><th>🔵 Aday 1</th><th>🟢 Aday 2</th><th>🟡 Aday 3 ⭐</th></tr>
+<tr><td>20/20 dolu biten gün</td><td><b>954 (%74)</b></td><td>874 (%67)</td><td>774 (%60)</td><td>819 (%63)</td></tr>
+<tr><td>En uzun kesintisiz dolu dönem</td><td><b>301 gün</b><br><span class="mut">Kas 2022 → Şub 2024</span></td>
+<td>237 gün<br><span class="mut">Mar 2023 → Şub 2024</span></td><td>140 gün<br><span class="mut">Eki 2025 → May 2026</span></td>
+<td>209 gün<br><span class="mut">May 2025 → Mar 2026</span></td></tr>
+<tr><td>Sinyal gelen gün</td><td>829</td><td>818</td><td>772</td><td>771</td></tr>
+<tr><td>…bunlardan en az 1 sinyalin kapasiteden kaçtığı gün</td>
+<td><b>799 (%96)</b></td><td>790 (%97)</td><td>741 (%96)</td><td>741 (%96)</td></tr>
+<tr><td>Gelen sinyal (hisse-gün)</td><td>3.990</td><td>3.772</td><td>3.561</td><td>3.578</td></tr>
+<tr><td>Alınabilen</td><td>200</td><td>243</td><td>269</td><td>244</td></tr>
+<tr><td>Yer (slot) dolu diye kaçan</td><td>3.334</td><td>2.758</td><td>2.486</td><td>2.632</td></tr>
+<tr><td>Nakit yetmedi diye kaçan</td><td>456</td><td>771</td><td>806</td><td>702</td></tr>
+<tr><td>Yatırım oranı (medyan / en yüksek %5)</td><td>%74 / %97</td><td>%76 / %98</td><td>%78 / %98</td><td>%77 / %98</td></tr>
+</table></div>
+<p class="note">Yıl kırılımı çarpıcı: ayı piyasasında (2021-22) slotlar çoğunlukla boştu (Baz 2022: 251 günün
+63'ü dolu), ama <b>2023'ten itibaren fiilen her gün dolu</b> — Baz 2023: 250/250, 2024: 242/252, 2025: 248/250.
+Trend yıllarında "boş yer" istisnadır, kural değil.</p>
+</div>
+
+<div class="card">
+<b>Bu darboğaz bir kusur mu? Hayır — bu raporun varlık sebebi.</b>
+<p>Yer kıt olduğu için "kalabalık günde <b>kimi</b> seçersin" sorusu sistemin ana kararı hâline geliyor.
+Baz ile adaylar arasındaki tek fark bu seçim sırası (+ sağlık kapısı) olduğu hâlde 5 yıllık getiri
++%74,7'den +%208'e açılıyor: <b>fark tamamen, dolu kapıda kimin içeri alındığından doğuyor.</b>
+Kapasite bol olsaydı dört sistem aynı işlemleri yapar, aynı getiriyi verirdi — sıralama kuralının hiçbir
+önemi kalmazdı. Yani slot darboğazı adayların getiri farkının <i>kaynağıdır</i>.</p>
+<p><b>Yer mi, para mı önce bitiyor?</b> Yer. Kaçan sinyallerin %76–88'i slot dolu olduğu için, kalanı nakit
+yetmediği için kaçtı. Bunun nedeni pozisyonların portföy içindeki payının zamanla küçülmesi: her giriş o günkü
+sermayenin %7,5'i kadar açılıyor; sermaye büyüdükçe eski pozisyonların oransal ağırlığı düşüyor ve +2R satışı
+%60'lık nakdi geri getiriyor. Böylece 20 dolu slota rağmen kasada tipik olarak %25 civarı nakit bekliyor.</p>
+<p><b>Dürüstlük notu:</b> "3.334 kaçan sinyal" sayısı hisse-gün sayımıdır — kırılım bölgesinde kalan bir hisse
+arka arkaya günlerde tekrar tekrar sinyal verir ve her seferinde sayılır; kaçan <i>benzersiz fırsat</i> sayısı
+bundan küçüktür. Abartısız ölçü gün bazlıdır: <b>sinyal gelen günlerin %96'sında en az bir aday dışarıda kaldı.</b></p>
+<p><b>"O zaman 20'yi artıralım mı?"</b> Bu deney yapıldı — sonuçlar hemen aşağıdaki bölümde.
+Kısa cevap: canlıdaki yöntem (Aday 3) için 20 doğrulandı. Canlı portföyde 18-20 açık pozisyonla gün
+kapamak ve 22:45 taramasında "alınabilir" görünen hissenin alınmaması normal işleyiştir — yer açılmadan
+yeni konuk girmez.</p>
+</div>
+
+<h2>🎛️ En iyi slot sayısı kaç? — optimizasyon taraması</h2>
+<p class="note">Yukarıdaki bölümün doğal devamı: madem yer neredeyse hep dolu, sınırı oynatsak ne olur?
+Dört sistem, diğer her ayar sabit kalarak (%7,5 pozisyon, 60/40 çıkış, combo) yalnız slot sayısı
+değiştirilerek 5 yıllık veride yeniden koşuldu: 5 · 10 · 15 · 20 · 25 · 30 · 40 · sınırsız.
+20-slot satırları yukarıdaki tablolarla birebir tuttu (4/4 kontrol geçti).</p>
+
+<div class="card">
+<b>5 yıllık sonuç — getiri % / en derin çukur %</b>
+<div class="tblwrap"><table>
+<tr><th>Slot</th><th>⚪ Baz</th><th>🔵 Aday 1</th><th>🟢 Aday 2</th><th>🟡 Aday 3 ⭐</th></tr>
+<tr><td>5</td><td>+10,7 / −7,4</td><td>+34,6 / −5,3</td><td>+57,0 / −6,4</td><td>+43,6 / −6,5</td></tr>
+<tr><td>10</td><td>+36,3 / −10,2</td><td>+93,4 / −10,8</td><td>+107,4 / −12,6</td><td>+108,6 / −11,0</td></tr>
+<tr><td>15</td><td>+49,1 / −20,1</td><td>+146,6 / −11,6</td><td>+132,6 / −10,9</td><td>+139,7 / −18,2</td></tr>
+<tr><td><b>20 (canlı)</b></td><td>+74,7 / −17,2</td><td>+181,5 / −17,0</td><td><b>+208,1 / −18,2</b></td><td>+166,3 / −19,6</td></tr>
+<tr><td>25</td><td><b>+91,5</b> / −24,3</td><td><b>+220,7</b> / −21,4</td><td>+200,1 / −19,3</td><td><b>+168,0</b> / −18,8</td></tr>
+<tr><td>30 = 40 = sınırsız</td><td>+85,0 / −24,3</td><td>+198,2 / −25,3</td><td>+198,5 / −18,6</td><td>+157,7 / −18,5</td></tr>
+</table></div>
+<p class="note">30, 40 ve "sınırsız" satırlarının dört sistemde de <b>birebir aynı</b> çıkması tesadüf değil,
+kanıttır: ~25-30 pozisyonda para %100 yatırıma dayanıyor ve slot yerine <b>nakit</b> sınır oluyor —
+slot sınırının fiili tavanı zaten var. Aşağı yönde ise tablo çok net: 5-10-15 slot her sistemde ciddi
+getiri bırakıyor (kapasitenin gerçekten kıt olduğunun bir başka kanıtı).</p>
+</div>
+
+<div class="card">
+<b>25 slot cazip görünüyor — ama sınav pencerelerinde dökülüyor.</b>
+<p>5 yıl toplamında Baz, Aday 1 ve Aday 3'te en yüksek getiri 25 slotta. Kalıcı mı diye her birinin
+25-slot hâli dört alt pencerede yeniden koşuldu. Canlıdaki yöntem için sonuç (getiri % / çukur %):</p>
+<div class="tblwrap"><table>
+<tr><th>🟡 Aday 3</th><th>slot 20 (canlı)</th><th>slot 25</th><th>kazanan</th></tr>
+<tr><td>5 yıl tam</td><td>+166,3 / −19,6</td><td>+168,0 / −18,8</td><td>25 (kıl payı)</td></tr>
+<tr><td>Ayı 2021-23</td><td>+21,3 / −17,2</td><td>+19,1 / −15,8</td><td>20</td></tr>
+<tr><td>Toparlanma 2023-25</td><td>+43,3 / −18,4</td><td>+30,6 / −20,0</td><td><b>20 (açık ara)</b></td></tr>
+<tr><td>Son 2 yıl</td><td>+81,3 / −16,5</td><td>+75,0 / −17,1</td><td>20</td></tr>
+<tr><td>Son 1 yıl</td><td>+57,4 / −12,5</td><td>+47,3 / −10,4</td><td><b>20 (açık ara)</b></td></tr>
+</table></div>
+<p><b>Karar: canlı sistemde değişiklik yok — 20 slot doğrulandı.</b> 25'in 5 yıllık +1,7 puanlık üstünlüğü
+beş pencerenin dördünde kayboluyor; son 1 yılda 10 puan geride. Diğerlerinde de benzer desen: Baz'da
+25 slot 5 yılı +91,5'e taşıyor ama ayı getirisi +5,9'dan +4,7'ye düşüp çukur −%24,3'e iniyor; Aday 1'de
+son 2 yıl/1 yıl geriliyor (+72,8 vs +80,2 · +46,0 vs +50,9); Aday 2'de zaten 20 her koşulda önde.</p>
+<p><b>Neden 25'ten sonra bozuluyor?</b> İki mekanizma: <b>(a) kalite seyrelmesi</b> — ek slotlar, sıralamanın
+daha önce "almaya değmez" diye elediği düşük puanlı sinyallere gidiyor; kazanç/kayıp dengesi bunu açık
+gösteriyor (Aday 3'te PF 3,67 → 3,09). <b>(b) Nakit tamponunun erimesi</b> — yatırım %100'e dayanınca
+düşüş günlerinde savunma kalmıyor; Baz/Aday 1'de çukurun −%17'den −%24/−25'e inmesi bundan.</p>
+<p><b>Dürüstlük notu:</b> Bu tek-parametre taramasıdır ve aynı 5 yıllık veride yapılmıştır — 25'in toplam
+getiri üstünlüğü tam da klasik aşırı-uyum desenidir (veriye bakıp en iyi sayıyı seçmek). Pencere sağlaması
+bu tuzağı burada yakaladı: "5 yılda en iyi" ile "her koşulda güvenilir" aynı şey değil. 20, hem sağlam
+hem zaten canlıda kanıt biriktiren değer olarak yerinde kalıyor.</p>
+</div>
+
 <h2>Karar öncesi tartılan noktalar</h2>
 <div class="card">
 <ul>

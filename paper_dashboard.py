@@ -161,8 +161,13 @@ def candles_json(symbol, tf):
     if df is None or not len(df):
         return {"symbol": symbol, "tf": tf, "candles": [], "error": "veri yok",
                 "market": market_status()}
-    df = df.tail(700)
-    sma = df["Close"].rolling(50).mean()
+    full = df
+    df = full.tail(700)
+    # göstergeler TAM seriden (sol kenarda ısınma boşluğu olmasın), sonra pencereye kesilir
+    sma = full["Close"].rolling(50).mean().reindex(df.index)
+    # 21-EMA: runner bacağının çıkış kuralı (kapanış < 21-EMA) — yalnız günlük grafikte anlamlı
+    ema21 = (full["Close"].ewm(span=21, adjust=False).mean().reindex(df.index)
+             if not intraday else None)
 
     def tm(ts):
         ts = pd.Timestamp(ts)
@@ -174,6 +179,8 @@ def candles_json(symbol, tf):
                 "low": round(r.Low, 2), "close": round(r.Close, 2)}
                for ts, r in df.iterrows()]
     sma_line = [{"time": tm(ts), "value": round(v, 2)} for ts, v in sma.items() if pd.notna(v)]
+    ema_line = ([{"time": tm(ts), "value": round(v, 2)} for ts, v in ema21.items() if pd.notna(v)]
+                if ema21 is not None else [])
 
     def snap(date):
         if not date:
@@ -190,9 +197,8 @@ def candles_json(symbol, tf):
             t = snap(b["date"])
             if t is None:
                 continue
-            txt = "AL " + (b["date"] or "")
-            if b["price"] is not None:
-                txt += f" ${b['price']:.2f}"
+            # kısa metin: tarih zaten okun konumunda; detay alttaki işlem satırında
+            txt = "AL" + (f" ${b['price']:.2f}" if b["price"] is not None else "")
             markers.append({"time": t, "position": "belowBar", "color": _BLU,
                             "shape": "arrowUp", "text": txt})
         for s_ in ev["sells"]:
@@ -200,14 +206,15 @@ def candles_json(symbol, tf):
             if t is None or s_["price"] is None:
                 continue
             col = _GRN if (s_.get("pnl") or 0) >= 0 else _RED
-            txt = ("SAT " + (s_.get("outcome") or "") + " "
-                   + (s_["date"] or "") + f" ${s_['price']:.2f}")
+            txt = ("SAT " + (s_.get("outcome") or "")).strip() + f" ${s_['price']:.2f}"
             markers.append({"time": t, "position": "aboveBar", "color": col,
-                            "shape": "arrowDown", "text": txt.strip()})
+                            "shape": "arrowDown", "text": txt})
     markers.sort(key=lambda m: (m["time"] if isinstance(m["time"], int) else m["time"]))
     return {"symbol": symbol, "tf": tf, "intraday": intraday,
-            "candles": candles, "sma": sma_line, "lines": lines, "markers": markers,
+            "candles": candles, "sma": sma_line, "ema21": ema_line,
+            "lines": lines, "markers": markers,
             "info": ({"open": ev["open"], "partial_open": ev["partial_open"],
+                      "exit_plan": ev.get("exit_plan"),
                       "buys": ev["buys"], "sells": ev["sells"]} if ev else None),
             "market": market_status()}
 
@@ -439,6 +446,12 @@ def portfolio_json():
     # ⭐ Aday 3 rejim bilgisi (son taramadan; A200 = havuzun SMA200-üstü %'si)
     out["a200"] = st.get("a200")
     out["regime_open"] = st.get("regime_open")
+    # sistemin açık olduğu işlem günü sayısı — defter equity_curve satır sayısı (salt-okur)
+    try:
+        with open(qp.PAPER_QULLA_LEDGER) as f:
+            out["trading_days"] = len(json.load(f).get("equity_curve") or [])
+    except Exception:
+        out["trading_days"] = None
     # --- SPY al-tut kıyası (başlangıç tarihinden) ---
     spy_now = prices.get("SPY")
     hist = _spy_history()
@@ -481,6 +494,43 @@ def equity_json():
         prev = eq
     return {"points": points, "initial": round(initial, 2), "has_spy": s0 is not None,
             "start": L.get("start"), "last_date": L.get("last_date")}
+
+
+# --- piyasa genişliği (A200) günlük serisi -------------------------------------
+_BREADTH = {"data": None, "key": None}
+_BREADTH_LOCK = threading.Lock()
+
+def breadth_json(window=252):
+    """Piyasa genişliği (A200) GÜNLÜK serisi: evrenin (sp500_ndx ~373 hisse) yüzde
+    kaçı kendi 200-günlük ortalamasının üstünde. Motorun kendi formülüyle
+    (DengeBacktester._a200_series) ARTIMLI VERİ DEPOSUNDAN hesaplanır — İNDİRME YOK,
+    engine/trade'e dokunmaz (salt-okur). Seri store'dan deterministik → store son barı
+    (last_date) değişmedikçe yeniden hesaplamaz; ~10s'lik hesap günde bir çalışır.
+    Döner: {points:[{date, a200}], threshold, last}."""
+    with _BREADTH_LOCK:
+        store = qp._load_store()
+        key = (store or {}).get("last_date")
+        if _BREADTH["data"] is not None and _BREADTH["key"] == key:
+            return _BREADTH["data"]
+        try:
+            if not store or not store.get("frames"):
+                out = {"points": [], "threshold": float(qp.DengeBacktester.A200_MIN)}
+            else:
+                cfg = qp._cfg()
+                market = s2.build_market_from_frames(store["frames"], cfg)   # indirmesiz
+                bt = qp.DengeBacktester(cfg, market=market)
+                bt._a200(bt.spy.index[-1])                                   # seriyi tembel-kur
+                ser = bt._a200_series.dropna()
+                if window:
+                    ser = ser.tail(int(window))
+                pts = [{"date": d.strftime("%Y-%m-%d"), "a200": round(float(v), 1)}
+                       for d, v in ser.items()]
+                out = {"points": pts, "threshold": float(qp.DengeBacktester.A200_MIN),
+                       "last": (pts[-1]["a200"] if pts else None)}
+        except (Exception, SystemExit) as e:
+            out = {"points": [], "threshold": 50.0, "error": str(e)}
+        _BREADTH.update(data=out, key=key)
+        return out
 
 
 def scan_json():
@@ -529,8 +579,14 @@ def _trade_events(symbol):
     sells.sort(key=lambda s: s["date"] or "")
     if open_pos is None and lines["entry"] is None and buys:
         lines["entry"] = buys[-1]["price"]      # kapanan: son girişi çizgi yap
+    exit_plan = None                            # açık kalan bacak(lar) — 60/40'ta "yarı" denmez
+    if open_pos is not None and open_pos.get("legs"):
+        _lbl = {"target": "+2R hedef", "ema21": "21-EMA runner", "ema8": "8-EMA"}
+        rem = [_lbl.get(l["rule"], l["rule"]) for l in open_pos["legs"] if l["shares"] > 0]
+        exit_plan = " · ".join(rem) if rem else None
     return {"open": open_pos is not None,
-            "partial_open": bool(open_pos is not None and sells),   # yarı satıldı, kalan açık
+            "partial_open": bool(open_pos is not None and sells),   # bacak satıldı, kalan açık
+            "exit_plan": exit_plan,
             "lines": lines, "buys": buys, "sells": sells}
 
 
@@ -618,6 +674,12 @@ PAGE = """<!doctype html><html lang="tr"><head><meta charset="utf-8">
  .defter .kural a{color:var(--sis)}
  h3.alt{font-size:10.5px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;
   color:var(--sis);margin:20px 0 8px}
+ /* açılır/kapanır liste başlıkları */
+ h3.alt.tgl{cursor:pointer;user-select:none}
+ h3.alt.tgl:hover{color:var(--kagit,#e6e9ef)}
+ h3.alt.tgl .chev{display:inline-block;margin-right:6px;transition:transform .15s ease}
+ h3.alt.tgl.off .chev{transform:rotate(-90deg)}
+ h3.alt.tgl .cnt{color:var(--sis);font-weight:500;margin-left:6px;text-transform:none}
 
  /* KPI bandı: kart grid'i değil, ayraçlı cetvel */
  .kpis{display:flex;flex-wrap:wrap;background:var(--gece);border:1px solid var(--cizgi);
@@ -691,10 +753,14 @@ PAGE = """<!doctype html><html lang="tr"><head><meta charset="utf-8">
     <h3 class="alt">Sermaye Eğrisi &amp; Günlük K/Z (başlangıçtan bugüne)</h3>
     <div class="eqcharts">
       <div class="eqbox"><div class="eqlbl">📈 Ana Para (Özsermaye) · Tarih <span class="lg" style="color:#d4a843">— portföy</span> <span class="lg" style="color:#a9b2c1">┄ SPY al-tut</span></div><div id="eqChart" class="eqc"></div></div>
-      <div class="eqbox"><div class="eqlbl">📊 Günlük K/Z · Tarih <span class="lg" style="color:#3ecf8e">▮</span><span class="lg" style="color:#f07b7b">▮ portföy</span> <span class="lg" style="color:#7eb3e3">— SPY</span></div><div id="pnlChart" class="eqc"></div></div>
+      <div class="eqbox"><div class="eqlbl">📊 Günlük K/Z · Tarih <span class="lg" style="color:#3ecf8e">▮</span><span class="lg" style="color:#f07b7b">▮ portföy</span> <span class="lg" style="color:#5db2ff">—●— SPY al-tut</span></div><div id="pnlChart" class="eqc"></div></div>
     </div>
-    <h3 class="alt">Açık Pozisyonlar</h3><div id="open"></div>
-    <h3 class="alt">Kapanan İşlemler</h3><div id="closed"></div>
+    <h3 class="alt">Piyasa Genişliği (A200) · <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--sis)">portföyden bağımsız piyasa göstergesi — getiri değil</span></h3>
+    <div class="eqcharts" style="grid-template-columns:1fr">
+      <div class="eqbox"><div class="eqlbl">🌐 Havuzun (S&amp;P500+Nasdaq100 ~373 hisse) 200-günlük ortalaması üstünde kalan %'si · son 1 yıl <span class="lg" style="color:#5db2ff">— genişlik %</span> <span class="lg" style="color:#f0a24a">┄ %50 alım freni</span></div><div id="brChart" class="eqc"></div></div>
+    </div>
+    <h3 class="alt tgl" id="h-open" onclick="togglePanel('open')"><span class="chev">▾</span>Açık Pozisyonlar<span class="cnt" id="cnt-open"></span></h3><div id="open"></div>
+    <h3 class="alt tgl" id="h-closed" onclick="togglePanel('closed')"><span class="chev">▾</span>Kapanan İşlemler<span class="cnt" id="cnt-closed"></span></h3><div id="closed"></div>
   </section>
 
   <section class="defter d-scan">
@@ -727,11 +793,24 @@ async function loadAll(){
   const [p,s]=await Promise.all([fetch('/api/portfolio').then(r=>r.json()),fetch('/api/scan').then(r=>r.json())]);
   renderRace(p);
   renderKpis(p,'kpis'); renderOpen(p,'open',true); renderClosed(p,'closed');
+  $('cnt-open').textContent='('+p.n_open+')'; $('cnt-closed').textContent='('+p.n_closed+')';
   renderScan(s); renderMkt(p.market);
-  loadEquity();
+  loadEquity(); loadBreadth();
   $('meta').textContent=`başlangıç ${p.started||'?'} · ${p.slippage||'slippage kapalı'}`;
   $('upd').textContent='güncellendi '+new Date().toLocaleTimeString('tr-TR');
 }
+// ---- açılır/kapanır liste panelleri (tercih localStorage'da kalıcı) ----
+function togglePanel(id){
+  const el=$(id),h=$('h-'+id),kapali=el.style.display==='none';
+  el.style.display=kapali?'':'none'; h.classList.toggle('off',!kapali);
+  try{localStorage.setItem('fold_'+id,kapali?'1':'0');}catch(e){}
+}
+(function(){  // kayıtlı tercihi uygula (varsayılan: açık)
+  for(const id of['open','closed']){
+    let v=null; try{v=localStorage.getItem('fold_'+id);}catch(e){}
+    if(v==='0'){$(id).style.display='none';$('h-'+id).classList.add('off');}
+  }
+})();
 // ---- sermaye eğrisi + günlük K/Z (defter equity_curve'ünden; salt-görüntü) ----
 let _eqChart=null,_eqSeries=null,_eqSpy=null,_pnlChart=null,_pnlSeries=null,_pnlSpy=null,_eqBase=null;
 function ensureEqCharts(){
@@ -751,7 +830,8 @@ function ensureEqCharts(){
   _pnlChart=LightweightCharts.createChart(e2,{...o,width:e2.clientWidth,height:e2.clientHeight,autoSize:true});
   _pnlSeries=_pnlChart.addHistogramSeries({priceLineVisible:false,
     priceFormat:{type:'price',precision:0,minMove:1}});
-  _pnlSpy=_pnlChart.addLineSeries({color:'#7eb3e3',lineWidth:1,
+  _pnlSpy=_pnlChart.addLineSeries({color:'#5db2ff',lineWidth:2,
+    pointMarkersVisible:true,pointMarkersRadius:2.5,
     priceLineVisible:false,lastValueVisible:false,priceFormat:{type:'price',precision:0,minMove:1}});
   window.addEventListener('resize',()=>{if(_eqChart){
     _eqChart.applyOptions({width:e1.clientWidth,height:e1.clientHeight});
@@ -764,7 +844,7 @@ async function loadEquity(){
   ensureEqCharts();
   _eqSeries.setData(d.points.map(p=>({time:p.date,value:p.equity})));
   _pnlSeries.setData(d.points.map(p=>({time:p.date,value:p.daily_pnl,
-    color:p.daily_pnl>=0?'#3ecf8e':'#f07b7b'})));
+    color:p.daily_pnl>=0?'rgba(62,207,142,.78)':'rgba(240,123,123,.78)'})));
   // SPY al-tut kıyası (varsa)
   _eqSpy.setData(d.points.filter(p=>p.spy_equity!=null).map(p=>({time:p.date,value:p.spy_equity})));
   _pnlSpy.setData(d.points.filter(p=>p.spy_daily_pnl!=null).map(p=>({time:p.date,value:p.spy_daily_pnl})));
@@ -773,6 +853,33 @@ async function loadEquity(){
       lineWidth:1,lineStyle:2,axisLabelVisible:true,title:'başlangıç $'+f(d.initial,0)});
   }
   _eqChart.timeScale().fitContent();_pnlChart.timeScale().fitContent();
+}
+// ---- piyasa genişliği (A200) günlük grafiği; salt-görüntü, portföyden bağımsız ----
+let _brChart=null,_brSeries=null,_brThreshLine=null;
+function ensureBrChart(){
+  if(_brChart)return;
+  const o={layout:{background:{color:'#101216'},textColor:'#a9b2c1',fontSize:11},
+    grid:{vertLines:{color:'rgba(174,188,214,.05)'},horzLines:{color:'rgba(174,188,214,.05)'}},
+    timeScale:{borderColor:'rgba(174,188,214,.15)'},
+    rightPriceScale:{borderColor:'rgba(174,188,214,.15)'},crosshair:{mode:0}};
+  const e=$('brChart');e.innerHTML='';
+  _brChart=LightweightCharts.createChart(e,{...o,width:e.clientWidth,height:e.clientHeight,autoSize:true});
+  _brSeries=_brChart.addAreaSeries({lineColor:'#5db2ff',topColor:'rgba(93,178,255,.22)',
+    bottomColor:'rgba(93,178,255,.02)',lineWidth:2,priceLineVisible:false,lastValueVisible:true,
+    priceFormat:{type:'price',precision:0,minMove:1}});
+  // %50 alım freni: ayrı düz çizgi serisi → otomatik ölçeğe dahil, hep görünür
+  _brThreshLine=_brChart.addLineSeries({color:'rgba(240,162,74,.6)',lineWidth:1,lineStyle:2,
+    priceLineVisible:false,lastValueVisible:false,priceFormat:{type:'price',precision:0,minMove:1}});
+  window.addEventListener('resize',()=>{if(_brChart)_brChart.applyOptions({width:e.clientWidth,height:e.clientHeight});});
+}
+async function loadBreadth(){
+  let d;
+  try{d=await fetch('/api/breadth').then(r=>r.json());}catch(e){return;}
+  if(!d.points||!d.points.length)return;
+  ensureBrChart();
+  _brSeries.setData(d.points.map(p=>({time:p.date,value:p.a200})));
+  if(d.threshold!=null)_brThreshLine.setData(d.points.map(p=>({time:p.date,value:d.threshold})));
+  _brChart.timeScale().fitContent();
 }
 function renderRace(p){
   // yarış rayı: üç defterin özsermayesi tek bakışta (salt görüntü — /api/portfolio verisinden)
@@ -809,9 +916,11 @@ function renderKpis(p,el,other){
   const k=[['Özsermaye','$'+f(p.equity)],['Genel K/Z',sign(p.total_pl)+'$ ('+sign(p.total_pl_pct)+'%)',cls(p.total_pl)],
    ['Gerçekleşmemiş',sign(p.unrealized)+'$',cls(p.unrealized)],['Gerçekleşen',sign(p.realized)+'$',cls(p.realized)],
    ['Nakit','$'+f(p.cash)],['Pozisyon',p.n_open+' açık · '+p.n_closed+' kapanan']];
+  if(p.trading_days!=null)k.push(['📅 Sistem açık (işlem günü)',p.trading_days+' gün']);
   if(p.a200!=null){
-   k.push(['🚦 Yeni alım freni (son tarama)',(p.regime_open?'🟢 AÇIK':'🔴 KAPALI')+' · A200 %'+f(p.a200),
-           p.regime_open?'pos':'neg']);}
+   k.push(['🚦 Piyasa rejimi (son tarama · getiri değil)',
+           (p.regime_open?'🟢 Yeni alım açık':'🔴 Yeni alım freni')+' · piyasa genişliği %'+f(p.a200),
+           p.regime_open?'':'neg']);}
   if(p.spy_pct!=null){
    k.push(['📈 SPY (kıyas)',sign(p.spy_pct)+'%',cls(p.spy_pct)]);
    k.push(['⚖️ Alpha (SPY üstü)',sign(p.alpha)+'%',cls(p.alpha)]);}
@@ -853,7 +962,7 @@ function renderScan(s){
   $('scan').innerHTML=h; $('scan').classList.remove('scanbox');
 }
 const TFS=['15m','30m','1h','2h','4h','1d'];
-let _chart=null,_series=null,_sma=null,_plines=[],_cursym=null,_curtf='1d',_chartTimer=null,_cdTimer=null,_nextAt=0;
+let _chart=null,_series=null,_sma=null,_ema=null,_plines=[],_cursym=null,_curtf='1d',_chartTimer=null,_cdTimer=null,_nextAt=0;
 function buildTfbar(){
   $('tfbar').innerHTML=TFS.map(tf=>`<button class="tf${tf===_curtf?' on':''}" onclick="setTf('${tf}')">${tf}</button>`).join('');
 }
@@ -892,6 +1001,7 @@ function ensureChart(){
   _series=_chart.addCandlestickSeries({upColor:'#16a34a',downColor:'#dc2626',
     wickUpColor:'#16a34a',wickDownColor:'#dc2626',borderVisible:false});
   _sma=_chart.addLineSeries({color:'#f59e0b',lineWidth:1,priceLineVisible:false,lastValueVisible:false});
+  _ema=_chart.addLineSeries({color:'#38bdf8',lineWidth:1,priceLineVisible:false,lastValueVisible:false}); // 21-EMA (runner çıkış kuralı)
   window.addEventListener('resize',()=>{if(_chart)_chart.applyOptions({width:el.clientWidth,height:el.clientHeight});});
 }
 async function drawChart(keep){
@@ -907,10 +1017,11 @@ async function drawChart(keep){
   ensureChart();
   _series.setData(d.candles||[]);
   _sma.setData(d.sma||[]);
+  _ema.setData(d.ema21||[]);
   _plines.forEach(pl=>{try{_series.removePriceLine(pl);}catch(e){}});_plines=[];
   const L=d.lines||{};
   const addL=(p,c,t)=>{if(p!=null)_plines.push(_series.createPriceLine({price:p,color:c,lineWidth:1,lineStyle:2,axisLabelVisible:true,title:t}));};
-  addL(L.entry,'#3b82f6','Giriş');addL(L.stop,'#dc2626','Stop');addL(L.target,'#16a34a','+2R');
+  addL(L.entry,'#3b82f6','Giriş');addL(L.stop,'#dc2626','Ref. stop');addL(L.target,'#16a34a','+2R');
   _series.setMarkers(d.markers||[]);
   if(!keep)_chart.timeScale().fitContent();   // otomatik tazelemede zoom/kaydırma korunur
   if(d.error){$('chartNote').textContent='⚠️ '+d.error;}
@@ -924,11 +1035,11 @@ async function drawChart(keep){
               +(s.outcome?s.outcome+' ':'')+s.date+(s.price!=null?' @ <b>$'+s.price+'</b>':'');
         if(s.pnl_pct!=null){trade+=' <span class="'+((s.pnl_pct>=0)?'pos':'neg')+'">('+(s.pnl_pct>=0?'+':'')+s.pnl_pct+'%)</span>';}
       }
-      if(i.partial_open){trade+=' &nbsp;·&nbsp; <span class="muted">kalan yarı açık (21-EMA runner)</span>';}
-      else if(i.open&&!sells.length){trade+=' &nbsp;·&nbsp; <span class="muted">açık pozisyon</span>';}
+      if(i.partial_open){trade+=' &nbsp;·&nbsp; <span class="muted">kalan bacak açık'+(i.exit_plan?': '+i.exit_plan:'')+'</span>';}
+      else if(i.open&&!sells.length){trade+=' &nbsp;·&nbsp; <span class="muted">açık pozisyon'+(i.exit_plan?' · çıkış: '+i.exit_plan:'')+'</span>';}
       trade+=' <span class="muted">· işlemler 15:45 ET seans kapanışında (günlük bar)</span><br>';
     }
-    $('chartNote').innerHTML=trade+(d.intraday?'🕒 saatler ET · ':'')+((d.candles||[]).length)+' bar · tekerlek=zoom, sürükle=kaydır · SMA50 (turuncu) · giriş/stop/+2R çizgileri · AL▲/SAT▼';
+    $('chartNote').innerHTML=trade+(d.intraday?'🕒 saatler ET · ':'')+((d.candles||[]).length)+' bar · tekerlek=zoom, sürükle=kaydır · <span style="color:#f59e0b">SMA50</span>'+(d.intraday?'':' · <span style="color:#38bdf8">21-EMA (runner çıkışı)</span>')+' · giriş/ref-stop/+2R çizgileri · AL▲/SAT▼';
   }
 }
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeChart();});
@@ -963,6 +1074,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._send(200, json.dumps(scan_json(), ensure_ascii=False), "application/json")
             elif path == "/api/equity":
                 self._send(200, json.dumps(equity_json(), ensure_ascii=False), "application/json")
+            elif path == "/api/breadth":
+                self._send(200, json.dumps(breadth_json(), ensure_ascii=False), "application/json")
             elif path == "/static/lwc.js":
                 self._send(200, _LWC_JS, "application/javascript; charset=utf-8")
             elif path == "/rapor":
