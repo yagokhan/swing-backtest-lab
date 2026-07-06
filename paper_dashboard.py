@@ -769,7 +769,7 @@ PAGE = """<!doctype html><html lang="tr"><head><meta charset="utf-8">
     <div id="scan" class="scanbox">…</div>
   </section>
 
-  <p class="ipucu">Bir <b>açık</b> ya da <b>kapanan</b> pozisyon satırına tıkla → <b>etkileşimli</b> mum grafiği açılır: <b>tekerlek</b>=zaman(X) zoom, <b>fiyat ekseninde (sağ kenar) sürükle</b>=fiyat(Y) zoom, gövdeyi sürükle=kaydır, <b>⤢ Sığdır</b>=sıfırla, üstten <b>zaman dilimi</b> (15m·30m·1h·2h·4h·1d) seç. <span class="pos">AL ▲</span> / <span class="neg">SAT ▼</span> işaretleri <b>tarih + fiyatla</b> etiketli; grafik altında AL→SAT özeti (tarih · fiyat · K/Z%) + giriş/stop/+2R çizgileri.</p>
+  <p class="ipucu">Bir <b>açık</b> ya da <b>kapanan</b> pozisyon satırına tıkla → <b>etkileşimli</b> mum grafiği açılır: <b>tekerlek</b>=zaman(X) zoom, <b>sağdaki fiyat ekseni üstünde tekerlek</b>=fiyat(Y) zoom, gövdeyi sürükle=kaydır, <b>⤢ Sığdır</b>=sıfırla, üstten <b>zaman dilimi</b> (15m·30m·1h·2h·4h·1d) seç. <span class="pos">AL ▲</span> / <span class="neg">SAT ▼</span> işaretleri <b>tarih + fiyatla</b> etiketli; grafik altında AL→SAT özeti (tarih · fiyat · K/Z%) + giriş/stop/+2R çizgileri.</p>
 </div>
 <div class="modal" id="modal" onclick="if(event.target===this)closeChart()">
   <div class="modal-inner">
@@ -963,7 +963,7 @@ function renderScan(s){
   $('scan').innerHTML=h; $('scan').classList.remove('scanbox');
 }
 const TFS=['15m','30m','1h','2h','4h','1d'];
-let _chart=null,_series=null,_sma=null,_ema=null,_plines=[],_cursym=null,_curtf='1d',_chartTimer=null,_cdTimer=null,_nextAt=0;
+let _chart=null,_series=null,_sma=null,_ema=null,_plines=[],_cursym=null,_curtf='1d',_chartTimer=null,_cdTimer=null,_nextAt=0,_yRange=null;
 function buildTfbar(){
   $('tfbar').innerHTML=TFS.map(tf=>`<button class="tf${tf===_curtf?' on':''}" onclick="setTf('${tf}')">${tf}</button>`).join('');
 }
@@ -991,8 +991,30 @@ function closeChart(){
 }
 function resetZoom(){                                   // zoom'dan çıkış: X sığdır + Y otomatik ölçek
   if(!_chart)return;
+  _yRange=null; _yRescale();                            // manuel Y aralığını bırak
   try{_chart.priceScale('right').applyOptions({autoScale:true});}catch(e){}
   _chart.timeScale().fitContent();
+}
+// --- fiyat ekseni üzerinde tekerlek = dikey (Y) zoom (TradingView tarzı) ---
+// _yRange (null=otomatik) görünür fiyat aralığını autoscaleInfoProvider ile override eder.
+function _yRescale(){   // provider'ı TAZE ref ile uygula → yeniden ölçeklemeyi tetikler (aynı ref no-op olurdu)
+  try{_series.applyOptions({autoscaleInfoProvider:o=>_yRange?{priceRange:{minValue:_yRange.min,maxValue:_yRange.max}}:o()});}catch(e){}
+}
+function _wheelY(e){
+  if(!_chart||!_series)return;
+  const el=$('chart'), rect=el.getBoundingClientRect();
+  let psW=56; try{const w=_chart.priceScale('right').width(); if(w>0)psW=w;}catch(_){}
+  let axisH=28; try{const h=_chart.timeScale().height(); if(h>0)axisH=h;}catch(_){}
+  const paneH=rect.height-axisH, x=e.clientX-rect.left, y=e.clientY-rect.top;
+  if(x<rect.width-psW) return;                          // yalnız SAĞ fiyat-ekseni şeridi üzerinde
+  if(y<0||y>paneH) return;
+  const top=_series.coordinateToPrice(0), bot=_series.coordinateToPrice(paneH), cur=_series.coordinateToPrice(y);
+  if(top==null||bot==null||cur==null||top<=bot) return;
+  e.preventDefault(); e.stopPropagation();              // LWC'nin zaman-zoom'unu bastır
+  try{_chart.priceScale('right').applyOptions({autoScale:true});}catch(_){}  // eksen sürüklemesi kapattıysa geri aç
+  const f=e.deltaY<0?0.9:1/0.9;                          // yukarı=yakınlaş, aşağı=uzaklaş (imleç fiyatı sabit)
+  _yRange={min:cur+(bot-cur)*f, max:cur+(top-cur)*f};
+  _yRescale();
 }
 function ensureChart(){
   if(_chart)return;
@@ -1014,6 +1036,7 @@ function ensureChart(){
     wickUpColor:'#16a34a',wickDownColor:'#dc2626',borderVisible:false});
   _sma=_chart.addLineSeries({color:'#f59e0b',lineWidth:1,priceLineVisible:false,lastValueVisible:false});
   _ema=_chart.addLineSeries({color:'#38bdf8',lineWidth:1,priceLineVisible:false,lastValueVisible:false}); // 21-EMA (runner çıkış kuralı)
+  el.addEventListener('wheel',_wheelY,{capture:true,passive:false});   // fiyat ekseni üstünde wheel=Y zoom (capture → LWC'den önce)
   window.addEventListener('resize',()=>{if(_chart)_chart.applyOptions({width:el.clientWidth,height:el.clientHeight});});
 }
 async function drawChart(keep){
@@ -1027,6 +1050,7 @@ async function drawChart(keep){
   if(d.market){const m=d.market;$('chartMkt').textContent=m.dot+' '+m.label+(m.et?' · '+m.et:'');
     $('chartMkt').style.color=m.is_open?'#7ee2a8':(m.state==='premarket'||m.state==='afterhours'?'#ffd591':'#ffa3ab');}
   ensureChart();
+  if(!keep)_yRange=null;                 // yeni sembol/zaman dilimi → Y otomatik ölçeğe dönsün
   _series.setData(d.candles||[]);
   _sma.setData(d.sma||[]);
   _ema.setData(d.ema21||[]);
@@ -1051,7 +1075,7 @@ async function drawChart(keep){
       else if(i.open&&!sells.length){trade+=' &nbsp;·&nbsp; <span class="muted">açık pozisyon'+(i.exit_plan?' · çıkış: '+i.exit_plan:'')+'</span>';}
       trade+=' <span class="muted">· işlemler 15:45 ET seans kapanışında (günlük bar)</span><br>';
     }
-    $('chartNote').innerHTML=trade+(d.intraday?'🕒 saatler ET · ':'')+((d.candles||[]).length)+' bar · <b>tekerlek</b>=zaman(X) zoom · <b>fiyat ekseninde sürükle</b>=fiyat(Y) zoom · gövdeyi sürükle=kaydır · <b>⤢ Sığdır</b>=sıfırla · <span style="color:#f59e0b">SMA50</span>'+(d.intraday?'':' · <span style="color:#38bdf8">21-EMA (runner çıkışı)</span>')+' · giriş/ref-stop/+2R çizgileri · AL▲/SAT▼';
+    $('chartNote').innerHTML=trade+(d.intraday?'🕒 saatler ET · ':'')+((d.candles||[]).length)+' bar · <b>tekerlek</b>=zaman(X) zoom · <b>fiyat ekseni üstünde tekerlek</b>=fiyat(Y) zoom · gövdeyi sürükle=kaydır · <b>⤢ Sığdır</b>=sıfırla ·<span style="color:#f59e0b">SMA50</span>'+(d.intraday?'':' · <span style="color:#38bdf8">21-EMA (runner çıkışı)</span>')+' · giriş/ref-stop/+2R çizgileri · AL▲/SAT▼';
   }
 }
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeChart();});
