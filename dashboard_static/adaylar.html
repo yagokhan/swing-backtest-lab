@@ -398,12 +398,41 @@ toparlanmalarla dolu — "dipte satmamak kazandırır" dersi bu örnekleme bağl
 hisse riski (delist vb.) backtestte az temsil edilir; geçmiş sonuç gelecek garantisi değildir.</p>
 <div class="leg" id="stopLeg"></div>
 <div id="stopLcharts"></div>
-<blockquote><p><b>Sonuç:</b> Skor sıralamasında (getiri + çukur-iyileşmesi, 5 dönem ortalaması)
-<b>birinci: bugünkü canlı davranış (korumasız baz)</b>; sıralama: <b>baz</b> &gt; t42 &gt; t63 &gt; t21 &gt; kombo:atr3.0+t42 &gt; kombo:atr3.0+t63 &gt; t10 &gt; atr3.0 &gt; atr2.0 &gt; kombo:atr2.0+t42 &gt; ema21 &gt; ref &gt; atr1.0.
+
+<h2 id="stopanat">🔬 Stopsuz bacakla yaşamak — kâr/zarar anatomisi</h2>
+<p>Karar stopsuz devam olduğuna göre, neyle yaşadığımızı sayılara dökelim. Aşağıdaki tablo
+korumasız (baz) koşuda +2R bekleyen bacağın kaderini dönem dönem gösterir:</p>
+<div style="overflow-x:auto"><table><tr><th>Dönem</th><th>Hedefe ulaşan (+2R)</th><th>Takılan (dönem sonu)</th><th>İsabet</th><th>Hedefe varış (medyan)</th><th>Suya batan payı</th><th>Tipik en derin sarkma</th><th>Stoplansaydı kesilecek KAZANAN (adet · kâr)</th></tr><tr><td>5 yıl (tümü, 2021→2026)</td><td>225</td><td>24 (15'i zararda)</td><td>%90,4</td><td>24 g</td><td>%82,3</td><td>−%6,7</td><td>138 · $83.355</td></tr><tr><td>Düşüş dönemi 2021-23 (zor dönem)</td><td>75</td><td>24 (16'i zararda)</td><td>%75,8</td><td>25 g</td><td>%87,9</td><td>−%6,7</td><td>45 · $19.227</td></tr><tr><td>Toparlanma 2023-25</td><td>119</td><td>23 (15'i zararda)</td><td>%83,8</td><td>23 g</td><td>%82,4</td><td>−%6,6</td><td>75 · $31.849</td></tr><tr><td>Son 2 yıl</td><td>134</td><td>23 (16'i zararda)</td><td>%85,4</td><td>19 g</td><td>%79,0</td><td>−%6,1</td><td>68 · $33.882</td></tr><tr><td>Son 1 yıl</td><td>92</td><td>23 (15'i zararda)</td><td>%80,0</td><td>16 g</td><td>%80,9</td><td>−%7,0</td><td>50 · $28.237</td></tr></table></div>
+<p><b>5 yıllık pencerenin detayı (249 bacak):</b> hedefe ulaşan 225 işlem toplam <b>$150.907</b>
+kâr getirdi (tipik işlem +%9,4); dönem sonuna takılan 24 kalıntının 15'i zararda kaldı,
+net faturası yalnız <b>−$5.829</b> (tipik −%4,2). Yani stopsuzluğun 5 yıllık net bilançosu:
+büyük kazanç, küçük fatura — ama tek tek işlemlerde yol ÇOK sarsıntılı:</p>
+<ul>
+<li><b>Kara ne zaman geçiyor?</b> Tipik işlem daha girişten sonraki <b>1. günde</b> kârda
+(medyan). Ama bu ilk kâr kalıcı değil: bacakların <b>%82,3'ü</b> yolda en az bir gün girişin
+altına sarkıyor; sarkanlar tipik <b>22 işlem günü</b> su altında kalıyor.</li>
+<li><b>Ne kadar derine batıyor?</b> Tipik en derin sarkma −%6,7; işlemlerin 104'ü
+−%10'dan derine battı ve bunların <b>93'ü yine de hedefe döndü</b>. En derin sarkma
+−%81,8 idi. Stop koymamanın kazandırdığı işte bu geri dönüşler: hedefe ulaşan işlemlerin
+138'i ($83.355 kâr) yolda referans stopa değmişti — stoplu dünyada bunlar zarar yazacaktı.</li>
+<li><b>Hedefe varış ne kadar sürüyor?</b> Medyan 24 işlem günü, ama kuyruk uzun: onda biri
+239 günden uzun sürdü. Takılan kalıntıların tipik taşınma süresi 45 gün; en inatçısı
+<b>1129 işlem günü</b> (≈4,5 yıl) taşındı — "slot işgali"nin gerçek yüzü bu.</li>
+</ul>
+<table><tr><th>Hedefe varış süresi (işlem günü)</th><th>≤5</th><th>6-10</th><th>11-21</th><th>22-42</th><th>43-63</th><th>64+</th></tr><tr><td>işlem sayısı</td><td>21</td><td>36</td><td>53</td><td>27</td><td>19</td><td>69</td></tr></table>
+<table><tr><th>Yoldaki en derin sarkma (MAE)</th><th>−%3'e kadar</th><th>−%3…−%6</th><th>−%6…−%10</th><th>−%10…−%20</th><th>−%20'den derin</th></tr><tr><td>işlem sayısı</td><td>64</td><td>45</td><td>36</td><td>45</td><td>59</td></tr></table>
+<p class="note">Dürüstlük: tutarlar bileşik büyüyen sermaye üstünden dolar; "stoplansaydı
+kesilecek" sütunu işlem-bazlı bir varsayımsaldır (stoplu dünyada portföy başka evrilirdi —
+o dünyanın gerçek toplamı yukarıdaki ana tabloda). "Takılan" kalıntı runner artığı içerebilir;
+sarkma (MAE) gün-içi Low ile, süreler giriş sonrası işlem günüyle ölçüldü.</p>
+
+<blockquote><p><b>✅ Karar (2026-07-07): stopsuz devam.</b> Skor sıralamasında (getiri +
+çukur-iyileşmesi, 5 dönem ortalaması) birinci zaten bugünkü canlı davranıştı; sıralama: <b>baz</b> &gt; t42 &gt; t63 &gt; t21 &gt; kombo:atr3.0+t42 &gt; kombo:atr3.0+t63 &gt; t10 &gt; atr3.0 &gt; atr2.0 &gt; kombo:atr2.0+t42 &gt; ema21 &gt; ref &gt; atr1.0.
 Korumalar portföy çukurunu da kayda değer düzeltmedi (baz −%19,6 → en iyi ~−%18; çukuru tek
 hisse kuyrukları değil, 20 pozisyonun birlikte düştüğü piyasa geneli belirliyor). Tek-işlem
-felaket sigortası isteyen için en ehveni süre sınırı (Süre sınırı: 42 işlem günü) — ama fiyatı 5 yılda getirinin
-yarısından fazlası. <b>Karar rafta — canlı sistem DEĞİŞMEDİ;</b> bu bölüm yalnız deney raporudur.</p></blockquote>
+felaket sigortası isteyene en ehveni süre sınırıydı (Süre sınırı: 42 işlem günü) — ama fiyatı 5 yılda getirinin
+yarısından fazlası. <b>Canlıda değişiklik GEREKMİYOR</b> (sistem zaten stopsuz çalışıyor);
+yukarıdaki anatomi, bu tercihle neyle yaşadığımızın belgesidir.</p></blockquote>
 <!-- STOPAB:END -->
 <h2>Karar öncesi tartılan noktalar</h2>
 <div class="card">

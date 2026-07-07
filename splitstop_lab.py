@@ -384,7 +384,104 @@ def wave2():
     print("skor sıralaması:", " > ".join(rank))
 
 
+def anatomy():
+    """Baz (korumasız) koşuda A bacağının yaşam döngüsü: hedefe ulaşma süresi,
+    suda kalma (kapanış<giriş), MAE (Low bazlı), ilk kâra geçiş, 'stoplansaydı
+    kesilirdi ama kazandı' sayacı. Trades + ham fiyat yolundan POST-HOC; motor değişmez.
+    Not: 'EOD' = pencere sonunda hedefe ulaşamadan tasfiye edilen kalıntı
+    (runner kalıntısı içerebilir); giriş barı yönetilmediği için süreler giriş
+    sonrası işlem günü sayısıdır."""
+    load_data()
+    d = load_json()
+    per_win = []; w0_recs = None
+    for wi, (wn, sd, ed) in enumerate(WINS):
+        c = copy.deepcopy(base_cfg()); c.start_date = sd; c.end_date = ed
+        StopKX.STOP = None; StopKX.TIMEOUT = 0; StopKX.AEMA = False
+        bt = StopKX(c, market=MARKET); bt.run()
+        recs = []
+        for t in bt.trades:
+            if t.outcome not in ("A:+2R", "EOD"):
+                continue
+            df = bt.data[t.symbol]
+            if t.entry_date not in df.index:
+                continue
+            ref = s.compute_trade_plan(df.loc[t.entry_date], c)["stop"]
+            mng = df.loc[t.entry_date:t.exit_date].iloc[1:]   # giriş barı yönetilmez
+            closes = mng["Close"].dropna(); lows = mng["Low"].dropna()
+            if len(closes) == 0:
+                continue
+            prof = closes[closes > t.entry]
+            recs.append({
+                "sym": t.symbol, "out": "hedef" if t.outcome == "A:+2R" else "eod",
+                "bars": int(len(closes)),
+                "uw_bars": int((closes < t.entry).sum()),
+                "mae": round(float((lows.min() / t.entry - 1) * 100), 1) if len(lows) else 0.0,
+                "first_prof": (int(closes.index.get_loc(prof.index[0]) + 1) if len(prof) else None),
+                "pnl": round(t.pnl, 2), "pnl_pct": round(t.pnl_pct, 1),
+                "would_stop": bool(len(lows) and float(lows.min()) <= ref),
+            })
+        tg = [r for r in recs if r["out"] == "hedef"]
+        eo = [r for r in recs if r["out"] == "eod"]
+        med = lambda xs: (round(float(pd.Series(xs).median()), 1) if xs else None)
+        ws = [r for r in tg if r["would_stop"]]
+        summ = {
+            "win": wn, "n_target": len(tg), "n_eod": len(eo),
+            "eod_loss_n": sum(1 for r in eo if r["pnl_pct"] < 0),
+            "win_rate": round(len(tg) / max(1, len(recs)) * 100, 1),
+            "pnl_target": round(sum(r["pnl"] for r in tg), 0),
+            "pnl_eod": round(sum(r["pnl"] for r in eo), 0),
+            "med_pct_target": med([r["pnl_pct"] for r in tg]),
+            "med_pct_eod": med([r["pnl_pct"] for r in eo]),
+            "med_bars_target": med([r["bars"] for r in tg]),
+            "p90_bars_target": (round(float(pd.Series([r["bars"] for r in tg]).quantile(0.9)), 0)
+                                if tg else None),
+            "uw_any_pct": round(sum(1 for r in recs if r["uw_bars"] > 0) / max(1, len(recs)) * 100, 1),
+            "med_uw_bars": med([r["uw_bars"] for r in recs if r["uw_bars"] > 0]),
+            "med_mae": med([r["mae"] for r in recs]),
+            "worst_mae": min((r["mae"] for r in recs), default=0.0),
+            "deep10": sum(1 for r in recs if r["mae"] <= -10),
+            "deep10_won": sum(1 for r in tg if r["mae"] <= -10),
+            "med_first_prof": med([r["first_prof"] for r in tg if r["first_prof"]]),
+            "would_stop_n": len(ws),
+            "would_stop_pnl": round(sum(r["pnl"] for r in ws), 0),
+            "eod_med_bars": med([r["bars"] for r in eo]),
+            "eod_max_bars": max((r["bars"] for r in eo), default=0),
+        }
+        per_win.append(summ)
+        print("  anatomi %-12s hedef %d · eod %d · isabet %%%s · medyan süre %s g · "
+              "suda %%%s · MAE med %s · stoplansaydı %d ($%s)" %
+              (wn, summ["n_target"], summ["n_eod"], summ["win_rate"],
+               summ["med_bars_target"], summ["uw_any_pct"], summ["med_mae"],
+               summ["would_stop_n"], summ["would_stop_pnl"]), flush=True)
+        if wi == 0:
+            w0_recs = recs
+
+    def hist_bars(xs):
+        h = {"≤5": 0, "6-10": 0, "11-21": 0, "22-42": 0, "43-63": 0, "64+": 0}
+        for x in xs:
+            k = ("≤5" if x <= 5 else "6-10" if x <= 10 else "11-21" if x <= 21
+                 else "22-42" if x <= 42 else "43-63" if x <= 63 else "64+")
+            h[k] += 1
+        return h
+
+    def hist_mae(xs):
+        h = {"−%3'e kadar": 0, "−%3…−%6": 0, "−%6…−%10": 0, "−%10…−%20": 0, "−%20'den derin": 0}
+        for x in xs:
+            k = ("−%3'e kadar" if x > -3 else "−%3…−%6" if x > -6 else "−%6…−%10" if x > -10
+                 else "−%10…−%20" if x > -20 else "−%20'den derin")
+            h[k] += 1
+        return h
+
+    tg0 = [r for r in w0_recs if r["out"] == "hedef"]
+    d["anatomy"] = {"per_win": per_win,
+                    "w0_bars_hist": hist_bars([r["bars"] for r in tg0]),
+                    "w0_mae_hist": hist_mae([r["mae"] for r in w0_recs]),
+                    "w0_recs": w0_recs}
+    save_json(d)
+
+
 TR = lambda v: ("%.1f" % v).replace(".", ",")
+TRG = lambda v: (TR(v)[:-2] if TR(v).endswith(",0") else TR(v))  # 24,0 -> 24
 
 VLABEL = {
     "none":   "Baz — bugünkü canlı (A bacağı korumasız)",
@@ -405,6 +502,76 @@ def _vlabel(key):
         sk, tk = key[6:].split("+")
         return "Kombo: %s + %s gün sınırı (hangisi önce)" % (VLABEL[sk], tk[1:])
     return VLABEL[key]
+
+
+def _anatomy_html(d, wins_tr):
+    """'🔬 Stopsuz bacakla yaşamak' alt bölümü — anatomy() çıktısından. Veri yoksa boş."""
+    a = d.get("anatomy")
+    if not a:
+        return ""
+    usd = lambda v: ("−$" if v < 0 else "$") + format(abs(int(round(v))), ",").replace(",", ".")
+    rows = []
+    for wi, m in enumerate(a["per_win"]):
+        rows.append(
+            "<tr><td>%s</td><td>%d</td><td>%d (%d'i zararda)</td><td>%%%s</td>"
+            "<td>%s g</td><td>%%%s</td><td>−%%%s</td><td>%d · %s</td></tr>" % (
+                wins_tr[wi], m["n_target"], m["n_eod"], m["eod_loss_n"], TR(m["win_rate"]),
+                TRG(m["med_bars_target"]), TR(m["uw_any_pct"]), TR(abs(m["med_mae"])),
+                m["would_stop_n"], usd(m["would_stop_pnl"])))
+    tbl = ('<div style="overflow-x:auto"><table><tr><th>Dönem</th><th>Hedefe ulaşan (+2R)</th>'
+           '<th>Takılan (dönem sonu)</th><th>İsabet</th><th>Hedefe varış (medyan)</th>'
+           '<th>Suya batan payı</th><th>Tipik en derin sarkma</th>'
+           '<th>Stoplansaydı kesilecek KAZANAN (adet · kâr)</th></tr>'
+           + "".join(rows) + "</table></div>")
+    w0 = a["per_win"][0]
+    bh = a["w0_bars_hist"]; mh = a["w0_mae_hist"]
+    n0 = w0["n_target"] + w0["n_eod"]
+    bh_tbl = ("<table><tr><th>Hedefe varış süresi (işlem günü)</th>"
+              + "".join("<th>%s</th>" % k for k in bh) + "</tr><tr><td>işlem sayısı</td>"
+              + "".join("<td>%d</td>" % v for v in bh.values()) + "</tr></table>")
+    mh_tbl = ("<table><tr><th>Yoldaki en derin sarkma (MAE)</th>"
+              + "".join("<th>%s</th>" % k for k in mh) + "</tr><tr><td>işlem sayısı</td>"
+              + "".join("<td>%d</td>" % v for v in mh.values()) + "</tr></table>")
+    para = ("""
+<h2 id="stopanat">🔬 Stopsuz bacakla yaşamak — kâr/zarar anatomisi</h2>
+<p>Karar stopsuz devam olduğuna göre, neyle yaşadığımızı sayılara dökelim. Aşağıdaki tablo
+korumasız (baz) koşuda +2R bekleyen bacağın kaderini dönem dönem gösterir:</p>
+%TBL%
+<p><b>5 yıllık pencerenin detayı (%N0% bacak):</b> hedefe ulaşan %NT% işlem toplam <b>%PT%</b>
+kâr getirdi (tipik işlem +%%MPT%); dönem sonuna takılan %NE% kalıntının %NEL%'i zararda kaldı,
+net faturası yalnız <b>%PE%</b> (tipik −%%MPE%). Yani stopsuzluğun 5 yıllık net bilançosu:
+büyük kazanç, küçük fatura — ama tek tek işlemlerde yol ÇOK sarsıntılı:</p>
+<ul>
+<li><b>Kara ne zaman geçiyor?</b> Tipik işlem daha girişten sonraki <b>1. günde</b> kârda
+(medyan). Ama bu ilk kâr kalıcı değil: bacakların <b>%%UW%'ü</b> yolda en az bir gün girişin
+altına sarkıyor; sarkanlar tipik <b>%UWB% işlem günü</b> su altında kalıyor.</li>
+<li><b>Ne kadar derine batıyor?</b> Tipik en derin sarkma −%%MMAE%; işlemlerin %D10%'ü
+−%10'dan derine battı ve bunların <b>%D10W%'ü yine de hedefe döndü</b>. En derin sarkma
+−%%WMAE% idi. Stop koymamanın kazandırdığı işte bu geri dönüşler: hedefe ulaşan işlemlerin
+%WSN%'i (%WSP% kâr) yolda referans stopa değmişti — stoplu dünyada bunlar zarar yazacaktı.</li>
+<li><b>Hedefe varış ne kadar sürüyor?</b> Medyan %MBT% işlem günü, ama kuyruk uzun: onda biri
+%P90% günden uzun sürdü. Takılan kalıntıların tipik taşınma süresi %EMB% gün; en inatçısı
+<b>%EMX% işlem günü</b> (≈4,5 yıl) taşındı — "slot işgali"nin gerçek yüzü bu.</li>
+</ul>
+%BHT%
+%MHT%
+<p class="note">Dürüstlük: tutarlar bileşik büyüyen sermaye üstünden dolar; "stoplansaydı
+kesilecek" sütunu işlem-bazlı bir varsayımsaldır (stoplu dünyada portföy başka evrilirdi —
+o dünyanın gerçek toplamı yukarıdaki ana tabloda). "Takılan" kalıntı runner artığı içerebilir;
+sarkma (MAE) gün-içi Low ile, süreler giriş sonrası işlem günüyle ölçüldü.</p>
+"""
+            .replace("%TBL%", tbl).replace("%N0%", str(n0)).replace("%NT%", str(w0["n_target"]))
+            .replace("%PT%", usd(w0["pnl_target"])).replace("%MPT%", TR(w0["med_pct_target"]))
+            .replace("%NE%", str(w0["n_eod"])).replace("%NEL%", str(w0["eod_loss_n"]))
+            .replace("%PE%", usd(w0["pnl_eod"])).replace("%MPE%", TR(abs(w0["med_pct_eod"])))
+            .replace("%UWB%", TRG(w0["med_uw_bars"])).replace("%UW%", TR(w0["uw_any_pct"]))
+            .replace("%MMAE%", TR(abs(w0["med_mae"]))).replace("%WMAE%", TR(abs(w0["worst_mae"])))
+            .replace("%D10W%", str(w0["deep10_won"])).replace("%D10%", str(w0["deep10"]))
+            .replace("%WSN%", str(w0["would_stop_n"])).replace("%WSP%", usd(w0["would_stop_pnl"]))
+            .replace("%MBT%", TRG(w0["med_bars_target"])).replace("%P90%", "%d" % w0["p90_bars_target"])
+            .replace("%EMB%", TRG(w0["eod_med_bars"])).replace("%EMX%", str(w0["eod_max_bars"]))
+            .replace("%BHT%", bh_tbl).replace("%MHT%", mh_tbl))
+    return para
 
 
 def report():
@@ -476,16 +643,19 @@ toparlanmalarla dolu — "dipte satmamak kazandırır" dersi bu örnekleme bağl
 hisse riski (delist vb.) backtestte az temsil edilir; geçmiş sonuç gelecek garantisi değildir.</p>
 <div class="leg" id="stopLeg"></div>
 <div id="stopLcharts"></div>
-<blockquote><p><b>Sonuç:</b> Skor sıralamasında (getiri + çukur-iyileşmesi, 5 dönem ortalaması)
-<b>birinci: bugünkü canlı davranış (korumasız baz)</b>; sıralama: %RANKING%.
+%ANATOMY%
+<blockquote><p><b>✅ Karar (2026-07-07): stopsuz devam.</b> Skor sıralamasında (getiri +
+çukur-iyileşmesi, 5 dönem ortalaması) birinci zaten bugünkü canlı davranıştı; sıralama: %RANKING%.
 Korumalar portföy çukurunu da kayda değer düzeltmedi (baz −%19,6 → en iyi ~−%18; çukuru tek
 hisse kuyrukları değil, 20 pozisyonun birlikte düştüğü piyasa geneli belirliyor). Tek-işlem
-felaket sigortası isteyen için en ehveni süre sınırı (%TOPLABEL%) — ama fiyatı 5 yılda getirinin
-yarısından fazlası. <b>Karar rafta — canlı sistem DEĞİŞMEDİ;</b> bu bölüm yalnız deney raporudur.</p></blockquote>
+felaket sigortası isteyene en ehveni süre sınırıydı (%TOPLABEL%) — ama fiyatı 5 yılda getirinin
+yarısından fazlası. <b>Canlıda değişiklik GEREKMİYOR</b> (sistem zaten stopsuz çalışıyor);
+yukarıdaki anatomi, bu tercihle neyle yaşadığımızın belgesidir.</p></blockquote>
 <!-- STOPAB:END -->
 """.replace("%TABLE%", table).replace("%TOPLABEL%", _vlabel(top)) \
    .replace("%DROI5%", ("−%d" if droi5 < 0 else "+%d") % abs(round(droi5))) \
-   .replace("%RANKING%", " &gt; ".join(("<b>baz</b>" if k == "none" else k) for k in rank))
+   .replace("%RANKING%", " &gt; ".join(("<b>baz</b>" if k == "none" else k) for k in rank)) \
+   .replace("%ANATOMY%", _anatomy_html(d, wins_tr))
 
     # --- inline eğri verisi + çizim (lwc.js sayfada zaten yüklü; en sona eklenir) ---
     curves = {}
@@ -562,7 +732,10 @@ def main():
     ap.add_argument("--wave1", action="store_true")
     ap.add_argument("--wave2", action="store_true")
     ap.add_argument("--report", action="store_true")
+    ap.add_argument("--anatomy", action="store_true")
     args = ap.parse_args()
+    if args.anatomy:
+        anatomy(); return
     if args.selftest:
         selftest(); return
     if args.fidelity:
