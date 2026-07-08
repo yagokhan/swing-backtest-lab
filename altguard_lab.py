@@ -27,6 +27,7 @@ import copy
 import json
 import os
 import pickle
+import re
 import sys
 
 sys.path.insert(0, "/home/gokhan")
@@ -379,8 +380,14 @@ def selftest():
     v = bt._pick_victim(d, "age")
     assert v is not None and v[0] == "Z1", v                # yaş filtresi
     bt.GIL_VUW = 0
-    assert parse_key("gil-pnl85v25") == {"gil": ("pnl", 85), "vpct": 25.0, "vuw": 0}
-    assert parse_key("gil-age90u120") == {"gil": ("age", 90), "vpct": 0.0, "vuw": 120}
+    assert parse_key("gil-pnl85v25") == {"gil": ("pnl", 85), "vpct": 25.0, "vuw": 0,
+                                         "min_age": 5}
+    assert parse_key("gil-age90u120") == {"gil": ("age", 90), "vpct": 0.0, "vuw": 120,
+                                          "min_age": 5}
+    assert parse_key("gil-pnl92a21") == {"gil": ("pnl", 92), "vpct": 0.0, "vuw": 0,
+                                         "min_age": 21}
+    assert parse_key("gil-pnl92u200a63") == {"gil": ("pnl", 92), "vpct": 0.0, "vuw": 200,
+                                             "min_age": 63}
     print("selftest: 17/17 GEÇTİ")
 
 
@@ -422,13 +429,13 @@ def _tail_stats(bt):
     return out
 
 
-def run_windows(gil=None, rsx=None, volk=None, vpct=0.0, vuw=0, label=""):
+def run_windows(gil=None, rsx=None, volk=None, vpct=0.0, vuw=0, min_age=5, label=""):
     load_data()
     rows = []
     for wi, (wn, sd, ed) in enumerate(WINS):
         c = copy.deepcopy(base_cfg()); c.start_date = sd; c.end_date = ed
         GKX.GIL = gil; GKX.RSX = rsx; GKX.VOLK = volk
-        GKX.GIL_VPCT = vpct; GKX.GIL_VUW = vuw
+        GKX.GIL_VPCT = vpct; GKX.GIL_VUW = vuw; GKX.GIL_MIN_AGE = min_age
         bt = GKX(c, market=MARKET); bt.run()
         m = bt.metrics()
         row = {"win": wn, "roi": round(m["roi"], 1), "max_dd": round(m["max_dd"], 1),
@@ -494,7 +501,8 @@ def load_json():
 def _run_variant(out, key, kw):
     print("varyant:", key, flush=True)
     rows = run_windows(gil=kw.get("gil"), rsx=kw.get("rsx"), volk=kw.get("volk"),
-                       vpct=kw.get("vpct", 0.0), vuw=kw.get("vuw", 0), label=key)
+                       vpct=kw.get("vpct", 0.0), vuw=kw.get("vuw", 0),
+                       min_age=kw.get("min_age", 5), label=key)
     out["variants"][key] = {"kind": kw, "rows": rows}
 
 
@@ -544,16 +552,12 @@ def parse_key(key):
     """Varyant adı -> kwargs. gil-<mode><Q>[v<pct>][u<gün>] | rs<X>-<scope> | vol<k>-<scope>.
     Ör: gil-pnl90 · gil-pnl85v25 (kurban ≥ −%25 ekside) · gil-age85u120 (kurban ≥ 120 gün su altı)."""
     if key.startswith("gil-"):
-        body = key[4:]
-        vpct, vuw = 0.0, 0
-        if "u" in body:
-            body, su = body.split("u", 1); vuw = int(su)
-        if "v" in body:
-            body, sv = body.split("v", 1); vpct = float(sv)
-        mode = "".join(ch for ch in body if ch.isalpha())
-        q = int("".join(ch for ch in body if ch.isdigit()))
-        assert mode in ("pnl", "age") and 0 < q <= 100, key
-        return {"gil": (mode, q), "vpct": vpct, "vuw": vuw}
+        m = re.match(r"^(pnl|age)(\d+)(?:v(\d+(?:\.\d+)?))?(?:u(\d+))?(?:a(\d+))?$", key[4:])
+        assert m, key
+        mode, q = m.group(1), int(m.group(2))
+        assert 0 < q <= 100, key
+        return {"gil": (mode, q), "vpct": float(m.group(3) or 0),
+                "vuw": int(m.group(4) or 0), "min_age": int(m.group(5) or 5)}
     if key.startswith("rs"):
         x, scope = key[2:].split("-")
         assert scope in ("A", "tum"), key
@@ -599,6 +603,8 @@ def _vlabel(key):
             zf += "; kurban ≥ −%%%d ekside olmalı" % int(kw["vpct"])
         if kw.get("vuw"):
             zf += "; kurban ≥ %d gün su altında olmalı" % kw["vuw"]
+        if kw.get("min_age", 5) != 5:
+            zf += "; kurban ≥ %d gün taşınmış olmalı" % kw["min_age"]
         return "Giyotin: yıldız (skor≥%d) gelince %s kurban edilir%s" % (q, who, zf)
     if "rsx" in kw:
         x, sc = kw["rsx"]
@@ -654,14 +660,13 @@ def report():
              and score_variant(d["variants"][k]["rows"], base) > 0]
     if beats:
         verdict = ("<b>Kısa cevap: RS çöküşü ve hacim kırılımı HER ayarda ağır kaybettirdi "
-                   "(5 yıllık getiride bazın 70-140 puan gerisi); tek geçen fikir GİYOTİN.</b> "
-                   "En iyisi %s: 5 yılda +%%%s → +%%%s, çukur aynı kaldı. Ama tabloda bazı geçen "
-                   "%d satırın hepsi AYNI fikrin farklı eşikleri ve kazancın tamamı 5 yılda "
-                   "yalnızca %d takastan geliyor — kanıt istatistiksel olarak incecik. "
-                   "Takasların dökümü ve karar aşağıda." % (
-                       _vlabel(beats[0]), TR(base[0]["roi"]),
-                       TR(d["variants"][top]["rows"][0]["roi"]), len(beats),
-                       (d["variants"][top]["rows"][0].get("gil") or {}).get("n", 0)))
+                   "(5 yıllık getiride bazın 70-140 puan gerisi); tek geçen fikir GİYOTİN "
+                   "gibi göründü — ama sağlamlık sorgusunda o da çöktü.</b> Skor≥92 giyotin "
+                   "kâğıt üstünde 5 yılda +%%166 → +%%210 verdi; ne var ki test penceresinin "
+                   "başlangıcını birkaç ay kaydırınca aynı kural bazın 9-20 puan GERİSİNE "
+                   "düşüyor (aşağıda jitter tablosu). Tabloda bazı geçen %d satırın hepsi aynı "
+                   "fikrin farklı eşikleri; kazanç tek şanslı takastan (MRVL→META) geliyor. "
+                   "Takas dökümü, sağlamlık sorgusu ve karar aşağıda." % len(beats))
     else:
         verdict = ("<b>Kısa cevap: HAYIR — üç fikrin hiçbir varyantı bazı geçemedi.</b> "
                    "En yakını bile (%s) 5 yıllık getiride bazın %s puan gerisinde. Dünkü 🛡️ "
@@ -694,7 +699,35 @@ def report():
 <p class="note">Yani 5 yıllık +43,5 puanlık fark tek bir şanslı takasa (2023'te dibe vurmuş
 MRVL'den çıkıp META'nın yükselişine binmek) dayanıyor; aynı kural 2025'te TTD'den çıkıp
 GEV'e binince de ters tepti. 2-4 olaydan istatistik çıkmaz — eldeki şey "kural" değil,
-iki anekdot.</p>"""
+iki anekdot.</p>
+<h3>🔬 Sağlamlık sorgusu (dalga-3): anekdot mu, kural mı?</h3>
+<p>Üç ayrı test yapıldı:</p>
+<p><b>1) Min-yaş taraması — etkisiz (iyi haber).</b> "Kurban en az 21/63 gün taşınmış
+olmalı" şartları sonucu bir milim oynatmadı (a21 = a63 = düz skor≥92): kurbanlar zaten
+136-1009 gündür su altında yatan zombiler, bu düğme hiç devreye girmiyor.</p>
+<p><b>2) Su-altı filtresi — aşırı hassasiyet (kötü haber).</b> "Kurban ≥300 gün su altında
+olsun" (u300) skoru +8,9'a taşıyıp yeni lider oldu — ama komşusu u200 aynı testte +4,9'a
+düşüyor: giyotini TTD/PAYC yerine başka kurbanlara yönlendirdi ve o takaslar daha da kötü
+çıktı (son 2 yıl +%62,5). İki komşu eşiğin son-2-yıl etkisi −19 ile +1 puan arasında
+savruluyor; üstelik 300 sayısı, kaybeden takasların (136/153 gün) ile kazananın (316 gün)
+tam ortasına GERİYE BAKARAK konmuş bir değer. u300'ün liderliği fikrin gücünü değil,
+4 olaylık örneklemde parametrenin gürültüyü ezberlediğini gösterir.</p>
+<p><b>3) Başlangıç-tarihi kaydırma (jitter) — belirleyici test, giyotin ÇÖKTÜ.</b>
+5 yıllık pencerenin başlangıcı aylarla kaydırılıp her başlangıçta baz ile skor≥92 giyotin
+yeniden koşuldu (veri 2021-05'te başladığı için daha erken başlangıçlar oraya kilitlenir):</p>
+<div style="overflow-x:auto"><table>
+<tr><th>Başlangıç</th><th>Baz getiri</th><th>Giyotin getiri</th><th>Fark</th><th>Takaslar</th></tr>
+<tr><td>2021-05 (rapordaki)</td><td>+%166,3</td><td>+%209,8</td><td><b>+43,5</b></td><td>MRVL→META · EXR→GM</td></tr>
+<tr><td>2021-07</td><td>+%161,2</td><td>+%179,5</td><td><b>+18,4</b></td><td>DDOG→META · INTC→TPR · MRVL→GM</td></tr>
+<tr><td>2021-09</td><td>+%94,9</td><td>+%75,3</td><td><b>−19,6</b></td><td>DDOG→META · PAYC→TPR · VFC→GEV · FSLR→WDC · EXR→WBD</td></tr>
+<tr><td>2021-11</td><td>+%116,1</td><td>+%103,0</td><td><b>−13,1</b></td><td>DDOG→META · INTC→TPR · MDB→RCL · TEAM→GM · BX→HUM</td></tr>
+<tr><td>2022-01</td><td>+%150,4</td><td>+%141,9</td><td><b>−8,6</b></td><td>INTC→STX · FSLR→WDC · TER→RCL · DASH→HUM</td></tr>
+</table></div>
+<p class="note">5 farklı başlangıcın 2'sinde kazanç, 3'ünde KAYIP; işaret başlangıç tarihine
+göre dönüyor (+43,5 ↔ −19,6). Kazanan pencereler META'yı yakalayan pencereler; META'sız
+takasların (TPR, WBD, WDC, RCL, HUM…) toplamı eksi. Yani rapordaki +43,5, kuralın gücü
+değil, pencerenin MRVL→META takasına denk gelme şansı. Bu, "giyotin geçti" hükmünü
+düşürür.</p>"""
 
     section = """<!-- ALTAB:BEGIN -->
 <h2 id="altab">♻️ Stopsuz bacağa alternatif korumalar — giyotin · RS çöküşü · hacim kırılımı (2026-07-08)</h2>
