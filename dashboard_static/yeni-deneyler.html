@@ -1,0 +1,332 @@
+<!doctype html><html lang="tr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Qulla-21 · Yeni Deneyler</title>
+<style>
+ :root{
+  --gece:#101216;
+  --defter:#15181d;
+  --defter2:#1b1f26;
+  --cam:#20252d;
+  --cizgi:rgba(174,188,214,.10);
+  --cizgi2:rgba(174,188,214,.20);
+  --murekkep:#e8ecf3;
+  --gumus:#a9b2c1;
+  --sis:#69727f;
+  --kar:#3ecf8e;
+  --kar-bg:rgba(62,207,142,.09);
+  --zarar:#f07b7b;
+  --zarar-bg:rgba(240,123,123,.09);
+  --kehribar:#e8b04b;
+  --kehribar-bg:rgba(232,176,75,.10);
+  --b4:4px;
+ }
+ *{box-sizing:border-box}
+ body{margin:0;background:var(--gece);color:var(--murekkep);
+  font:14px/1.6 system-ui,"Segoe UI",Roboto,sans-serif;padding:20px}
+ a{color:var(--gumus);text-decoration:none} a:hover{color:var(--murekkep);text-decoration:underline}
+ header{padding:14px 24px;border-bottom:1px solid var(--cizgi);
+  display:flex;flex-wrap:wrap;gap:16px;align-items:baseline;margin:-20px -20px 28px}
+ h1{font-size:16px;font-weight:650;letter-spacing:-.01em;margin:0}
+ h1 .alt{color:var(--sis);font-weight:500;font-size:12px;margin-left:8px}
+ h2{font-size:15px;font-weight:650;margin:28px 0 12px;color:var(--kar)}
+ h3{font-size:13px;font-weight:650;margin:20px 0 10px;color:var(--murekkep)}
+ .card{background:var(--defter);border:1px solid var(--cizgi);border-radius:10px;
+  padding:18px 20px;margin:0 0 20px;border-left:3px solid var(--cizgi2)}
+ .card.note{border-left-color:var(--kehribar)}
+ .card.good{border-left-color:var(--kar)}
+ .card.reject{border-left-color:var(--zarar)}
+ .summary{background:var(--cam);border:1px solid var(--cizgi2);border-radius:8px;
+  padding:16px 18px;margin:0 0 20px;line-height:1.7}
+ .summary b{color:var(--kar)}
+ .row{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin:0 0 20px}
+ .stat{background:var(--defter);border:1px solid var(--cizgi);border-radius:8px;
+  padding:14px 16px;text-align:center}
+ .stat .val{font-size:20px;font-weight:650;color:var(--murekkep);margin:4px 0}
+ .stat .lbl{font-size:11px;font-weight:600;letter-spacing:.07em;
+  text-transform:uppercase;color:var(--sis)}
+ .stat .note{font-size:10px;color:var(--sis);margin-top:4px}
+ .bar{display:flex;align-items:center;gap:12px;margin:8px 0}
+ .bar .name{min-width:140px;font-weight:550;font-size:13px}
+ .bar .vals{min-width:90px;text-align:right;font-size:12px}
+ .bar .track{flex:1;height:8px;background:var(--defter2);border-radius:4px;overflow:hidden;min-width:80px}
+ .bar .fill{height:100%;background:var(--kar);border-radius:4px}
+ .bar .status{min-width:70px;font-size:11px;font-weight:600;letter-spacing:.04em}
+ .bar.kept .fill{background:var(--kar)}
+ .bar.rejected .fill{background:var(--zarar)}
+ .bar.untrusted .fill{background:var(--kehribar)}
+ .table-wrap{overflow-x:auto;margin:12px 0}
+ table{width:100%;border-collapse:collapse;font-size:12.5px}
+ th{background:var(--defter2);color:var(--sis);font-weight:600;padding:8px;
+  text-align:right;border-bottom:1px solid var(--cizgi);font-size:11px;
+  letter-spacing:.07em;text-transform:uppercase}
+ th:first-child{text-align:left}
+ td{padding:8px;border-bottom:1px solid var(--cizgi);text-align:right}
+ td:first-child{text-align:left;font-weight:550}
+ tr:hover{background:var(--defter2)}
+ .pos{color:var(--kar)}
+ .neg{color:var(--zarar)}
+ .sec{color:var(--sis);font-size:13px}
+ .note-box{background:var(--kehribar-bg);border-left:3px solid var(--kehribar);
+  padding:12px 14px;margin:12px 0;border-radius:4px;font-size:13px;line-height:1.5}
+ .badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:650;
+  letter-spacing:.04em}
+ .b-ok{background:var(--kar-bg);color:var(--kar)}
+ .b-reject{background:var(--zarar-bg);color:var(--zarar)}
+ .b-untrust{background:var(--kehribar-bg);color:var(--kehribar)}
+ details{margin:12px 0;background:var(--defter2);border:1px solid var(--cizgi);border-radius:6px;overflow:hidden}
+ summary{padding:10px 14px;cursor:pointer;font-weight:550;font-size:13px;color:var(--murekkep);
+  display:flex;align-items:center;gap:8px;user-select:none}
+ summary:hover{background:var(--defter)}
+ details[open]>summary{border-bottom:1px solid var(--cizgi)}
+ details>:not(summary){padding:0 14px 12px}
+ button.back{background:transparent;color:var(--gumus);border:1px solid var(--cizgi2);
+  border-radius:7px;padding:6px 12px;font-size:12.5px;font-weight:550;cursor:pointer;
+  margin-left:auto}
+ button.back:hover{color:var(--murekkep);border-color:rgba(174,188,214,.34);background:var(--defter2)}
+ @media(max-width:600px){
+  body{padding:12px}
+  .row{grid-template-columns:1fr}
+  header{padding:10px 16px;margin:-12px -12px 20px}
+  .bar{flex-wrap:wrap}
+  .bar .name{min-width:auto}
+  .bar .track{min-width:120px}
+ }
+</style></head><body>
+<header>
+ <h1>🧪 Qulla-21 Yeni Deneyler<span class="alt">20 Temmuz 2026</span></h1>
+ <button class="back" onclick="location.href='/'">← Geri</button>
+</header>
+
+<div class="summary">
+ <b>Sonuç:</b> Yeni kural eklemedik. Mevcut Aday 3 hâlâ en sağlam yöntem. <br>
+ Deneyler bazı dönemlerde iyi görünse de farklı dönemlerde aynı başarıyı göstermedi; bu yüzden canlıya alınmadı.
+</div>
+
+<h2>Mevcut Sistem (Temel Durum)</h2>
+<div class="card">
+ <p><b>Yöntem:</b> Aday 3 · 63 günlük kırılım taraması (RS sıralama + hareketlilik dengeleme)</p>
+ <p><b>Evren:</b> S&P 500 + Nasdaq 100 (günlük RS top-50)</p>
+ <p><b>Çıkış:</b> Split pozisyon: %60 +2R hedef · %40 kapanış < 21-EMA runner</p>
+</div>
+
+<div class="row">
+ <div class="stat">
+  <div class="lbl">Son 5 Yıl Getiri</div>
+  <div class="val">+166,3%</div>
+  <div class="note">Temel baz</div>
+ </div>
+ <div class="stat">
+  <div class="lbl">En Derin Düşüş</div>
+  <div class="val">−19,6%</div>
+  <div class="note">Max DD</div>
+ </div>
+ <div class="stat">
+  <div class="lbl">Karlılık Faktörü</div>
+  <div class="val">3,67</div>
+  <div class="note">PF (kazanan/kaybedenler)</div>
+ </div>
+ <div class="stat">
+  <div class="lbl">İşlem Sayısı</div>
+  <div class="val">482</div>
+  <div class="note">5 yıl (2021–2026)</div>
+ </div>
+</div>
+
+<h3>Sonuçları Karşılaştır: Dört Yaklaşım</h3>
+<div class="card" style="background:var(--defter);padding:20px">
+ <div class="bar kept">
+  <div class="name">✓ Mevcut (Aday 3)</div>
+  <div class="vals">+166,3%</div>
+  <div class="track"><div class="fill" style="width:80%"></div></div>
+  <div class="status"><span class="badge b-ok">Canlıda</span></div>
+ </div>
+ <div class="bar rejected">
+  <div class="name">✗ Fundamentaller (w=0.05)</div>
+  <div class="vals">+177,0%</div>
+  <div class="track"><div class="fill" style="width:85%"></div></div>
+  <div class="status"><span class="badge b-reject">2/5 iyi</span></div>
+ </div>
+ <div class="bar untrusted">
+  <div class="name">⚠ Momentum ilk (k=0.40)</div>
+  <div class="vals">+208,4%</div>
+  <div class="track"><div class="fill" style="width:100%"></div></div>
+  <div class="status"><span class="badge b-untrust">Hassas</span></div>
+ </div>
+ <div class="bar rejected">
+  <div class="name">✗ Momentum adil (k=0.40)</div>
+  <div class="vals">+189,5%</div>
+  <div class="track"><div class="fill" style="width:91%"></div></div>
+  <div class="status"><span class="badge b-reject">2/5 iyi</span></div>
+ </div>
+</div>
+
+<h2>Deney 1: Fundamentaller (Ciro/EPS Büyümesi)</h2>
+<div class="card">
+ <p><b>Fikir:</b> RS sıralamasına ciro ve EPS büyümesini (ağırlık w = 0.05, 0.10, 0.20) ekle.</p>
+ <p><b>Hipotez:</b> İyi finansal sağlık hisse seçimini iyileştirebilir.</p>
+</div>
+<div class="note-box">
+ ⚠️ <b>Sonuç: Reddedildi.</b> w=0.05'te 5 yıl +177,0% (bazdan 10,7 puan yüksek) gözükse de, yalnızca 2/5 test döneminde bazdan iyi. Diğer w değerleri daha zayıf. İyi şirket bilgisi bu sistem için hisse seçimini güvenilir şekilde iyileştirmedi.
+</div>
+
+<details>
+ <summary>🔍 Deney 1 Detayı: Fundamentaller (w=0.05, 0.10, 0.20)</summary>
+ <div class="table-wrap">
+  <table>
+   <tr><th>Ağırlık (w)</th><th>5y ROI</th><th>Max DD</th><th>PF</th><th>Durum</th></tr>
+   <tr><td>0.05</td><td class="pos">177,0%</td><td>−19,1%</td><td>3,54</td><td><span class="badge b-reject">2/5 dönem iyi</span></td></tr>
+   <tr><td>0.10</td><td class="neg">137,7%</td><td>−21,2%</td><td>2,89</td><td><span class="badge b-reject">Daha zayıf</span></td></tr>
+   <tr><td>0.20</td><td>164,6%</td><td>−15,9%</td><td>3,44</td><td><span class="badge b-reject">2/5 dönem iyi</span></td></tr>
+  </table>
+ </div>
+ <p class="sec" style="margin-top:10px">Denetim: 25 farklı hisse örneğinde tarihsel bilgi açıklığı doğrulanmış (0 ihlal); kapsam %95.6</p>
+</details>
+
+<h2>Deney 2: Hareketliye Daha Çok Para (Momentum Ağırlığı)</h2>
+<div class="card">
+ <p><b>Fikir:</b> Momentum güçlü hisselere daha fazla sermaye ayır (k = 0.40).</p>
+ <p><b>Hipotez:</b> Hareketliliği ödüllendirmek daha fazla getiri verebilir.</p>
+</div>
+<div class="note-box">
+ ⚠️ <b>Sonuç: Reddedildi.</b> k=0.40 ile 5 yıllık getiri +208,4% oldu ve beş test penceresinin her birinde o pencerenin baz getirisini geçti. İlk bakışta umut vericiydi. Ancak komşu k ayarları aynı başarıyı tekrarlamadığı için sonuç tek bir ayara fazla hassastı. Bu, veriye aşırı uyum riskidir; canlıya alınmadı.
+</div>
+
+<details>
+ <summary>🔍 Deney 2 Detayı: Momentum (k=0.40)</summary>
+ <div class="table-wrap">
+  <table>
+   <tr><th>Dönem</th><th>Baz ROI</th><th>k=0.40 ROI</th><th>Fark</th><th>PF</th></tr>
+   <tr><td>5y tam</td><td>166,3%</td><td class="pos">208,4%</td><td class="pos">+42,1 puan</td><td>3,71</td></tr>
+   <tr><td>Ayı 21–23</td><td>21,3%</td><td class="pos">21,8%</td><td class="pos">+0,5 puan</td><td>1,94</td></tr>
+   <tr><td>Topar 23–25</td><td>43,3%</td><td class="pos">48,9%</td><td class="pos">+5,6 puan</td><td>2,95</td></tr>
+   <tr><td>Son 2y</td><td>81,3%</td><td class="pos">113,3%</td><td class="pos">+32,0 puan</td><td>4,51</td></tr>
+   <tr><td>Son 1y</td><td>57,4%</td><td class="pos">58,8%</td><td class="pos">+1,4 puan</td><td>3,0</td></tr>
+  </table>
+ </div>
+ <p class="sec" style="margin-top:10px">Risk: Max DD k=0.40'te −19,0% (baz −19,6% ile benzer). Ancak komşu ayarların başarısızlığı parametre hassasiyeti gösterir.</p>
+</details>
+
+<h2>Deney 3: Adil Kontrol (Bütçe-Nötr Momentum)</h2>
+<div class="card">
+ <p><b>Fikir:</b> Momentum +2R hedef/runner split'in (60/40) nakit etkisini izole etmek için, aynı günlük toplam açık % tutarını koru.</p>
+ <p><b>Hipotez:</b> Bütçe-nötr kontrol Deney 2'nin sıçramasının ne kadarının ince-tuning, ne kadarının gerçek kural iyileşmesi olduğunu göster.</p>
+</div>
+<div class="note-box">
+ ⚠️ <b>Sonuç: Reddedildi.</b> k=0.40 bütçe-nötr testte 5 yıllık getiri +189,5% oldu, fakat yalnızca 5 yılın tamamında ve 2023–25 toparlanma döneminde bazdan iyiydi (2/5). Ayı döneminde getiri +10,4% ile bazın altında kaldı. Ortalama pozisyon tam %7,50, bütçe sapması 0%. Bu, Deney 2'deki sıçramanın çoğunun nakit ve işlem sırası etkisinden geldiğini gösterdi; canlıya alınmadı.
+</div>
+
+<details>
+ <summary>🔍 Deney 3 Detayı: Bütçe-Nötr Momentum (k=0.40)</summary>
+ <div class="table-wrap">
+  <table>
+   <tr><th>Dönem</th><th>ROI</th><th>Baz ROI</th><th>Fark</th><th>Durum</th></tr>
+   <tr><td>5y tam</td><td>189,5%</td><td>166,3%</td><td class="pos">+23,2 puan</td><td><span class="badge b-ok">İyi</span></td></tr>
+   <tr><td>Ayı 21–23</td><td class="neg">10,4%</td><td>21,3%</td><td class="neg">−10,9 puan</td><td><span class="badge b-reject">Çöktü</span></td></tr>
+   <tr><td>Topar 23–25</td><td class="pos">49,6%</td><td>43,3%</td><td class="pos">+6,3 puan</td><td><span class="badge b-ok">İyi</span></td></tr>
+   <tr><td>Son 2y</td><td>56,7%</td><td>81,3%</td><td class="neg">−24,6 puan</td><td><span class="badge b-reject">Zayıf</span></td></tr>
+   <tr><td>Son 1y</td><td>55,0%</td><td>57,4%</td><td class="neg">−2,4 puan</td><td><span class="badge b-reject">Zayıf</span></td></tr>
+  </table>
+ </div>
+ <p class="sec" style="margin-top:10px">Karar: 2/5 dönem iyi; ortadaki ayı döneminde ciddi düşüş. Gelecek için güvenilir değil.</p>
+</details>
+
+<h2>Neden Bu İyi Haber?</h2>
+<div class="card good">
+ <p>📌 <b>Canlı sistemde böyle bir "iyileştirilmiş" kural üretilmedi.</b></p>
+ <p>Aşırı uyumlu veya tesadüf tabanlı varyantları canlı ticarete almamak, ölçüm kalitesinin ve disiplinin göstergesidir. Gelecek performans güvenilirliği önceliklenir.</p>
+</div>
+
+<h2>Bilinen Sınırlar</h2>
+<div class="card note">
+ <p><b>🕒 Bugünkü Endeks Üyeleriyle Test (Survivorship Yanlılığı):</b><br>
+  Geçmiş veriler bugünün S&P 500 / Nasdaq 100 listesiyle test edildi. Batmış şirketler hariç — bu iyimserliği arttırır.</p>
+
+ <p><b>💰 FMP Tarihsel Veri Revizyonu:</b><br>
+  Mali veriler (ciro, EPS) daha sonra düzeltilmiş olabilir. Deney 1 revizyonlara karşı dirençlidir ancak garanti değildir.</p>
+
+ <p><b>🔮 İleri-Dönük Doğrulama Yok:</b><br>
+  Deney Temmuz 2026'dır. Sonuçlar iyiye dönerse, Temmuz 2027'de doğrulanması gerekir.</p>
+</div>
+
+<h2>Teknik Detay: Tam Veri Doğrulama</h2>
+<p class="sec">Tüm sayılar doğrudan kaynak dosyalarından alındı:</p>
+
+<details>
+ <summary>📊 Deney 1 Tam Tablosu: Fundamentaller (5 Dönem × 3 Ağırlık)</summary>
+ <div class="table-wrap">
+  <table>
+   <tr><th>Ağırlık</th><th>Dönem</th><th>ROI</th><th>Max DD</th><th>PF</th><th>Trades</th><th>Kapsam %</th></tr>
+   <tr><td rowspan="5">w=0.05</td><td>5y tam</td><td>177,0%</td><td>−19,1%</td><td>3,54</td><td>506</td><td>95,5</td></tr>
+   <tr><td>Ayı 21–23</td><td>25,5%</td><td>−15,9%</td><td>2,02</td><td>205</td><td>93,3</td></tr>
+   <tr><td>Topar 23–25</td><td>31,1%</td><td>−20,0%</td><td>1,93</td><td>257</td><td>98,2</td></tr>
+   <tr><td>Son 2y</td><td>66,2%</td><td>−19,0%</td><td>2,84</td><td>274</td><td>95,7</td></tr>
+   <tr><td>Son 1y</td><td>49,3%</td><td>−11,3%</td><td>2,55</td><td>208</td><td>95,0</td></tr>
+   <tr><td rowspan="5">w=0.10</td><td>5y tam</td><td>137,7%</td><td>−21,2%</td><td>2,89</td><td>501</td><td>95,5</td></tr>
+   <tr><td>Ayı 21–23</td><td>26,2%</td><td>−13,8%</td><td>2,09</td><td>213</td><td>93,0</td></tr>
+   <tr><td>Topar 23–25</td><td>33,2%</td><td>−19,3%</td><td>2,04</td><td>262</td><td>98,3</td></tr>
+   <tr><td>Son 2y</td><td>57,6%</td><td>−15,4%</td><td>2,35</td><td>293</td><td>95,9</td></tr>
+   <tr><td>Son 1y</td><td>59,5%</td><td>−11,3%</td><td>2,95</td><td>217</td><td>95,2</td></tr>
+   <tr><td rowspan="5">w=0.20</td><td>5y tam</td><td>164,6%</td><td>−15,9%</td><td>3,44</td><td>508</td><td>96,0</td></tr>
+   <tr><td>Ayı 21–23</td><td>24,4%</td><td>−15,4%</td><td>2,02</td><td>195</td><td>93,5</td></tr>
+   <tr><td>Topar 23–25</td><td>32,1%</td><td>−17,7%</td><td>1,90</td><td>269</td><td>96,9</td></tr>
+   <tr><td>Son 2y</td><td>84,7%</td><td>−17,5%</td><td>2,87</td><td>337</td><td>95,5</td></tr>
+   <tr><td>Son 1y</td><td>45,4%</td><td>−14,2%</td><td>2,39</td><td>210</td><td>96,0</td></tr>
+  </table>
+ </div>
+ <p class="sec" style="margin-top:10px">Kaynak: fund_results.json (w=0.05, 0.10, 0.20 ve 5 dönem her biri)</p>
+</details>
+
+<details>
+ <summary>📊 Deney 2 Tam Tablosu: Momentum İlk (k=0.20, 0.40, 0.50)</summary>
+ <div class="table-wrap">
+  <table>
+   <tr><th>k (momentum)</th><th>Dönem</th><th>ROI</th><th>Max DD</th><th>PF</th><th>Trades</th></tr>
+   <tr><td rowspan="5">k=0.2</td><td>5y tam</td><td>149,7%</td><td>−16,9%</td><td>3,22</td><td>456</td></tr>
+   <tr><td>Ayı 21–23</td><td>21,8%</td><td>−11,0%</td><td>1,91</td><td>186</td></tr>
+   <tr><td>Topar 23–25</td><td>29,0%</td><td>−19,0%</td><td>1,89</td><td>253</td></tr>
+   <tr><td>Son 2y</td><td>106,3%</td><td>−17,0%</td><td>4,04</td><td>307</td></tr>
+   <tr><td>Son 1y</td><td>54,1%</td><td>−10,6%</td><td>2,96</td><td>210</td></tr>
+   <tr><td rowspan="5">k=0.4</td><td>5y tam</td><td class="pos">208,4%</td><td>−19,0%</td><td>3,71</td><td>491</td></tr>
+   <tr><td>Ayı 21–23</td><td class="pos">21,8%</td><td>−17,0%</td><td>1,94</td><td>191</td></tr>
+   <tr><td>Topar 23–25</td><td class="pos">48,9%</td><td>−16,2%</td><td>2,95</td><td>277</td></tr>
+   <tr><td>Son 2y</td><td class="pos">113,3%</td><td>−16,6%</td><td>4,51</td><td>345</td></tr>
+   <tr><td>Son 1y</td><td class="pos">58,8%</td><td>−12,5%</td><td>3,0</td><td>224</td></tr>
+   <tr><td rowspan="5">k=0.5</td><td>5y tam</td><td>216,0%</td><td>−19,0%</td><td>3,47</td><td>580</td></tr>
+   <tr><td>Ayı 21–23</td><td>31,0%</td><td>−14,6%</td><td>2,6</td><td>213</td></tr>
+   <tr><td>Topar 23–25</td><td>38,2%</td><td>−20,7%</td><td>1,95</td><td>294</td></tr>
+   <tr><td>Son 2y</td><td>106,0%</td><td>−17,6%</td><td>3,71</td><td>320</td></tr>
+   <tr><td>Son 1y</td><td>43,8%</td><td>−14,3%</td><td>2,34</td><td>226</td></tr>
+  </table>
+ </div>
+ <p class="sec" style="margin-top:10px">Kaynak: heat_results.json (k=0.2, 0.4, 0.5 ve 5 dönem her biri). k=0.4 iyi göründü ancak k=0.2, k=0.5 tutarlı değil — parametre seçim hassasiyeti.</p>
+</details>
+
+<details>
+ <summary>📊 Deney 3 Tam Tablosu: Bütçe-Nötr Momentum (k=0.20, 0.40, −0.40)</summary>
+ <div class="table-wrap">
+  <table>
+   <tr><th>k</th><th>Dönem</th><th>ROI</th><th>Ort. Pos %</th><th>Bütçe Dev.</th></tr>
+   <tr><td rowspan="5">k=0.2</td><td>5y tam</td><td>193,1%</td><td>7,5</td><td>0,0%</td></tr>
+   <tr><td>Ayı 21–23</td><td>24,5%</td><td>7,5</td><td>0,0%</td></tr>
+   <tr><td>Topar 23–25</td><td>37,0%</td><td>7,5</td><td>0,0%</td></tr>
+   <tr><td>Son 2y</td><td>60,2%</td><td>7,5</td><td>0,0%</td></tr>
+   <tr><td>Son 1y</td><td>45,7%</td><td>7,5</td><td>0,0%</td></tr>
+   <tr><td rowspan="5">k=0.4</td><td>5y tam</td><td class="pos">189,5%</td><td>7,5</td><td>0,0%</td></tr>
+   <tr><td>Ayı 21–23</td><td class="neg">10,4%</td><td>7,5</td><td>0,0%</td></tr>
+   <tr><td>Topar 23–25</td><td class="pos">49,6%</td><td>7,5</td><td>0,0%</td></tr>
+   <tr><td>Son 2y</td><td>56,7%</td><td>7,5</td><td>0,0%</td></tr>
+   <tr><td>Son 1y</td><td>55,0%</td><td>7,5</td><td>0,0%</td></tr>
+   <tr><td rowspan="5">k=−0.4</td><td>5y tam</td><td>161,1%</td><td>7,5</td><td>0,0%</td></tr>
+   <tr><td>Ayı 21–23</td><td>15,7%</td><td>7,5</td><td>0,0%</td></tr>
+   <tr><td>Topar 23–25</td><td>38,8%</td><td>7,5</td><td>0,0%</td></tr>
+   <tr><td>Son 2y</td><td>65,9%</td><td>7,5</td><td>0,0%</td></tr>
+   <tr><td>Son 1y</td><td>46,6%</td><td>7,5</td><td>0,0%</td></tr>
+  </table>
+ </div>
+ <p class="sec" style="margin-top:10px">Kaynak: heat_budget_results.json (k=0.2, 0.4, −0.4, bütçe sabit, tüm 5 dönem). k=0.4 ayı döneminde ciddi düşüş; k=−0.4 tüm dönemlerde bazdan zayıf. Bütçe-nötr kontrol Deney 2'nin sıçramasının çoğunun nakit/tesadüf olduğunu gösterir.</p>
+</details>
+
+<div style="margin-top:40px;padding-top:20px;border-top:1px solid var(--cizgi);color:var(--sis);font-size:12px">
+ Deney verileri 20 Temmuz 2026 · Kaynak: qulla21-fundamental-lab/exp_out/ (fund_results.json, heat_results.json, heat_budget_results.json)
+</div>
+</body></html>

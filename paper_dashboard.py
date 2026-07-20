@@ -740,6 +740,7 @@ PAGE = """<!doctype html><html lang="tr"><head><meta charset="utf-8">
     <span class="muted" id="upd"></span>
     <button onclick="window.open('/rapor','_blank')" title="Deney iterasyonu: canlı baz vs önerilen varyant — ekonomist gözüyle detaylı karşılaştırma">📊 Rapor</button>
     <button onclick="window.open('/adaylar','_blank')" title="Canlı sistemin yanına çıkan aday alternatifler — basit dille karşılaştırma">🏁 Adaylar</button>
+    <button onclick="window.open('/yeni-deneyler','_blank')" title="20 Temmuz Qulla-21 deney sonuçları — fundamentaller, momentum, bütçe-nötr kontrol">🧪 Yeni Deneyler</button>
     <button onclick="loadAll()">↻ Yenile</button>
   </div>
 </header>
@@ -1146,6 +1147,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         self._send(200, fh.read(), "text/html; charset=utf-8")
                 else:
                     self._send(404, "Adaylar sayfası henüz üretilmedi", "text/plain; charset=utf-8")
+            elif path == "/yeni-deneyler":
+                # Qulla-21 yeni deneyler sayfası (20 Temmuz, fundamentaller/momentum/bütçe-nötr) — salt-okur
+                rp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dashboard_static", "yeni-deneyler.html")
+                if os.path.exists(rp):
+                    with open(rp, "rb") as fh:
+                        self._send(200, fh.read(), "text/html; charset=utf-8")
+                else:
+                    self._send(404, "Yeni deneyler sayfası henüz üretilmedi", "text/plain; charset=utf-8")
             elif path.startswith("/api/candles/"):
                 sym = path[len("/api/candles/"):].upper()
                 q = urllib.parse.parse_qs(self.path.split("?", 1)[1]) if "?" in self.path else {}
