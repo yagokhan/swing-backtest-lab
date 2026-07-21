@@ -99,7 +99,8 @@
 
 <div class="summary">
  <b>Sonuç:</b> Canlı sisteme yeni kural eklemedik. Mevcut Aday 3 değişmedi. <br>
- Runner için ATR 2.0 koruması araştırma adayı oldu; fakat getiri bedeli ve ileri-dönük doğrulama eksikliği nedeniyle yalnız paper-forward izlenecek.
+ Runner için ATR 2.0 koruması araştırma adayı oldu; fakat getiri bedeli ve ileri-dönük doğrulama eksikliği nedeniyle yalnız paper-forward izlenecek.<br>
+ <b>Deney 5 (21 Temmuz):</b> Runner'a <i>girişten</i> aktif sert taban ailesi denendi — <b>aday çıkmadı</b>. Ayrıca Deney 4'te "girişten aktif" diye tarif edilen kuralın aslında hiç test edilmemiş olduğu bulundu; gerçek hâli ölçüldüğünde ayı penceresinde getiriyi 21,3%'ten 4,5%'e düşürüyor.
 </div>
 
 <h2>Mevcut Sistem (Temel Durum)</h2>
@@ -163,6 +164,18 @@
   <div class="vals">+139,4%</div>
   <div class="track"><div class="fill" style="width:67%"></div></div>
   <div class="status"><span class="badge b-untrust">Paper aday</span></div>
+ </div>
+ <div class="bar rejected">
+  <div class="name">✗ Runner tabanı −1,5R</div>
+  <div class="vals">+182,3%</div>
+  <div class="track"><div class="fill" style="width:87%"></div></div>
+  <div class="status"><span class="badge b-reject">Komşusu yok</span></div>
+ </div>
+ <div class="bar rejected">
+  <div class="name">✗ Runner tabanı −1,0R</div>
+  <div class="vals">+113,7%</div>
+  <div class="track"><div class="fill" style="width:55%"></div></div>
+  <div class="status"><span class="badge b-reject">Ayıda çöktü</span></div>
  </div>
 </div>
 
@@ -299,6 +312,96 @@
   </table>
  </div>
  <p class="sec" style="margin-top:10px">İlk teknik stop 5 yıllık sonucu değiştirmedi. Breakeven 2/5, giriş+0.5R ise komşu sabit-stop ailesi tarafından doğrulanmadı. SPY&lt;SMA200 stres kuralı 0/5 risk penceresinde iyiydi.</p>
+</details>
+
+<h2 id="runner-floor">Deney 5: Runner'a <em>Giriş'ten</em> Aktif Felaket Tabanı</h2>
+<div class="card">
+ <p><b>Neden yeni bir deney?</b> Deney 4'ün kodunda "ilk teknik stop" varyantı, açıklamasında <i>"girişten itibaren aktif"</i> diye tarif edilmişti. Kod öyle çalışmıyordu: stop yalnızca A bacağı +2R'ye ulaştıktan <b>sonra</b> kuruluyor ve ancak ertesi seans devreye giriyordu. Yani <b>girişten aktif sert taban hiç test edilmemişti</b> — Deney 4'ün ölçtüğü şey +2R sonrası korumaydı.</p>
+ <p><b>Bu deneyin sorusu:</b> %40 runner, ilk yönetilen seanstan itibaren sabit bir "felaket tabanı" taşısaydı kontrolsüz aşağı kuyruk ne kadar azalırdı ve bedeli ne olurdu?</p>
+ <p><b>Test edilen aile (koşudan önce donduruldu):</b> taban = giriş −1,0R / −1,5R / −2,0R; her biri hem tek başına hem de +2R sonrası ATR 2.0 takip stopuyla birlikte (etkin stop = <i>max</i>(taban, ATR) — taban asla gevşemez). Ayrıca Deney 4'ün adayı "yalnız ATR 2.0" kontrol sütunu olarak yeniden üretildi ve <b>birebir aynı</b> sonucu verdi (+139,4% / −17,6%), yani ölçüm düzeneği sağlam.</p>
+ <p><b>Not:</b> −1,0R tabanı tam olarak pozisyonun ilk teknik stopudur — Deney 4'te yanlış tarif edilen kuralın gerçek hâli.</p>
+</div>
+
+<div class="note-box">
+ ⛔ <b>Karar: ADAY YOK.</b> Girişten aktif hiçbir taban, koşudan önce dondurulan sağlamlık kapısını geçemedi. Canlı Aday 3 değişmedi; runner hâlâ yalnız EMA21 kapanış kuralıyla çıkıyor.
+</div>
+
+<div class="row">
+ <div class="stat">
+  <div class="lbl">Gerçek İlk Stop (−1,0R)</div>
+  <div class="val">166,3 → 113,7%</div>
+  <div class="note">Ayı penceresinde 21,3 → 4,5%</div>
+ </div>
+ <div class="stat">
+  <div class="lbl">Runner'ın Erken Ölümü</div>
+  <div class="val">%55,4</div>
+  <div class="note">−1,0R'de B çıkışlarının payı tabana çarpma</div>
+ </div>
+ <div class="stat">
+  <div class="lbl">Gap'li Zararlı Çıkış</div>
+  <div class="val">0 → 21</div>
+  <div class="note">Taban gap riskini kaldırmıyor</div>
+ </div>
+ <div class="stat">
+  <div class="lbl">Komşu Doğrulaması</div>
+  <div class="val">0/2 aile</div>
+  <div class="note">Kapıyı geçen her ayar tek başına kaldı</div>
+ </div>
+</div>
+
+<details>
+ <summary>🔍 Deney 5 Detayı: Komşu Yanıtı Neden Elemeye Yol Açtı</summary>
+ <p class="sec">Güvenilir bir kuralda taban gevşedikçe sonucun da düzgün değişmesi beklenir. Ölçülen yanıt zikzaklı:</p>
+ <div class="table-wrap">
+  <table>
+   <tr><th>Aile</th><th>Taban</th><th>5y ROI</th><th>5y Max DD</th><th>Risk pencere</th><th>Medyan ROI koruma</th><th>En düşük koruma</th><th>Kapı</th></tr>
+   <tr><td rowspan="3">Yalnız taban</td><td>−1,0R</td><td class="neg">113,7%</td><td>−19,2%</td><td>1/5</td><td>75,6%</td><td class="neg">21,1%</td><td><span class="badge b-reject">Düştü</span></td></tr>
+   <tr><td>−1,5R</td><td class="pos">182,3%</td><td class="pos">−17,7%</td><td>4/5</td><td>98,6%</td><td>64,0%</td><td><span class="badge b-untrust">Geçti</span></td></tr>
+   <tr><td>−2,0R</td><td>179,4%</td><td>−19,5%</td><td>0/5</td><td>100,7%</td><td>89,2%</td><td><span class="badge b-reject">Düştü</span></td></tr>
+   <tr><td rowspan="3">Taban + ATR 2.0</td><td>−1,0R</td><td>153,8%</td><td>−18,6%</td><td>3/5</td><td>103,7%</td><td>80,8%</td><td><span class="badge b-reject">Düştü</span></td></tr>
+   <tr><td>−1,5R</td><td class="neg">117,7%</td><td class="pos">−17,1%</td><td>3/5</td><td>88,2%</td><td class="neg">39,9%</td><td><span class="badge b-reject">Düştü</span></td></tr>
+   <tr><td>−2,0R</td><td>138,9%</td><td>−17,6%</td><td>4/5</td><td>85,5%</td><td>64,3%</td><td><span class="badge b-untrust">Geçti</span></td></tr>
+   <tr><td>Kontrol</td><td>yok (yalnız ATR2)</td><td>139,4%</td><td>−17,6%</td><td>1/5</td><td>95,1%</td><td>63,8%</td><td><span class="badge b-ok">Deney 4 ile birebir</span></td></tr>
+  </table>
+ </div>
+ <p class="sec" style="margin-top:10px">Baz: +166,3% · −19,6%. Her iki ailede de kapıyı geçen tek ayar var ve <b>hemen yanındaki iki ayar düşüyor</b>. Üstelik "yalnız taban" ailesinde geçen −1,5R, kendi ailesinin son-2y penceresindeki <b>en kötü</b> üyesi (+52,0%; komşuları +84,0% ve +94,1%). Bu düzgün bir etki değil, pencereye özel bir hizalanma; bu yüzden aday ilan edilmedi.</p>
+</details>
+
+<details>
+ <summary>⚠️ Sert Taban Kuyruğu Kesmiyor: Gap Kanıtı</summary>
+ <p class="sec">Taban bir emirdir, garanti değil. Fiyat gece boyunca tabanın altına açılırsa dolum tabandan değil <b>açılıştan</b> olur.</p>
+ <div class="table-wrap">
+  <table>
+   <tr><th>Kural</th><th>Hisse</th><th>Tarih</th><th>Taban fiyatı</th><th>Gerçekleşen dolum</th><th>Hedef R</th><th>Gerçekleşen R</th></tr>
+   <tr><td>Taban −1,5R</td><td>PANW</td><td>2024-02-21</td><td>171,63</td><td>137,39</td><td>−1,50R</td><td class="neg">−6,27R</td></tr>
+   <tr><td>Taban −2,0R</td><td>PANW</td><td>2024-02-21</td><td>168,05</td><td>137,39</td><td>−2,00R</td><td class="neg">−6,27R</td></tr>
+   <tr><td>Taban −1,0R</td><td>TER</td><td>2026-04-29</td><td>355,76</td><td>314,07</td><td>−1,00R</td><td class="neg">−2,67R</td></tr>
+  </table>
+ </div>
+ <p class="sec" style="margin-top:10px">Gap kaynaklı zararlı çıkış sayısı tabansız bazda <b>0</b> iken −1,0R'de <b>21</b>, −1,5R'de <b>12</b>, −2,0R'de <b>9</b>. En kötü tek runner zararı bazda −7,19R idi; −1,5R ve −2,0R tabanlarıyla yalnızca −6,27R'ye indi. Yani felaket kuyruğu <b>kaldırılmadı</b>, biraz kısaldı. −1,0R'nin en kötüsü (−2,67R) daha iyi görünüyor ama bu daha iyi koruma değil: o taban runner'ların %55,4'ünü erkenden öldürdüğü için pozisyonlar büyük gap gününe kadar zaten hayatta kalmıyor.</p>
+</details>
+
+<details>
+ <summary>🧪 Ölçüt Neden Sıkılaştırıldı (ve Deney 4 ile farkı)</summary>
+ <p class="sec">Sert taban, sol kuyruğu <b>tanımı gereği</b> budar: kuyruk ölçütü altı taban varyantının <b>hepsinde 5/5</b> iyileşti. Dolayısıyla "kuyruk düzeldi" demek hiçbir bilgi taşımıyor. Bu yüzden bu deneyde bir pencerenin "risk iyileşti" sayılması için <b>iki şart birden</b> arandı: (1) runner alt-%5 kuyruğu <b>ve</b> (2) portföy Max DD. Deney 4'ün "üç ölçütten ikisi" kuralı ise aynı verilerle <b>iki varyantı aday ilan ederdi</b> (−1,0R+ATR2 ve −2,0R+ATR2) — üstelik tam ortadaki −1,5R+ATR2 çökmüş olduğu hâlde. Bir ailenin iki ucundan "komşu istikrarı" üretmek düzgün bir parametre yanıtında mümkün değildir.</p>
+ <p class="sec">Aynı sıkı kapı, Deney 4'ün araştırma adayı ATR 2.0'ı da geçirmez (1/5). Bu, Deney 4'ün yanlış olduğu anlamına gelmez; kapı tanımının değiştiğini gösterir. Her iki kapının sonucu da rapor dosyasında yan yana duruyor.</p>
+</details>
+
+<details>
+ <summary>📡 Neden Haber/Sentiment Sinyali Kullanılmadı</summary>
+ <p class="sec">İstenen şey bir sentiment sağlayıcısı ya da benzeri bir mekanizmaydı. Güvenilir <b>nokta-zamanlı</b> haber/sentiment arşivi bu hesapta elde edilemedi. Uydurulmuş veya geriye dönük revize edilmiş skorla backtest yapmak lookahead üreteceği için reddedildi. Ölçülen durum:</p>
+ <div class="table-wrap">
+  <table>
+   <tr><th>Sağlayıcı / uç nokta</th><th>Sonuç</th></tr>
+   <tr><td>FMP <code>news/stock</code> (tarih aralıklı)</td><td class="neg">HTTP 402 — abonelik kapsamı dışı</td></tr>
+   <tr><td>FMP <code>news/stock-latest</code></td><td>HTTP 200 — ama yalnız güncel, geçmiş yok</td></tr>
+   <tr><td>FMP <code>historical/social-sentiment</code></td><td class="neg">HTTP 403 — legacy, kapatılmış</td></tr>
+   <tr><td>Tiingo News API</td><td class="neg">HTTP 403 — hesapta yetki yok</td></tr>
+   <tr><td>Alpha Vantage NEWS_SENTIMENT</td><td class="neg">Anahtar yok</td></tr>
+   <tr><td>Finnhub Company News (ücretsiz)</td><td class="neg">Geçmiş 1 yıl — 5 yıllık batarya için yetersiz</td></tr>
+  </table>
+ </div>
+ <p class="sec" style="margin-top:10px">Bu yüzden aynı amaç (kontrolsüz aşağı kuyruğu kesmek) ek veri sağlayıcısı olmadan, doğrudan fiyatla uygulanabilir sert taban ailesiyle sınandı. Gerçek bir nokta-zamanlı arşiv bulunmadıkça bu dosya kapalıdır; yeni taban değeri aramak (parametre madenciliği) zikzaklı yanıt nedeniyle değersizdir.</p>
 </details>
 
 <h2>Neden Bu İyi Haber?</h2>
