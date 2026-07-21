@@ -100,7 +100,8 @@
 <div class="summary">
  <b>Sonuç:</b> Canlı sisteme yeni kural eklemedik. Mevcut Aday 3 değişmedi. <br>
  Runner için ATR 2.0 koruması araştırma adayı oldu; fakat getiri bedeli ve ileri-dönük doğrulama eksikliği nedeniyle yalnız paper-forward izlenecek.<br>
- <b>Deney 5 (21 Temmuz):</b> Runner'a <i>girişten</i> aktif sert taban ailesi denendi — <b>aday çıkmadı</b>. Ayrıca Deney 4'te "girişten aktif" diye tarif edilen kuralın aslında hiç test edilmemiş olduğu bulundu; gerçek hâli ölçüldüğünde ayı penceresinde getiriyi 21,3%'ten 4,5%'e düşürüyor.
+ <b>Deney 5 (21 Temmuz):</b> Runner'a <i>girişten</i> aktif sert taban ailesi denendi — <b>aday çıkmadı</b>. Ayrıca Deney 4'te "girişten aktif" diye tarif edilen kuralın aslında hiç test edilmemiş olduğu bulundu; gerçek hâli ölçüldüğünde ayı penceresinde getiriyi 21,3%'ten 4,5%'e düşürüyor.<br>
+ <b>Deney 6–9 (21 Temmuz):</b> Dört yapısal fikir daha denendi — sermaye geri kazanımı, runner maruziyet tavanı, kademeli B aktivasyonu, gece boşluğu/bilanço riskine göre giriş boyutu. <b>Hiçbiri aday çıkmadı.</b> Karşılığında <a href="#kok-teshis" style="color:var(--kar)">kök teşhis</a> bulundu: zararın <b>%94,3'ü pozisyon +2R'ye ulaşmadan</b> oluşuyor ve kuyruğu üreten isimler kârı üreten isimlerle <b>aynı</b>.
 </div>
 
 <h2>Mevcut Sistem (Temel Durum)</h2>
@@ -403,6 +404,148 @@
  </div>
  <p class="sec" style="margin-top:10px">Bu yüzden aynı amaç (kontrolsüz aşağı kuyruğu kesmek) ek veri sağlayıcısı olmadan, doğrudan fiyatla uygulanabilir sert taban ailesiyle sınandı. Gerçek bir nokta-zamanlı arşiv bulunmadıkça bu dosya kapalıdır; yeni taban değeri aramak (parametre madenciliği) zikzaklı yanıt nedeniyle değersizdir.</p>
 </details>
+
+<h2 id="kok-teshis">🔬 Kök Teşhis: Zarar Nerede Oluşuyor?</h2>
+<div class="card good">
+ <p>Deney 4–5 runner'a çıkış kuralı eklemeye çalıştı ve ikisi de elendi. Deney 6 <b>nedenini ölçtü</b> ve bu, serinin en değerli çıktısı oldu:</p>
+ <p style="font-size:15px;margin:14px 0"><b>Baz koşuda en kötü %5 runner kaybının <span class="neg">%100'ü</span>, toplam runner zarar dolarının <span class="neg">%94,3'ü</span> pozisyon +2R'ye <em>hiç ulaşmadan</em> oluşuyor.</b></p>
+ <p>Yani sorun runner yönetimi <b>değil</b>. Runner, hasarın yalnızca <i>defterlendiği</i> yer. Şimdiye kadarki tüm koruma fikirleri (+2R sonrası stoplar, sert taban, sermaye geri kazanımı, maruziyet tavanı) yapıları gereği bu bölgeye <b>erişemiyor</b> — hepsi +2R anında veya sonrasında devreye giriyor. Deney 7–9 bu yüzden <b>+2R öncesi</b> bölgeyi hedefledi.</p>
+</div>
+
+<h2 id="runner-struct">Deney 6: Sermaye Geri Kazanımı + Runner Maruziyet Tavanı</h2>
+<div class="card">
+ <p><b>Fikir A (sermaye geri kazanımı):</b> A bacağı +2R'ye ulaştığı dolumda, pozisyonun orijinal maliyetini + komisyon/kaymayı geri getirecek kadar hisse sat. Kalan hisseler tanımı gereği <b>kâr-fonlu</b> olur.</p>
+ <p><b>Fikir B (maruziyet tavanı):</b> COMBO'nun <code>free_runner_slots</code> kuralı, A bacağı çıkmış pozisyonların slot işgal etmemesini sağlıyor — bu da portföyde <b>sınırsız birikebilen</b> "yalnız-runner" maruziyeti yaratıyor. Tavan bunu özkaynağın sabit yüzdesiyle sınırlar.</p>
+</div>
+
+<div class="note-box">
+ ⛔ <b>Karar: ADAY YOK.</b> Her iki mekanizma da <i>çalıştı</i> ama işe yaramadı. Geri kazanım %100'de medyan geri gelen oran tam <b>1,000</b>; runner maruziyeti p95 %19,1 → %5,5, maks %39,2 → %15,8. Tavanlar 5 yılda 54/35/14 kez tetiklendi. Buna rağmen <b>Max DD çoğu pencerede kötüleşti</b>.
+</div>
+
+<div class="row">
+ <div class="stat"><div class="lbl">Tavan %10 · Max DD</div><div class="val">−19,6 → <span class="neg">−24,8%</span></div><div class="note">Daha derin, daha iyi değil</div></div>
+ <div class="stat"><div class="lbl">Runner Maruziyeti</div><div class="val">%39,2 → %15,8</div><div class="note">Mekanizma çalıştı</div></div>
+ <div class="stat"><div class="lbl">İşlem Sayısı</div><div class="val">482 → 533–639</div><div class="note">Sermaye emekliye ayrılmadı</div></div>
+ <div class="stat"><div class="lbl">Sonuç</div><div class="val">0 aday</div><div class="note">6 varyantın hiçbiri</div></div>
+</div>
+
+<details>
+ <summary>🔍 Deney 6 Detayı: Neden Max DD Kötüleşti?</summary>
+ <div class="table-wrap"><table>
+  <tr><th>Varyant</th><th>5y ROI</th><th>Max DD</th><th>Risk pencere</th><th>Karar</th></tr>
+  <tr><td>Baz</td><td>166,3%</td><td>−19,6%</td><td>—</td><td><span class="badge b-ok">Canlı</span></td></tr>
+  <tr><td>Geri kazanım %80</td><td>180,4%</td><td class="pos">−17,2%</td><td>2/5</td><td><span class="badge b-reject">Düştü</span></td></tr>
+  <tr><td>Geri kazanım %100</td><td class="neg">112,1%</td><td>−19,3%</td><td>2/5</td><td><span class="badge b-reject">Düştü</span></td></tr>
+  <tr><td>Geri kazanım %120</td><td>184,1%</td><td class="neg">−20,6%</td><td>0/5</td><td><span class="badge b-reject">Düştü</span></td></tr>
+  <tr><td>Tavan %10</td><td>174,4%</td><td class="neg">−24,8%</td><td>1/5</td><td><span class="badge b-reject">Düştü</span></td></tr>
+  <tr><td>Tavan %15</td><td>227,1%</td><td>−18,7%</td><td>2/5</td><td><span class="badge b-reject">Düştü</span></td></tr>
+  <tr><td>Tavan %20</td><td>136,9%</td><td>−19,8%</td><td>0/5</td><td><span class="badge b-reject">Düştü</span></td></tr>
+ </table></div>
+ <p class="sec" style="margin-top:10px">Neden: serbest kalan sermaye <b>riski emekliye ayırmıyor, yeniden konuşlandırıyor</b>. İşlem sayısı 482'den 533–639'a çıktı, sermaye kullanımı ~%73–77 sabit kaldı. Runner maruziyeti, daha fazla eşzamanlı <b>tam riskli yeni girişle</b> takas edilmiş oluyor. Ayrıca komşu yanıtı yine zikzak: tavan ailesinde 5y ROI 174,4 → <b>227,1</b> → 136,9; ortadaki tek başına aykırı değer.</p>
+</details>
+
+<h2 id="runner-stage">Deney 7: Kademeli B Aktivasyonu (Anti-Martingale Giriş)</h2>
+<div class="card">
+ <p><b>Fikir:</b> Canlı kural girişte pozisyonun tamamını alıyor — %60 A + %40 B. Yani B doları, hisse <b>hiçbir şey kanıtlamadan</b> riske giriyor. Kademeli aktivasyonda B girişte alınmaz; bütçesi rezerve edilir ve ancak fiyat <code>giriş + T×risk</code> seviyesini kanıtlarsa devreye girer (T = +0,5R / +1,0R / +1,5R).</p>
+ <p><b>Hipotez (anti-martingale):</b> kaybedenler tam tahsisi hiç almaz, kazananlar alır.</p>
+</div>
+
+<div class="note-box">
+ ⛔ <b>Karar: ADAY YOK — hipotez mekanik olarak çürüdü.</b> Aktivasyon oranı <b>%92,8–98,5</b>. Filtre neredeyse hiçbir şeyi elemiyor; oysa baz runner bacaklarının yalnız ~%35,8'i kârda kapanıyor. Nedeni yapısal: <b>A bacağının stopu yok</b>, pozisyonlar süresizce yaşıyor, bu yüzden önce derin zarara geçen pozisyonlar bile eninde sonunda tetiğe değiyor.
+</div>
+
+<details>
+ <summary>🔍 Deney 7 Detayı: Max DD İyileşti — Ama Bu Alfa Değil</summary>
+ <div class="table-wrap"><table>
+  <tr><th>Varyant</th><th>5y ROI</th><th>Max DD</th><th>Calmar</th><th>DD iyi</th><th>Medyan ROI koruma</th><th>Karar</th></tr>
+  <tr><td>Baz</td><td>166,3%</td><td>−19,6%</td><td>8,48</td><td>—</td><td>—</td><td><span class="badge b-ok">Canlı</span></td></tr>
+  <tr><td>+0,5R</td><td>122,9%</td><td class="neg">−21,1%</td><td class="neg">5,82</td><td>4/5</td><td>80,7%</td><td><span class="badge b-reject">Düştü</span></td></tr>
+  <tr><td>+1,0R</td><td>115,6%</td><td class="pos">−18,4%</td><td class="neg">6,30</td><td>4/5</td><td>75,0%</td><td><span class="badge b-reject">Düştü</span></td></tr>
+  <tr><td>+1,5R</td><td>87,7%</td><td class="pos">−16,4%</td><td class="neg">5,36</td><td>5/5</td><td>55,1%</td><td><span class="badge b-reject">Düştü</span></td></tr>
+ </table></div>
+ <p class="sec" style="margin-top:10px">Max DD tutarlı biçimde iyileşti (bu seride bunu başaran ilk mekanizma) <b>ama bedeli fazla</b>: +1,5R'de %−47 ROI karşılığında yalnız %−16 daha sığ DD. <b>Calmar her varyantta bazdan kötü</b> (8,48 → 5,36/5,82/6,30). Bu alfa değil, sadece daha düşük kaldıraç — aynı etki daha küçük lot ile bedava elde edilir. Bu bulgu üzerine sonraki deneylere <b>Calmar ≥ %100</b> kapısı eklendi.</p>
+ <div class="note-box" style="margin-top:12px">
+  🧹 <b>Geçersiz ara sonuç açıklaması:</b> Bu deneyin ilk bataryası, ertelenen B bütçesini hem nakde geri ekleyip hem rezerve yazan bir <b>çift-sayım hatası</b> içeriyordu; özkaynağı şişirip aynı parayı yeni girişe tekrar harcanabilir yapıyordu — yani deneyin engellemek için kurulduğu karıştırıcının ta kendisi. Ürettiği imkânsız yüksek getiri rakamları <b>tümüyle geçersizdir ve atılmıştır</b>; hiçbir yerde alıntılanmamalıdır. Yukarıdaki tüm sayılar yalnızca düzeltilmiş koşudandır. Hata, koşu sonu <code>rezerv==0</code> assert'i ve sonradan eklenen <code>nakit+rezerv+yatırılan=başlangıç</code> korunum değişmezi ile yakalanmıştır; sonuç bağımsız tekrar koşusunda 160 alanın 160'ında birebir aynı çıkmıştır.
+ </div>
+</details>
+
+<h2 id="gap-risk">Deney 8: Gece Boşluğu Riskine Göre Giriş Boyutu</h2>
+<div class="card">
+ <p><b>Fikir:</b> Zarar fiyat <b>gece atladığı</b> için oluşuyor ve ne stop ne kademeli giriş buna emir koyabilir (ikisi de bar-içi). Gece boşluğunun önüne emir konulamaz — ama <b>o riske ne kadar dolar maruz bırakıldığı</b> girişte seçilebilir.</p>
+ <p><b>Skor (tamamen nedensel):</b> <code>gap = Açılış / önceki Kapanış − 1</code>; GRS = bu boşluğun 250 seanslık %5 yüzdeliği, <b>1 seans kaydırılmış</b> — yani giriş günü hiçbir veri kullanılmıyor. Sıçrama eğilimli tercilde pozisyon küçültülür.</p>
+ <p><b>Isı deneyinin tekrarı değil:</b> ısı deneyleri ATR (gün-içi oynaklık) kullanmıştı; bu skor gece boşluğunun sol kuyruğu. Kesitsel korelasyon <b>rho = 0,735</b> (&lt;0,90 eşiği) → ayrı faktör.</p>
+</div>
+
+<div class="note-box">
+ ⛔ <b>Karar: ADAY YOK — skor tahmin ediyor, ama kesinti kazandıranı kesiyor.</b>
+</div>
+
+<details>
+ <summary>✅ Skor Gerçekten Tahmin Ediyor (nedensel ön kapı)</summary>
+ <p class="sec">Giriş-günü tercili → <b>gelecek</b> 20 seansta gerçekleşen en kötü gece boşluğu (medyan):</p>
+ <div class="table-wrap"><table>
+  <tr><th>Tercil</th><th>Gelecek 20s en kötü boşluk</th><th>Gelecek 60s</th></tr>
+  <tr><td>T1 (en sakin)</td><td class="pos">−1,516%</td><td>−2,7%</td></tr>
+  <tr><td>T2</td><td>−1,963%</td><td>−3,4%</td></tr>
+  <tr><td>T3 (en sıçrayan)</td><td class="neg">−3,390%</td><td>−5,4%</td></tr>
+ </table></div>
+ <p class="sec" style="margin-top:10px">Monoton, <b>5/5 pencerede</b> aynı yönde. Skor işini yapıyor.</p>
+</details>
+
+<details>
+ <summary>🔍 Deney 8 Detayı: Neden Yine de Başarısız — ve Negatif Kontrolün Söyledikleri</summary>
+ <div class="table-wrap"><table>
+  <tr><th>Varyant</th><th>5y ROI</th><th>Max DD</th><th>Calmar</th><th>Medyan Calmar koruma</th><th>Karar</th></tr>
+  <tr><td>Baz</td><td>166,3%</td><td>−19,6%</td><td>8,48</td><td>—</td><td><span class="badge b-ok">Canlı</span></td></tr>
+  <tr><td>T3 kesinti %25</td><td>111,3%</td><td class="pos">−16,4%</td><td class="neg">6,78</td><td>80,0%</td><td><span class="badge b-reject">Düştü</span></td></tr>
+  <tr><td>T3 kesinti %50</td><td>66,1%</td><td class="pos">−11,9%</td><td class="neg">5,54</td><td>65,3%</td><td><span class="badge b-reject">Düştü</span></td></tr>
+  <tr><td>Kademeli 50/25/0</td><td>53,5%</td><td class="pos">−9,8%</td><td class="neg">5,44</td><td>53,2%</td><td><span class="badge b-reject">Düştü</span></td></tr>
+  <tr><td><b>NEGATİF KONTROL</b> (ters yön)</td><td>162,6%</td><td class="pos">−16,4%</td><td class="pos">9,94</td><td>113,2%</td><td><span class="badge b-untrust">Kontrol kolu</span></td></tr>
+ </table></div>
+ <p class="sec" style="margin-top:10px"><b>En öğretici sonuç:</b> kesinti <i>ters</i> yöne uygulandığında (en sakin isimleri küçült, sıçrayanlarda tam kal) sonuç bazdan iyi çıktı. Yani kazanç, skorun "riskli" tarafından kaçmaktan değil, <b>sıçrayan isimlerde tam kalmaktan</b> geliyor. Momentum stratejisinde <b>kuyruk ile kâr motoru aynı isimlerde</b>.</p>
+ <p class="sec"><b>Bu bir aday değildir:</b> negatif kontrol, ön-kayıtta aday yönü olarak tanımlanmadı, risk penceresi eşiğin altında (3/5) ve tek koldur. Hipotez üretir, sonuç üretmez — üzerine <b>hiçbir parametre araması yapılmadı</b>.</p>
+</details>
+
+<h2 id="earn-risk">Deney 9: Kazanç (Bilanço) Olay Kapısı — Orakl Üst Sınır</h2>
+<div class="card">
+ <p><b>Fikir:</b> Kuyruk belirli, takvime bağlı bir olayda mı yoğunlaşıyor? Öyleyse çözüm ismi sürekli küçültmek değil, o birkaç günü yönetmektir. Kural: sonraki bilanço açıklamasına ≤5 (veya ≤10) seans varsa yeni pozisyon açma; ya da yarım aç.</p>
+ <p><b>Veri:</b> FMP <code>stable/earnings</code> — 373 sembolün 367'si, 5 yıllık pencerede 7.471 açıklama.</p>
+</div>
+
+<div class="note-box">
+ ⚠️ <b>Bu bir ORAKL ÜST SINIR teşhisidir, dağıtılabilir bir backtest değildir.</b> FMP'nin verdiği tarih <b>bugün bilinen gerçekleşmiş</b> açıklama tarihidir; geçmişte o takvimin <i>ne olarak bilindiğine</i> dair nokta-zamanlı anlık görüntü elimizde <b>yok</b>. Dolayısıyla "giriş anında bu tarih biliniyor muydu?" sorusu veriyle doğrulanamaz (tarih kayması + henüz duyurulmamış olma). Sonuç asimetrik okunur: <b>düşerse kesin olumsuz</b>, geçerse yalnızca üst sınır.
+</div>
+
+<details>
+ <summary>✅ Mekanizma Doğrulandı: Kuyruk Gerçekten Bilanço Günlerinde</summary>
+ <div class="table-wrap"><table>
+  <tr><th>Gün tipi</th><th>n</th><th>p05 boşluk</th><th>p01 boşluk</th></tr>
+  <tr><td>Bilanço tepki günü</td><td>14.794</td><td class="neg">−5,899%</td><td class="neg">−12,461%</td></tr>
+  <tr><td>Diğer günler</td><td>464.405</td><td>−1,528%</td><td>−3,056%</td></tr>
+ </table></div>
+ <p class="sec" style="margin-top:10px">Sol kuyruk <b>3,86 kat</b> daha kalın. "+2R öncesi kuyruk" gerçekten büyük ölçüde bilanço günlerinde yoğunlaşıyor.</p>
+</details>
+
+<div class="note-box">
+ ⛔ <b>Karar: ADAY YOK — ve bu kesin bir olumsuz.</b> Kural, gerçekte sahip olamayacağı bir bilgiyle (orakl) çalıştığı hâlde kapıyı geçemedi: ≤5 seans kapısı risk 0/5 · medyan Calmar koruma %72,8; ≤10 seans 0/5 · %69,3; yarım açma 1/5 · %97,2. Negatif kontrol beklendiği gibi çöktü (%43,6). Orakl avantajıyla bile başarısız olan bir kuralın, gerçek bilgiyle daha iyi olması beklenemez.
+</div>
+
+<h2 id="data-yok">📡 Veri Rotaları: Neyin Erişimi Yok?</h2>
+<div class="card note">
+ <p>Bu deneylerin bazıları haber/sentiment veya opsiyon verisi isteseydi daha güçlü olurdu. Mevcut hesapla ölçülen erişim durumu — <b>hiçbir veri uydurulmadı, bugünün sınıflandırmaları geçmişe taşınmadı</b>:</p>
+ <div class="table-wrap"><table>
+  <tr><th>Kaynak / uç nokta</th><th>Durum</th></tr>
+  <tr><td>FMP <code>news/stock</code> (tarih aralıklı)</td><td class="neg">HTTP 402 — abonelik dışı</td></tr>
+  <tr><td>FMP <code>news/press-releases</code> (tarih aralıklı)</td><td class="neg">HTTP 402 — kısıtlı uç nokta</td></tr>
+  <tr><td>Tiingo News API</td><td class="neg">HTTP 403 — hesapta yetki yok</td></tr>
+  <tr><td>Alpha Vantage NEWS_SENTIMENT · Finnhub</td><td class="neg">Anahtar yok</td></tr>
+  <tr><td>FMP opsiyon zinciri / tarihsel opsiyon</td><td class="neg">HTTP 404 (boş) · 403 (legacy)</td></tr>
+  <tr><td>Tiingo opsiyon fiyatları</td><td class="neg">HTTP 404 — mevcut değil</td></tr>
+  <tr><td>FMP <code>stable/earnings</code> (bilanço takvimi)</td><td class="pos">HTTP 200 — erişilebilir ✓</td></tr>
+ </table></div>
+ <p style="margin-top:12px"><b>DATA YOK — sentiment:</b> güvenilir nokta-zamanlı 5 yıllık haber/sentiment arşivi elde edilemedi. Uydurulmuş veya geriye dönük revize edilmiş skorla backtest yapmak lookahead üreteceği için <b>reddedildi</b>.</p>
+ <p><b>DATA YOK — opsiyon:</b> koruyucu put / collar backtesti için gereken tarihsel opsiyon zinciri (prim, spread, vade) <b>hiçbir sağlayıcıda erişilebilir değil</b>. Opsiyon fiyatı <b>uydurulmadı</b>; bu nedenle sigorta deneyi hiç kurulmadı.</p>
+</div>
 
 <h2>Neden Bu İyi Haber?</h2>
 <div class="card good">
