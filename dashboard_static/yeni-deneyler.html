@@ -93,13 +93,13 @@
  }
 </style></head><body>
 <header>
- <h1>🧪 Qulla-21 Yeni Deneyler<span class="alt">20 Temmuz 2026</span></h1>
+ <h1>🧪 Qulla-21 Yeni Deneyler<span class="alt">21 Temmuz 2026</span></h1>
  <button class="back" onclick="location.href='/'">← Geri</button>
 </header>
 
 <div class="summary">
- <b>Sonuç:</b> Yeni kural eklemedik. Mevcut Aday 3 hâlâ en sağlam yöntem. <br>
- Deneyler bazı dönemlerde iyi görünse de farklı dönemlerde aynı başarıyı göstermedi; bu yüzden canlıya alınmadı.
+ <b>Sonuç:</b> Canlı sisteme yeni kural eklemedik. Mevcut Aday 3 değişmedi. <br>
+ Runner için ATR 2.0 koruması araştırma adayı oldu; fakat getiri bedeli ve ileri-dönük doğrulama eksikliği nedeniyle yalnız paper-forward izlenecek.
 </div>
 
 <h2>Mevcut Sistem (Temel Durum)</h2>
@@ -132,7 +132,7 @@
  </div>
 </div>
 
-<h3>Sonuçları Karşılaştır: Dört Yaklaşım</h3>
+<h3>Sonuçları Karşılaştır: Ana Yaklaşımlar</h3>
 <div class="card" style="background:var(--defter);padding:20px">
  <div class="bar kept">
   <div class="name">✓ Mevcut (Aday 3)</div>
@@ -157,6 +157,12 @@
   <div class="vals">+189,5%</div>
   <div class="track"><div class="fill" style="width:91%"></div></div>
   <div class="status"><span class="badge b-reject">2/5 iyi</span></div>
+ </div>
+ <div class="bar untrusted">
+  <div class="name">⚠ Runner ATR 2.0</div>
+  <div class="vals">+139,4%</div>
+  <div class="track"><div class="fill" style="width:67%"></div></div>
+  <div class="status"><span class="badge b-untrust">Paper aday</span></div>
  </div>
 </div>
 
@@ -228,6 +234,71 @@
   </table>
  </div>
  <p class="sec" style="margin-top:10px">Karar: 2/5 dönem iyi; ortadaki ayı döneminde ciddi düşüş. Gelecek için güvenilir değil.</p>
+</details>
+
+<h2 id="runner-stop">Deney 4: %40 Runner İçin Koruma Stopu</h2>
+<div class="card">
+ <p><b>Gerçek durum:</b> Pozisyonun %60'ı +2R hedefinde çıkar. Kalan %40 runner'ın ortak sert stopu yoktur; yalnız fiyat 21 günlük üstel ortalamanın altında <b>kapanınca</b> satılır.</p>
+ <p><b>Ölçüm:</b> 5 yılda A bacağı 225 kez +2R'ye ulaştı; bu anların 99'unda runner hâlâ açıktı. Baseline runner bacakları toplam kârın %21,9'unu (+$36.399) üretti.</p>
+ <p><b>Fikir:</b> A bacağı +2R'ye ulaştıktan sonra runner'a, o güne kadar bilinen tepe eksi 2 ATR seviyesinde takip stopu koy. Bugünün tepe/ATR bilgisi yalnız ertesi günün stopunda kullanılır; stop altına gap varsa açılıştan doldurulur.</p>
+</div>
+
+<div class="note-box">
+ ⚠️ <b>Karar: Araştırma adayı, canlı değil.</b> ATR 2.0, beş risk penceresinin tamamında runner kuyruğu/geri verme bileşik ölçüsünü iyileştirdi. Fakat toplam Max DD yalnız 3/5 pencerede iyileşti ve 2021–23 ROI'si bazın yalnız %63,8'ini korudu. Yeni parametre aramak yerine kural dondurulup paper-forward izlenmeli.
+</div>
+
+<div class="row">
+ <div class="stat">
+  <div class="lbl">5y Max DD</div>
+  <div class="val">−19,6 → −17,6%</div>
+  <div class="note">2,0 puan daha sığ</div>
+ </div>
+ <div class="stat">
+  <div class="lbl">Runner Alt %5 Kuyruk</div>
+  <div class="val">−3,54 → −3,13R</div>
+  <div class="note">En kötü dilim iyileşti</div>
+ </div>
+ <div class="stat">
+  <div class="lbl">P90 Geri Verme</div>
+  <div class="val">18,5 → 10,8%</div>
+  <div class="note">Tepe kârından çıkışa</div>
+ </div>
+ <div class="stat">
+  <div class="lbl">5y ROI Bedeli</div>
+  <div class="val">166,3 → 139,4%</div>
+  <div class="note">−26,9 puan</div>
+ </div>
+</div>
+
+<details>
+ <summary>🔍 Deney 4 Detayı: ATR 2.0 Beş Pencere</summary>
+ <div class="table-wrap">
+  <table>
+   <tr><th>Dönem</th><th>Baz ROI</th><th>ATR 2.0 ROI</th><th>Baz DD</th><th>ATR DD</th><th>Alt %5 R</th><th>P90 geri verme</th></tr>
+   <tr><td>5y tam</td><td>166,3%</td><td>139,4%</td><td>−19,6%</td><td class="pos">−17,6%</td><td>−3,13R</td><td class="pos">10,8%</td></tr>
+   <tr><td>Ayı 21–23</td><td>21,3%</td><td class="neg">13,6%</td><td>−17,2%</td><td class="pos">−15,4%</td><td>−2,43R</td><td class="pos">7,3%</td></tr>
+   <tr><td>Topar 23–25</td><td>43,3%</td><td>42,2%</td><td>−18,4%</td><td class="neg">−19,5%</td><td>−3,15R</td><td class="pos">10,3%</td></tr>
+   <tr><td>Son 2y</td><td>81,3%</td><td>80,4%</td><td>−16,5%</td><td class="neg">−18,6%</td><td>−2,86R</td><td class="pos">10,8%</td></tr>
+   <tr><td>Son 1y</td><td>57,4%</td><td>54,6%</td><td>−12,5%</td><td class="pos">−10,4%</td><td>−3,02R</td><td class="pos">10,9%</td></tr>
+  </table>
+ </div>
+ <p class="sec" style="margin-top:10px">ATR 2.0 beş pencerede medyan ROI'nin %95,1'ini korudu; en düşük korunma 2021–23'te %63,8. PF 5 yılda 3,67'den 3,28'e indi.</p>
+</details>
+
+<details>
+ <summary>🧭 Komşu Ayarlar ve Diğer Koruma Aileleri</summary>
+ <div class="table-wrap">
+  <table>
+   <tr><th>Kural</th><th>5y ROI</th><th>Max DD</th><th>Alt %5 R</th><th>P90 geri verme</th><th>Karar</th></tr>
+   <tr><td>EMA21 kontrol</td><td>166,3%</td><td>−19,6%</td><td>−3,54R</td><td>18,5%</td><td><span class="badge b-ok">Canlı baz</span></td></tr>
+   <tr><td>ATR 2.0</td><td>139,4%</td><td>−17,6%</td><td>−3,13R</td><td>10,8%</td><td><span class="badge b-untrust">Paper aday</span></td></tr>
+   <tr><td>ATR 2.5</td><td>200,4%</td><td>−16,1%</td><td>−2,78R</td><td>13,1%</td><td><span class="badge b-reject">Son 1y tutmadı</span></td></tr>
+   <tr><td>ATR 3.0</td><td>173,0%</td><td>−20,4%</td><td>−3,23R</td><td>15,8%</td><td><span class="badge b-reject">Son 2y çöktü</span></td></tr>
+   <tr><td>EMA10</td><td>189,0%</td><td>−18,6%</td><td>−2,64R</td><td>16,9%</td><td><span class="badge b-reject">EMA15 doğrulamadı</span></td></tr>
+   <tr><td>A200 stres</td><td>159,7%</td><td>−17,5%</td><td>−3,43R</td><td>17,9%</td><td><span class="badge b-reject">2/5 risk iyi</span></td></tr>
+  </table>
+ </div>
+ <p class="sec" style="margin-top:10px">İlk teknik stop 5 yıllık sonucu değiştirmedi. Breakeven 2/5, giriş+0.5R ise komşu sabit-stop ailesi tarafından doğrulanmadı. SPY&lt;SMA200 stres kuralı 0/5 risk penceresinde iyiydi.</p>
 </details>
 
 <h2>Neden Bu İyi Haber?</h2>
@@ -327,6 +398,6 @@
 </details>
 
 <div style="margin-top:40px;padding-top:20px;border-top:1px solid var(--cizgi);color:var(--sis);font-size:12px">
- Deney verileri 20 Temmuz 2026 · Kaynak: qulla21-fundamental-lab/exp_out/ (fund_results.json, heat_results.json, heat_budget_results.json)
+ Deney verileri 20–21 Temmuz 2026 · Kaynak: qulla21-fundamental-lab/exp_out/ ve runner_stop_results.json
 </div>
 </body></html>
