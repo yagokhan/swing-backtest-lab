@@ -1155,6 +1155,30 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         self._send(200, fh.read(), "text/html; charset=utf-8")
                 else:
                     self._send(404, "Yeni deneyler sayfası henüz üretilmedi", "text/plain; charset=utf-8")
+            elif path == "/adaylar-ml":
+                # 🤖 ML gölge-mod sahte-kırılım raporu (statik, ml_shadow_report.py üretir) — salt-okur
+                rp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dashboard_static", "adaylar-ml.html")
+                if os.path.exists(rp):
+                    with open(rp, "rb") as fh:
+                        self._send(200, fh.read(), "text/html; charset=utf-8")
+                else:
+                    self._send(404, "ML raporu henüz üretilmedi (python3 ml_shadow_report.py)", "text/plain; charset=utf-8")
+            elif path == "/tahsis":
+                # ⚖️ sermaye tahsisi deneyi (statik, tahsis_lab.py raporu) — salt-okur
+                rp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dashboard_static", "tahsis.html")
+                if os.path.exists(rp):
+                    with open(rp, "rb") as fh:
+                        self._send(200, fh.read(), "text/html; charset=utf-8")
+                else:
+                    self._send(404, "Tahsis raporu yok", "text/plain; charset=utf-8")
+            elif path == "/ml-rapor":
+                # 📜 ML seferi özet raporu (statik, basit anlatım) — salt-okur
+                rp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dashboard_static", "ml-rapor.html")
+                if os.path.exists(rp):
+                    with open(rp, "rb") as fh:
+                        self._send(200, fh.read(), "text/html; charset=utf-8")
+                else:
+                    self._send(404, "ML özet raporu yok", "text/plain; charset=utf-8")
             elif path.startswith("/api/candles/"):
                 sym = path[len("/api/candles/"):].upper()
                 q = urllib.parse.parse_qs(self.path.split("?", 1)[1]) if "?" in self.path else {}

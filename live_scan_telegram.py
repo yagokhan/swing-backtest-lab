@@ -14,7 +14,7 @@ Gizli (~/.portfolio_keys.json | env): TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, FMP_
 Açık pozisyonlar (ops.): ~/.swing_held.json → ["AAPL","MSFT"]  (KIRILIM listesinden düşülür)
 Kullanım: python3 live_scan_telegram.py [--test] [--asof YYYY-MM-DD] [--demo-watch] [--et-window]
 """
-import os, sys, json, html
+import os, sys, json, html, time
 import matplotlib; matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
@@ -87,6 +87,114 @@ def _et_window_ok(lo=(15, 30), hi=(16, 5)):
     mins = et.hour * 60 + et.minute
     ok = et.weekday() < 5 and (lo[0]*60+lo[1]) <= mins <= (hi[0]*60+hi[1])
     return ok, et
+
+
+# NYSE tam-kapalı günler (yarım günler hariç: onlarda bar oluşur, sorun çıkmaz).
+# Tatilde bar HİÇ gelmeyecektir → tekrar deneme de uyarı da anlamsız, sessiz geç.
+NYSE_HOLIDAYS = {
+    "2026-01-01", "2026-01-19", "2026-02-16", "2026-04-03", "2026-05-25",
+    "2026-06-19", "2026-07-03", "2026-09-07", "2026-11-26", "2026-12-25",
+    "2027-01-01", "2027-01-18", "2027-02-15", "2027-03-26", "2027-05-31",
+    "2027-06-18", "2027-07-05", "2027-09-06", "2027-11-25", "2027-12-24",
+}
+
+# Bar gecikmesinde tekrar deneme. Son tarih 16:20 ET: piyasa 16:00'da kapanır ve
+# bar KESİNLEŞİR; kalibrasyon zaten "15:45 girişi ≈ kapanış" diyor, dolayısıyla
+# kapanış sonrası kesin barla giriş varsayımı bozmaz. 16:20'den sonrası ise
+# "bugünü boşver, haber ver" bölgesi.
+RETRY_ATTEMPTS, RETRY_WAIT_S, RETRY_DEADLINE = 4, 120, (16, 20)
+
+
+def _now_et():
+    """Şimdi (ABD Doğu). zoneinfo yoksa yerel saate düşer (deadline yine işler)."""
+    from datetime import datetime
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo("America/New_York"))
+    except Exception:
+        return datetime.now()
+
+
+def _is_market_holiday(day):
+    """day (YYYY-MM-DD) NYSE'nin tam kapalı olduğu bir gün mü?"""
+    return str(day) in NYSE_HOLIDAYS
+
+
+def _stale_action(prev_locked, today):
+    """asof defterdeki günden ileri gitmediğinde ne yapmalı?
+
+    Üç farklı sebep aynı belirtiyi verir; ayırmazsak ya boş alarm çalar ya da
+    gerçek arıza sessiz kalır:
+      'yayınlandı' → defter BUGÜNDE kilitli: bugün zaten yayınlandı (elle tekrar
+                     çalıştırma / ikinci cron slotu). Sessiz no-op — alarm YOK.
+      'tatil'      → NYSE kapalı: bar hiç oluşmayacak. Sessiz — alarm YOK.
+      'gecikme'    → piyasa açıktı, bar GELMELİYDİ ama yok (2026-07-14 FMP
+                     gecikmesi). Tekrar dene; yine yoksa KULLANICIYI UYAR.
+    """
+    if str(prev_locked) >= str(today):
+        return "yayınlandı"
+    if _is_market_holiday(today):
+        return "tatil"
+    return "gecikme"
+
+
+def _wait_for_new_bar(prev_locked, *, runner, now_et, sleeper=time.sleep,
+                      attempts=RETRY_ATTEMPTS, wait_s=RETRY_WAIT_S,
+                      deadline=RETRY_DEADLINE):
+    """Bugünün barı gecikmişse taramayı tekrarla (FMP'yi yeniden yoklar).
+
+    2026-07-14: FMP barı 15:45 ET'de vermedi, ~10 dk sonra verdi; script tek
+    denemede pes edip sessizce sustu. Artık son tarihe kadar tekrar denenir.
+    Dönen: (qr, asof, deneme_sayısı) — bar hâlâ yoksa (None, None, deneme).
+    """
+    tried = 0
+    for _ in range(attempts):
+        now = now_et()
+        if now.hour * 60 + now.minute >= deadline[0] * 60 + deadline[1]:
+            break
+        sleeper(wait_s)
+        tried += 1
+        qr = runner(None)
+        if qr["asof"] > prev_locked:
+            print(f"[bar geldi] {tried}. denemede asof {qr['asof']} (FMP gecikmesi)",
+                  flush=True)
+            return qr, qr["asof"], tried
+        print(f"[bekleniyor] {tried}. deneme: bar hâlâ {qr['asof']}", flush=True)
+    return None, None, tried
+
+
+def _stale_alert_text(prev_locked, tried, et):
+    """Sessiz kalma: bugün neden yayın olmadığını Telegram'dan söyle."""
+    return ("⚠️ <b>Bugün tarama yapılamadı</b>\n\n"
+            f"FMP {et:%Y-%m-%d} gününün barını vermedi "
+            f"({tried} deneme, sonuncusu {et:%H:%M} ET).\n"
+            f"Defter <code>{prev_locked}</code> gününde kilitli kaldı — "
+            "<b>yayın yok, işlem yok, pozisyonlar değişmedi.</b>\n\n"
+            "Veri gelince elle çalıştır:\n"
+            "<code>python3 live_scan_telegram.py</code>")
+
+
+def _tg_targets():
+    """(token, alıcılar) — sahip + /abone olanlar. Yoksa (None, [])."""
+    token, chat = _secret("TELEGRAM_BOT_TOKEN"), _secret("TELEGRAM_CHAT_ID")
+    if not token or not chat:
+        return None, []
+    return token, [str(chat)] + [c for c in pt.load_subscribers() if c != str(chat)]
+
+
+def _bcast(fn, *args, token=None, chats=()):
+    """Tüm alıcılara gönder; yanıtı kontrol et (sessiz kayıp olmasın).
+    Botu bloklayan (403) abone listeden otomatik düşürülür."""
+    for c in chats:
+        try:
+            j = fn(*args, token=token, chat=c).json()
+            if not j.get("ok"):
+                print(f"[send NON-OK] chat={c} {j.get('error_code')} {j.get('description')}", flush=True)
+                if j.get("error_code") == 403 and c != chats[0]:
+                    pt.remove_subscriber(c)
+                    print(f"[abone düşürüldü] {c}", flush=True)
+        except Exception as e:
+            print(f"[send hata] chat={c} {e}", flush=True)
 
 
 def draw_chart(sym, df, c, asof, path, nbars=50):
@@ -234,9 +342,29 @@ def main():
     # "bugün işlem yapılmış" izlenimi verir (2026-07-03, 4 Temmuz tatili olayı). Defter
     # zaten ilerlemez; yayını da kes. Bilinçli tekrar için --asof ver (kapıya takılmaz).
     if auto and prev_locked and asof <= prev_locked:
-        print(f"[atlandı] yeni bar yok (asof {asof} defterde zaten kilitli) — "
-              f"tatil ya da veri gecikmesi; yayın yok")
-        return
+        now = _now_et()
+        today = f"{now:%Y-%m-%d}"
+        action = _stale_action(prev_locked, today)
+        if action == "yayınlandı":
+            print(f"[atlandı] {today} zaten yayınlandı (defter kilitli) — yayın yok")
+            return
+        if action == "tatil":
+            print(f"[atlandı] {today} NYSE tatili — bar zaten oluşmayacak; yayın yok")
+            return
+        # Tatil değil, bugün de yayınlanmadı → bar GELMELİYDİ. Sessizce pes etme:
+        # son tarihe kadar tekrar dene (2026-07-14: FMP ~10 dk gecikti), olmazsa uyar.
+        print(f"[gecikme] bar yok (defter {prev_locked}'te kilitli) — tekrar deneniyor", flush=True)
+        qr2, asof2, tried = _wait_for_new_bar(
+            prev_locked, runner=qp.run_qulla, now_et=_now_et)
+        if qr2 is None:
+            token, chats = _tg_targets()
+            if token:
+                _bcast(send_message, _stale_alert_text(prev_locked, tried, now),
+                       token=token, chats=chats)
+            print(f"[UYARI gönderildi] bar {tried} denemede de gelmedi — yayın yok",
+                  file=sys.stderr)
+            sys.exit(1)
+        qr, asof, market = qr2, asof2, qr2["market"]
     summ = qp.qulla_summary(qr)
     cands = qp.chart_cands(qr)       # bugün açılan Qulla girişleri (grafik)
     msg = qp.qulla_message(qr)       # portföy gün-sonu
@@ -258,36 +386,19 @@ def main():
               f"{len(qr['positions'])} açık · gönderilmedi]")
         return
 
-    token, chat = _secret("TELEGRAM_BOT_TOKEN"), _secret("TELEGRAM_CHAT_ID")
-    if not token or not chat:
+    token, chats = _tg_targets()
+    if not token:
         print("HATA: TELEGRAM_BOT_TOKEN/CHAT_ID yok.", file=sys.stderr); sys.exit(2)
 
-    # Alıcılar: sahip + /abone olan herkes (komut botu kaydeder)
-    chats = [str(chat)] + [c for c in pt.load_subscribers() if c != str(chat)]
-
-    def _bcast(fn, *args):
-        """Tüm alıcılara gönder; yanıtı kontrol et (sessiz kayıp olmasın).
-        Botu bloklayan (403) abone listeden otomatik düşürülür."""
-        for c in chats:
-            try:
-                j = fn(*args, token=token, chat=c).json()
-                if not j.get("ok"):
-                    print(f"[send NON-OK] chat={c} {j.get('error_code')} {j.get('description')}", flush=True)
-                    if j.get("error_code") == 403 and c != str(chat):
-                        pt.remove_subscriber(c)
-                        print(f"[abone düşürüldü] {c}", flush=True)
-            except Exception as e:
-                print(f"[send hata] chat={c} {e}", flush=True)
-
-    _bcast(send_message, summ)
+    _bcast(send_message, summ, token=token, chats=chats)
     for c in cands:
         cap = qp.chart_caption(c)
         path = os.path.join(OUT, f"qulla_{c['symbol']}.png")
         if draw_chart(c["symbol"], market["data"][c["symbol"]], c, asof, path):
-            _bcast(send_photo, path, cap)
+            _bcast(send_photo, path, cap, token=token, chats=chats)
         else:
-            _bcast(send_message, cap)
-    _bcast(send_message, msg)
+            _bcast(send_message, cap, token=token, chats=chats)
+    _bcast(send_message, msg, token=token, chats=chats)
 
     # /lastscan için son mesajı + dashboard için Qulla durumunu + yapısal tarama verisini kaydet
     pt.save_last_scan("\n\n".join([summ] + [qp.chart_caption(c) for c in cands] + [msg]), asof)

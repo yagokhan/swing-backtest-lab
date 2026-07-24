@@ -1,0 +1,99 @@
+<!DOCTYPE html><html lang="tr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>🤖 ML Seferi — Ne Denedik, Ne Öğrendik?</title>
+<style>
+ :root{--bg:#0d1117;--card:#161b22;--bd:#30363d;--fg:#e6edf3;--mut:#8b949e;--grn:#3fb950;--red:#f85149;--blu:#58a6ff;--amb:#d29922}
+ *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.65 system-ui,'Segoe UI',sans-serif}
+ .wrap{max-width:900px;margin:0 auto;padding:18px 20px 60px}
+ h1{font-size:22px;margin:14px 0 4px} h2{font-size:18px;margin:34px 0 10px;border-bottom:1px solid var(--bd);padding-bottom:6px}
+ .mut{color:var(--mut)} .pos{color:var(--grn)} .neg{color:var(--red)} .amb{color:var(--amb)}
+ .card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:14px 16px;margin:12px 0}
+ a{color:var(--blu)} .back{font-size:13px} ul{margin:6px 0 6px 20px;padding:0} li{margin:5px 0} ol{margin:6px 0 6px 20px} ol li{margin:6px 0}
+ table{border-collapse:collapse;width:100%;font-size:13.5px;margin:8px 0}
+ th,td{border:1px solid var(--bd);padding:6px 9px;text-align:left;vertical-align:top}
+ th{background:#1c2128;font-weight:600} .tblwrap{overflow-x:auto}
+ blockquote{border-left:3px solid var(--amb);margin:10px 0;padding:4px 14px;color:#d8c690;background:#1a1f17;border-radius:0 8px 8px 0}
+ code{background:#1c2128;padding:1px 5px;border-radius:4px;font-size:12.5px}
+</style></head><body><div class="wrap">
+
+<p class="back"><a href="/">← Seans Masası</a> · <a href="/adaylar">🏁 Adaylar</a> · <a href="/adaylar-ml">🤖 Günlük ML sayfası</a></p>
+<h1>🤖 ML Seferi — Ne Denedik, Ne Öğrendik?</h1>
+<p class="mut">9 Temmuz 2026 · basit anlatım · <b>canlı sisteme hiçbir şey değişmedi</b> — bu sayfa yalnız bilgi.</p>
+
+<h2>Asıl soru ve kısa cevabı</h2>
+<p>Haftalardır sorduğumuz soru şuydu: <b>"Sistem bir hisseye AL dediğinde, bunun tutup
+tutmayacağını bilgisayar önceden bilebilir mi?"</b></p>
+<blockquote><b>Cevap: Hayır.</b> Sahte kırılımla gerçek kırılım, alım gününde birbirinin
+tıpatıp aynısı görünüyor. Beş ayrı yönden baktık — hiçbiri ayırt edemedi.</blockquote>
+<div class="card"><b>Bakılan beş yön</b> (5 yıllık geçmişten 4.489 gerçek örnekle):
+<ul>
+<li>📊 <b>Günün fotoğrafı</b> — hacim, güç, momentum, risk mesafesi… <span class="neg">ayırmadı</span></li>
+<li>🏗️ <b>Taban yapısı</b> — kırılım öncesi ne kadar sıkışmış, hacim kurumuş mu… <span class="neg">ayırmadı</span></li>
+<li>🏭 <b>Sektör gücü</b> — hisse kendi sektörünü yeniyor mu… <span class="neg">ayırmadı</span></li>
+<li>📅 <b>Bilanço yakınlığı</b> — son bilançodan kaç gün geçmiş, bilanço günü sıçramış mı… <span class="neg">ayırmadı</span></li>
+<li>⏱️ <b>Gün içi seyir</b> — sabah hacmi, kapanışa doğru güç, seviyenin üstünde tutunma… <span class="neg">ayırmadı</span></li>
+</ul>
+<span class="mut">Ölçüm dürüst: model hep yalnız GEÇMİŞLE eğitildi, hiç görmediği GELECEKte sınandı
+(4 ayrı dönemde). Şüpheli her sonuç ikinci bir yöntemle çapraz kontrol edildi.</span></div>
+
+<h2>Bugünkü üç yeni soru</h2>
+
+<h2 style="border:none;font-size:16px;margin:20px 0 6px">1️⃣ "Kalabalık günde masaya kimi oturtalım?" — sıralama yarışması</h2>
+<p>Sistemin asıl derdi şu: çoğu gün 20 sandalye dolu, kapıda 5-6 aday bekliyor. Kimi içeri
+alacağını basit bir formülle seçiyor (kalite puanı + hareketlilik = "denge karışımı").
+Bu formülü yapay zekâyla yarıştırdık: aynı günün adaylarını kim daha doğru sıralar?</p>
+<blockquote><b>Mevcut formül kazandı — hem de açık farkla.</b> Yapay zekânın seçtikleri
+sonradan daha kötü gitti. Yani canlıdaki sıralama yöntemi testten alnının akıyla geçti;
+değiştirmeye gerek yok, değiştirmek zarar ettirirdi.</blockquote>
+<p>İşin güzel yanı: "gelecekte kimin iyi gideceği" tamamen bilinmez değilmiş. Zayıf ama
+gerçek bir ipucu var — ve o ipucu <b>zaten senin formülünün içinde saklı</b>. Kâhinlik 100 puan,
+yazı-tura 0 puan olsun: formül ~17-20 puan alıyor. Az görünür ama borsada bu kadarı fark
+yaratır — geçen ay Aday 3'ün yarışı kazanmasının sebebi tam olarak buymuş, şimdi ispatı var.</p>
+
+<h2 style="border:none;font-size:16px;margin:20px 0 6px">2️⃣ "Sahte mi?" yerine "ne kadar getirir?"</h2>
+<p>Soruyu ikili (sahte/gerçek) sormayı bırakıp "önümüzdeki 1-3 ayda ne kadar getirir?"
+diye sorduk — belki öyle sorulunca yapay zekâ bir şey yakalar dedik. <b>Yakalamadı.</b>
+Ama yukarıdaki "formül gerçek ipucu taşıyor" bulgusunu ortaya çıkaran deney bu oldu —
+boşa gitmedi.</p>
+
+<h2 style="border:none;font-size:16px;margin:20px 0 6px">3️⃣ "Bu hafta hava nasıl?" — ilk umut kıpırtısı 🌤️</h2>
+<p>Tek tek hisse sormayı bıraktık: <b>"bu hafta açılacak işlemlerin GENEL başarı havası
+öngörülebilir mi?"</b> Bazı haftalar kırılımların çoğu tutuyor, bazı haftalar çoğu çuvallıyor.</p>
+<p>İlk kez küçük bir "evet" çıktı. İki basit kural, 5 yılın denediğimiz her diliminde aynı yönde çalıştı:</p>
+<ol>
+<li><b>Piyasa son 3 ayda çok koştuysa</b>, o haftanın kırılımları daha sık başarısız oluyor.
+<span class="mut">(Uzamış piyasada herkes kovalıyor; geç kalan faturayı ödüyor.)</span></li>
+<li><b>Kötü haftanın ardından genelde daha iyi hafta geliyor.</b> "Geçen hafta her şey çuvalladı,
+bu hafta uzak dur" içgüdüsü <span class="neg">yanlış</span> — tersine işliyor.</li>
+</ol>
+<p>Bir gün işe yarayabileceği yer: <i>"bu hafta riskli görünüyor, pozisyonları küçük aç"</i>
+diyen bir ayar düğmesi. Mevcut A200 freninden farklı bir bilgi (onunla örtüşmüyor, yanına eklenebilir).</p>
+<blockquote>⚠️ <b>Dikkat:</b> elimizde yalnız 188 hafta var ve 6 değişkenden 2'si tutarlı çıktı —
+bu kadarı şans eseri de olabilir. Buna "kanıt" değil <b>"iz"</b> diyoruz. En temiz test bedava:
+sistem her gece veri biriktiriyor; <b>~Ocak 2027'de</b> aynı soruyu taze veriyle soracağız.
+İz hâlâ oradaysa o zaman ciddiye alırız.</blockquote>
+
+<h2>Karne — tek bakışta</h2>
+<div class="tblwrap"><table>
+<tr><th>Soru</th><th>Sonuç</th><th>Anlamı</th></tr>
+<tr><td>Sahte kırılım önceden bilinir mi? (5 yön, 3 tanım)</td><td class="neg"><b>Hayır</b></td><td>Alım günündeki hiçbir bilgi ayırt etmiyor; dosya kapandı</td></tr>
+<tr><td>ML sıralamada formülü yener mi?</td><td class="neg"><b>Hayır — formül yendi</b></td><td>Canlı sıralama yöntemi doğrulandı, aynen kalıyor</td></tr>
+<tr><td>Getiri miktarı tahmin edilir mi?</td><td class="neg"><b>ML: hayır</b></td><td>Ama zayıf-gerçek ipucunun formülde zaten var olduğu görüldü</td></tr>
+<tr><td>Haftanın genel havası öngörülür mü?</td><td class="amb"><b>Belki (iz)</b></td><td>2 tutarlı işaret; Ocak 2027'de taze veriyle retest</td></tr>
+</table></div>
+
+<h2>Senin için ne değişti?</h2>
+<p><b>Hiçbir şey.</b> Portföy, tarama, sıralama aynen devam. Bugünün kazancı üç cümle:</p>
+<ul>
+<li>✅ Canlı sıralama formülü sınavdan geçti — ML'le değiştirme fikri kapandı.</li>
+<li>✅ "Sahte kırılımı önceden yakala" hayali beş koldan denendi ve kesin cevaplandı: <b>bu bilgiyle olmuyor.</b> Kimse "şunu da deneseydik" demesin diye hepsi kayıtlı.</li>
+<li>📌 Takvim notu: <b>Ocak 2027</b> — "haftanın havası" izini taze veriyle kontrol et.</li>
+</ul>
+
+<p class="mut" style="margin-top:30px;font-size:12.5px">Teknik detay isteyenlere: betikler
+<code>ml_backfill.py · ml_feature_lab.py · ml_horizon_lab.py · ml_rank_lab.py · ml_regime_lab.py</code>,
+tüm sayılar <code>~/.swing_ml/model_meta.json</code>, tasarım
+<code>docs/superpowers/specs/2026-07-09-ml-uc-deney-design.md</code>. Doğrulama: purged
+walk-forward (4 dönem), hiperparametre araması yok, şüpheli sonuçlara model-bağımsız çapraz kontrol.</p>
+
+</div></body></html>

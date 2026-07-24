@@ -21,3 +21,6 @@ venv/
 
 # isolated dev worktrees
 .worktrees/
+
+# zaman damgalı yerel yedekler
+*.bak.*
