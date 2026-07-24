@@ -136,4 +136,7 @@ check("her alıcıya gönderir", [c for c, _ in sent] == ["owner", "999"], f"{se
 check("bloklayan aboneyi düşürür", dropped == ["999"], f"{dropped}")
 
 print("\n" + ("TÜM TESTLER GEÇTİ" if not FAILS else f"{len(FAILS)} TEST ÇÖKTÜ: {FAILS}"))
-raise SystemExit(1 if FAILS else 0)
+if __name__ == "__main__":
+    raise SystemExit(1 if FAILS else 0)
+if FAILS:
+    raise AssertionError(f"bayat-bar koruması başarısız: {FAILS}")

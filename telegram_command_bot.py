@@ -15,7 +15,7 @@ Gizli anahtarlar: ~/.portfolio_keys.json | env (TELEGRAM_BOT_TOKEN, FMP_API_KEY)
 Arka plan (örnek):
   nohup python3 /home/gokhan/telegram_command_bot.py >> /home/gokhan/swing2_out/cmdbot.log 2>&1 &
 """
-import os, sys, json, time
+import os, sys, json, re, time
 from datetime import datetime
 
 import requests
@@ -26,6 +26,17 @@ KEYS = os.path.expanduser("~/.portfolio_keys.json")
 OFFSET_FILE = os.path.expanduser("~/.swing_cmdbot_offset")
 TG = "https://api.telegram.org/bot{tok}/{method}"
 POLL_TIMEOUT = 30   # saniye (long-poll)
+
+
+def _safe_error(exc, token=None):
+    """requests hatalarındaki URL'lerden bot/API anahtarlarını loglamadan ayıkla."""
+    text = str(exc)
+    if token:
+        text = text.replace(str(token), "<REDACTED>")
+    text = re.sub(r"(api\.telegram\.org/bot)[^/\s]+", r"\1<REDACTED>", text)
+    text = re.sub(r"\b\d{7,12}:[A-Za-z0-9_-]{20,}\b", "<REDACTED>", text)
+    text = re.sub(r"([?&]apikey=)[^&\s]+", r"\1<REDACTED>", text, flags=re.I)
+    return text
 
 
 def _secret(name):
@@ -57,7 +68,7 @@ def _send(token, chat, text):
                 print(f"[send fallback de başarısız] chat={chat} {r2.text[:200]}", file=sys.stderr)
         return j.get("ok")
     except Exception as e:
-        print(f"[send hata] chat={chat} {e}", file=sys.stderr)
+        print(f"[send hata] chat={chat} {_safe_error(e, token)}", file=sys.stderr)
         return False
 
 
@@ -136,7 +147,7 @@ def main():
                              params=params, timeout=POLL_TIMEOUT + 15)
             updates = r.json().get("result", [])
         except Exception as e:
-            print(f"[getUpdates hata] {e}", file=sys.stderr); time.sleep(5); continue
+            print(f"[getUpdates hata] {_safe_error(e, token)}", file=sys.stderr); time.sleep(5); continue
         for u in updates:
             offset = u["update_id"] + 1
             _save_offset(offset)
@@ -155,7 +166,7 @@ def main():
             try:
                 handle(cmd, token, chat, fmp_key, chat_name=name)
             except Exception as e:
-                print(f"[handle hata] {cmd}: {e}", file=sys.stderr)
+                print(f"[handle hata] {cmd}: {_safe_error(e, token)}", file=sys.stderr)
 
 
 if __name__ == "__main__":

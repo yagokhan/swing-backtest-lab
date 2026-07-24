@@ -16,7 +16,7 @@ bağımsız). Grafik kütüphanesi (Lightweight Charts) yerel servis edilir → 
   python3 paper_dashboard.py [PORT]        # varsayılan 8061
   nohup python3 paper_dashboard.py >> swing2_out/dashboard.log 2>&1 &
 """
-import json, os, sys, time, threading
+import glob, hashlib, json, os, pickle, re, sys, time, threading
 import http.server
 import urllib.parse
 from datetime import datetime, time as _dtime
@@ -47,9 +47,18 @@ except Exception:
 # --- basit cache'ler (gereksiz ağ çağrısını önle) ---
 _hist_cache = {}      # {symbol: (t_loaded, df)}
 _quote_cache = {"t": 0, "data": {}}
+_health_cache = {"t": 0, "data": None}
 _lock = threading.Lock()
 HIST_TTL = 900        # 15 dk
 QUOTE_TTL = 20        # sn
+
+
+def _safe_error(exc):
+    """Ağ istisnasında URL'ye gömülü olabilecek anahtarları dışarı verme."""
+    text = str(exc)
+    text = re.sub(r"(api\.telegram\.org/bot)[^/\s]+", r"\1<REDACTED>", text)
+    text = re.sub(r"\b\d{7,12}:[A-Za-z0-9_-]{20,}\b", "<REDACTED>", text)
+    return re.sub(r"([?&]apikey=)[^&\s]+", r"\1<REDACTED>", text, flags=re.I)
 
 
 # ----------------------------- veri yardımcıları -----------------------------
@@ -374,12 +383,16 @@ def _portfolio_payload(st, prices):
     equity = cash + mkt_val
     realized = sum((r.get("pnl") or 0.0) for r in st["closed"])
     start_cap = st.get("start_capital", pt.START_CAPITAL)
+    quote_count = sum(p["price"] is not None for p in positions)
+    quote_missing = [p["symbol"] for p in positions if p["price"] is None]
     return {
         "cash": round(cash, 2), "equity": round(equity, 2), "start_capital": start_cap,
         "unrealized": round(unreal, 2), "realized": round(realized, 2),
         "total_pl": round(equity - start_cap, 2),
         "total_pl_pct": round((equity - start_cap) / start_cap * 100, 2) if start_cap else 0.0,
         "n_open": len(positions), "n_closed": len(closed),
+        "quote_count": quote_count, "quote_total": len(positions),
+        "quote_missing": quote_missing, "quote_complete": not quote_missing,
         "started": st.get("started"),
         "positions": positions, "closed": closed}
 
@@ -406,7 +419,7 @@ def _spy_history():
             hist = {x["date"]: float(x["close"]) for x in rows
                     if x.get("date") and x.get("close") is not None}
         except Exception as e:
-            print(f"[SPY history hata] {e}")
+            print(f"[SPY history hata] {_safe_error(e)}")
     with _lock:
         _spy_cache["t"] = now
         _spy_cache["hist"] = hist
@@ -441,6 +454,9 @@ def portfolio_json():
     held = sorted(pt.held_symbols(st))
     prices = _live_quotes(list(held) + ["SPY"])          # SPY'ı da çek (kıyas)
     out = _portfolio_payload(st, prices)
+    with _lock:
+        out["quote_age_seconds"] = (round(time.time() - _quote_cache["t"])
+                                    if _quote_cache["t"] else None)
     out["market"] = market_status()
     out["slippage"] = ""
     # ⭐ Aday 3 rejim bilgisi (son taramadan; A200 = havuzun SMA200-üstü %'si)
@@ -541,6 +557,309 @@ def scan_json():
     if ls:
         return {"mode": "text", "asof": ls.get("asof"), "ts": ls.get("ts"), "text": ls.get("text", "")}
     return {"mode": "none"}
+
+
+HEALTH_FORWARD_START = "2026-07-06"
+
+
+def system_health_json(home="/home/gokhan", canonical=None):
+    """Qulla-21 için ağ çağrısı yapmadan, salt-okur sistem sağlık özeti.
+
+    Bu rapor bir strateji puanı üretmez. Operasyonel dosyaları/korumaları kontrol eder;
+    performansı da eski bootstrap defteri ile Aday-3'ün gerçek ileri dönemini ayırarak
+    gösterir. Böylece "servis çalışıyor" ile "strateji kanıtlandı" karıştırılmaz.
+    """
+    canonical = canonical or os.path.join(home, "swing-backtest-lab")
+    cacheable = home == "/home/gokhan" and canonical == "/home/gokhan/swing-backtest-lab"
+    if cacheable:
+        with _lock:
+            if (_health_cache["data"] is not None and
+                    time.time() - _health_cache["t"] < 60):
+                return _health_cache["data"]
+    ledger_path = os.path.join(home, ".swing_paper_qulla_ledger.json")
+    state_path = os.path.join(home, ".swing_paper_qulla.json")
+    store_path = os.path.join(home, ".swing_daily_store.pkl")
+    log_path = os.path.join(home, "swing2_out", "live_scan.log")
+    errors = []
+
+    def _json(path):
+        try:
+            with open(path, encoding="utf-8") as fh:
+                return json.load(fh)
+        except Exception as exc:
+            errors.append(f"{os.path.basename(path)}: {exc}")
+            return {}
+
+    ledger = _json(ledger_path)
+    state = _json(state_path)
+    try:
+        with open(store_path, "rb") as fh:
+            store = pickle.load(fh)
+        if not isinstance(store, dict):
+            raise TypeError("depo sözlük değil")
+    except Exception as exc:
+        errors.append(f"{os.path.basename(store_path)}: {exc}")
+        store = {}
+
+    ledger_date = str(ledger.get("last_date") or "")
+    state_date = str(state.get("asof") or "")
+    store_date = str(store.get("last_date") or "")
+    positions = ledger.get("positions") or []
+    initial = float(ledger.get("initial") or 10000.0)
+    cash = float(ledger.get("cash") or 0.0)
+    invested = sum(float(p.get("cost") or 0.0) for p in positions)
+
+    def _leg_shares(pos, rule):
+        return sum(float(x.get("shares") or 0.0)
+                   for x in (pos.get("legs") or []) if x.get("rule") == rule)
+
+    signal_slots = sum(_leg_shares(p, "target") > 1e-9 for p in positions)
+    runner_only = sum(_leg_shares(p, "target") <= 1e-9 and
+                      _leg_shares(p, "ema21") > 1e-9 for p in positions)
+
+    eq = []
+    for row in ledger.get("equity_curve") or []:
+        try:
+            eq.append((pd.Timestamp(row[0]).normalize(), float(row[1])))
+        except Exception:
+            continue
+    eq.sort(key=lambda x: x[0])
+    close_equity = eq[-1][1] if eq else None
+    all_pct = ((close_equity / initial - 1) * 100) if close_equity is not None else None
+    forward_start = pd.Timestamp(HEALTH_FORWARD_START)
+    forward = [x for x in eq if x[0] >= forward_start]
+    earlier = [x for x in eq if x[0] < forward_start]
+    forward_anchor = earlier[-1][1] if earlier else (forward[0][1] if forward else None)
+    forward_pct = (((forward[-1][1] / forward_anchor) - 1) * 100
+                   if forward and forward_anchor else None)
+
+    frames = store.get("frames") or {}
+    fresh = lagging = stale = 0
+    stale_symbols = []
+    anomaly_symbols = []
+    store_ts = pd.Timestamp(store_date).normalize() if store_date else None
+    for sym, df in frames.items():
+        try:
+            if df is None or not len(df):
+                stale += 1
+                stale_symbols.append(str(sym))
+                continue
+            last = pd.Timestamp(df.index[-1]).normalize()
+            age = int((store_ts - last).days) if store_ts is not None else 999
+            if age <= 1:
+                fresh += 1
+            elif age <= 7:
+                lagging += 1
+            else:
+                stale += 1
+                stale_symbols.append(str(sym))
+            jumps = pd.to_numeric(df["Close"], errors="coerce").pct_change().abs()
+            if bool((jumps > .40).any()):
+                anomaly_symbols.append(str(sym))
+        except Exception:
+            stale += 1
+            stale_symbols.append(str(sym))
+
+    history_start = None
+    try:
+        spy = frames.get("SPY")
+        if spy is not None and len(spy):
+            history_start = str(pd.Timestamp(spy.index[0]).date())
+    except Exception:
+        pass
+
+    core_files = ("swing2_backtest.py", "qulla_paper.py", "live_scan_telegram.py",
+                  "telegram_command_bot.py", "paper_dashboard.py", "paper_keepalive.sh")
+    sync_rows = []
+    for name in core_files:
+        lp = os.path.join(home, name)
+        cp = os.path.join(canonical, name)
+        try:
+            with open(lp, "rb") as fh:
+                lh = hashlib.sha256(fh.read()).hexdigest()
+            with open(cp, "rb") as fh:
+                ch = hashlib.sha256(fh.read()).hexdigest()
+            same = lh == ch
+        except Exception:
+            same = False
+        sync_rows.append({"file": name, "same": same})
+
+    scan_source = ""
+    try:
+        with open(os.path.join(home, "live_scan_telegram.py"), encoding="utf-8") as fh:
+            scan_source = fh.read()
+    except Exception as exc:
+        errors.append(f"live_scan_telegram.py: {exc}")
+    glitch_wired = bool(
+        re.search(r"_qulla_validation_rows\s*\(\s*qr\s*,\s*prev_ledger", scan_source)
+        and re.search(
+            r"_qulla_validation_issues\s*\(\s*validation_rows\s*,\s*validation_symbols\s*,\s*quotes",
+            scan_source))
+    commit_alert_wired = "DEFTER COMMIT HATASI" in scan_source
+    cmd_source = ""
+    dashboard_source = ""
+    try:
+        with open(os.path.join(home, "telegram_command_bot.py"), encoding="utf-8") as fh:
+            cmd_source = fh.read()
+        with open(os.path.join(home, "paper_dashboard.py"), encoding="utf-8") as fh:
+            dashboard_source = fh.read()
+    except Exception as exc:
+        errors.append(f"güvenlik kaynakları: {exc}")
+    token_hits = 0
+    try:
+        with open(os.path.join(home, "swing2_out", "cmdbot.log"),
+                  encoding="utf-8", errors="replace") as fh:
+            token_hits = len(re.findall(
+                r"\b\d{7,12}:[A-Za-z0-9_-]{20,}\b", fh.read()))
+    except Exception:
+        pass
+    secret_redaction_wired = "_safe_error" in cmd_source
+    network_wide_bind = '("0.0.0.0", port)' in dashboard_source
+
+    sent_asof = None
+    try:
+        with open(log_path, encoding="utf-8", errors="replace") as fh:
+            matches = re.findall(r"Gönderildi .*?asof (\d{4}-\d{2}-\d{2})", fh.read())
+        sent_asof = matches[-1] if matches else None
+    except Exception:
+        pass
+
+    exact_backup = bool(ledger_date and
+                        os.path.exists(f"{ledger_path}.bak.{ledger_date}"))
+    legacy_backups = sorted(glob.glob(f"{ledger_path}.bak.*"))
+    dates = [x for x in (ledger_date, state_date, store_date) if x]
+    dates_synced = len(dates) == 3 and len(set(dates)) == 1
+    files_ok = not errors and bool(ledger) and bool(state) and bool(store)
+    sources_synced = all(x["same"] for x in sync_rows)
+    delivery_synced = bool(sent_asof and ledger_date and sent_asof == ledger_date)
+
+    checks = [
+        {"label": "Ana dosyalar okunuyor", "status": "ok" if files_ok else "bad",
+         "detail": "Defter, durum ve günlük veri deposu açıldı." if files_ok
+                   else "; ".join(errors) or "Bir ana dosya eksik."},
+        {"label": "Tarih zinciri aynı günde", "status": "ok" if dates_synced else "bad",
+         "detail": f"defter {ledger_date or '—'} · durum {state_date or '—'} · veri {store_date or '—'}"},
+        {"label": "Son yayın ile kilitli defter uyumlu",
+         "status": "ok" if delivery_synced else "warn",
+         "detail": f"son başarılı yayın {sent_asof or 'bulunamadı'} · defter {ledger_date or '—'}"},
+        {"label": "Veri kapsamı", "status": "warn" if stale else ("ok" if fresh else "bad"),
+         "detail": f"{fresh} güncel · {lagging} gecikmeli · {stale} uzun süre eski / {len(frames)} seri"},
+        {"label": "Giriş/çıkış fiyat sapması kapısı (kaynak bağlantısı)",
+         "status": "ok" if glitch_wired else "bad",
+         "detail": "Açık pozisyon, yeni giriş ve replay çıkışı quote ile kontrol eden çağrı bağlı; "
+                   "davranış ayrıca birim testinde sınanıyor."
+                   if glitch_wired else "Koruma canlı çağrı yoluna bağlı görünmüyor."},
+        {"label": "Commit hatası görünür ve durum ilerlemiyor",
+         "status": "ok" if commit_alert_wired else "bad",
+         "detail": "Commit başarısızlığında Telegram alarmı var; dashboard durumu ilerletilmiyor."
+                   if commit_alert_wired else "Commit hatası için açık alarm bulunamadı."},
+        {"label": "Loglarda açık Telegram token'ı yok",
+         "status": "ok" if secret_redaction_wired and token_hits == 0 else "bad",
+         "detail": (f"Mevcut log eşleşmesi: {token_hits}; yeni istisnalar redakte ediliyor."
+                    if secret_redaction_wired else
+                    "İstisna URL'lerini temizleyen koruma bulunamadı.")},
+        {"label": "Dashboard ağ erişimi sınırlandırılmış",
+         "status": "warn" if network_wide_bind else "ok",
+         "detail": ("0.0.0.0 üzerinde kimlik doğrulamasız dinliyor; uzaktan erişim ihtiyacı "
+                    "netleşmeden bind adresi değiştirilmedi." if network_wide_bind else
+                    "Dashboard yalnız sınırlandırılmış bir arayüze bağlı.")},
+        {"label": "Canlı kod = ana depo", "status": "ok" if sources_synced else "warn",
+         "detail": f"{sum(x['same'] for x in sync_rows)}/{len(sync_rows)} çekirdek dosya birebir aynı."},
+        {"label": "Günlük otomatik defter yedeği",
+         "status": "ok" if exact_backup else "warn",
+         "detail": (f"{os.path.basename(ledger_path)}.bak.{ledger_date} hazır."
+                    if exact_backup else
+                    f"Kod aktif; mevcut günün ilk sonraki commit'inde üretilecek. "
+                    f"Eski/elle alınmış yedek: {len(legacy_backups)}.")},
+    ]
+
+    sector_counts = {}
+    for pos in positions:
+        sec = s2.SECTOR_MAP.get(pos.get("symbol"), "eşleşmemiş")
+        sector_counts[sec] = sector_counts.get(sec, 0) + 1
+    top_sectors = sorted(sector_counts.items(), key=lambda x: (-x[1], x[0]))[:3]
+    sector_text = " · ".join(f"{k}: {v}" for k, v in top_sectors) or "pozisyon yok"
+    sector_matched = len(positions) - sector_counts.get("eşleşmemiş", 0)
+
+    findings = [
+        {"severity": "high", "title": "Telegram bot anahtarı yenilenmeli",
+         "detail": "Komut-botu istisnası geçmişte tam token'ı yerel loga 6 kez yazdı. "
+                   "Kopyalar redakte edildi ve yeni sızıntı kapatıldı; ancak bir kez açığa çıkan "
+                   "credential BotFather üzerinden döndürülene kadar güvenli sayılmaz."},
+        {"severity": "high", "title": "Dashboard kimlik doğrulamasız ağda dinliyor",
+         "detail": "Servis 0.0.0.0 adresinde ve erişim token'ı yok. Uzak/telefon erişimi "
+                   "bozulmasın diye otomatik kapatılmadı; yalnız localhost ya da Tailscale + "
+                   "kimlik doğrulama seçimi yapılmalı."},
+        {"severity": "high", "title": "Runner bacağında sert zarar tabanı yok",
+         "detail": "Kalan %40 yalnız 21-EMA kapanışında çıkar. Gap gününde teorik stop gerçek dolumu sınırlamaz; laboratuvarda -6R civarı örnek görüldü. Denenen sert tabanlar henüz bütün dönemlerde sağlam üstünlük vermedi."},
+        {"severity": "high", "title": "Geçmiş testte survivorship bias var",
+         "detail": f"Bugünkü endeks üyeleri geçmişe taşınıyor; veri başlangıcı {history_start or 'bilinmiyor'}. İflas/delist olan eski üyeler ve 2020 COVID çöküşünün başı tam temsil edilmiyor."},
+        {"severity": "high", "title": "Sektör sınıflaması eksik; bağlayıcı tavan yok",
+         "detail": f"Motor yalnız {sector_matched}/{len(positions)} açık pozisyonu sektörle eşliyor "
+                   f"({sector_text}). AMD, ASML, STX, WDC, INTC, LRCX, TER ve GLW gibi ilişkili "
+                   "teknoloji/donanım isimleri birlikte birikebiliyor; sektör başına limit yok."},
+        {"severity": "medium", "title": "İşlem maliyeti modeli eksik",
+         "detail": "Komisyon ve temel kayma var; alış-satış spread'i, piyasa etkisi, temettü ve T+1 nakit kısıtı tam modellenmiyor. 15:45 sinyali ile günlük kapanış dolumu da küçük iyimserlik yaratabilir."},
+        {"severity": "medium", "title": "Haftalık tam veri yenilemesi kritik saate denk gelebiliyor",
+         "detail": "5 yıllık 384-seri yenileme 15:45 ET taramasını uzatabilir. Gecikme tekrar denemesi var; ağır işi seans öncesine taşımak daha güvenli."},
+        {"severity": "high", "title": "Gerçek ileri-test kanıtı hâlâ kısa",
+         "detail": f"Aday-3 ileri dönemi {len(forward)} seans; kapanış defterinde sonuç "
+                   f"{forward_pct:+.2f}%." if forward_pct is not None
+                   else "Aday-3 ileri dönemini ölçmek için yeterli özsermaye noktası yok."},
+        {"severity": "medium", "title": "Telegram + defter tam bir işlem (transaction) değil",
+         "detail": "Yayın önce, defter commit'i sonra geliyor. Yeni alarm ve yedek kaybı görünür kılıyor; fakat ağ başarısı ile disk commit'i teknik olarak tek ve atomik bir işlem değil."},
+        {"severity": "medium", "title": "Eksik canlı fiyat giriş fiyatına düşüyor",
+         "detail": "Dashboard quote alamadığı pozisyonu giriş fiyatıyla değerliyor. Artık kaç "
+                   "fiyatın geldiği ve eksik semboller sarı bantta gösteriliyor; yine de bu sayı "
+                   "eksik quote varken gerçek anlık özsermaye değildir."},
+    ]
+
+    improvements = [
+        "Açık pozisyon, yeni giriş veya yeni/replay çıkış fiyatı quote'tan %25'ten fazla saparsa; quote ya da günlük satır eksikse yayın ve commit duruyor.",
+        "Defter atomik yazılıyor; geçersiz mevcut dosyanın üstüne yazma reddediliyor ve günlük değişmez yedek hazırlanıyor.",
+        "Ana defter kaybolmuş ama yedek varsa sessiz yeniden-bootstrap reddediliyor.",
+        "Commit, durum yazımı ve beklenmeyen çökme Telegram alarmına dönüştürüldü.",
+        "Telegram/FMP anahtarları istisna URL'lerinden temizleniyor; geçmiş logdaki 6 token kopyası redakte edildi.",
+        "Dashboard canlı fiyat kapsamasını ve quote yaşını gösteriyor; eksikte sarı uyarı veriyor.",
+        "Terminaldeki yanıltıcı maliyet-özsermayesi yerine gerçek kapanış piyasa özsermayesi gösteriliyor.",
+        "Bootstrap dönemi ile 6 Temmuz'da başlayan Aday-3 ileri dönemi ayrı ölçülüyor.",
+        "Kural dokümanı %7.5 slot, %60/%40 çıkış, A200 ve Aday-3 sıralamasıyla eşitlendi.",
+    ]
+    strengths = [
+        "Sinyal hesapları geçmiş bara kaydırılmış; ileri bakış sızıntısı bulunmadı.",
+        "RS top-50 listesi ve A200 piyasa freni her tarih için o tarihteki veriyle hesaplanıyor.",
+        "Yeni bar gelmeden yayın yapılmıyor; FMP gecikmesinde kontrollü tekrar deneniyor.",
+        "Split ölçekleme koruması, temel komisyon/kayma ve atomik dosya yazımı mevcut.",
+        "Günlük veri deposu artımlı güncelleniyor; dashboard motoru veya defteri ilerletmeden okuyor.",
+    ]
+    bad = any(x["status"] == "bad" for x in checks)
+    warn = any(x["status"] == "warn" for x in checks) or any(
+        x["severity"] == "high" for x in findings)
+    result = {
+        "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+        "overall": "bad" if bad else ("warn" if warn else "ok"),
+        "verdict": ("Operasyonel bir hata var; canlı kullanımdan önce düzelt."
+                    if bad else
+                    "Sistem çalışıyor ve korumalar güçlendi; fakat stratejik kanıt henüz kısa, ana riskler açık."),
+        "metrics": {
+            "ledger_date": ledger_date or None, "positions": len(positions),
+            "signal_slots": signal_slots, "runner_only": runner_only,
+            "cash": round(cash, 2), "invested_cost": round(invested, 2),
+            "close_equity": round(close_equity, 2) if close_equity is not None else None,
+            "all_pct": round(all_pct, 2) if all_pct is not None else None,
+            "forward_start": HEALTH_FORWARD_START, "forward_sessions": len(forward),
+            "forward_pct": round(forward_pct, 2) if forward_pct is not None else None,
+            "fresh_series": fresh, "total_series": len(frames),
+            "stale_symbols": sorted(set(stale_symbols)),
+            "anomaly_symbols": sorted(set(anomaly_symbols)),
+        },
+        "checks": checks, "source_sync": sync_rows, "findings": findings,
+        "improvements": improvements, "strengths": strengths,
+    }
+    if cacheable:
+        with _lock:
+            _health_cache.update(t=time.time(), data=result)
+    return result
 
 
 # ----------------------------- pozisyon meta (grafik overlay) -----------------------------
@@ -741,9 +1060,12 @@ PAGE = """<!doctype html><html lang="tr"><head><meta charset="utf-8">
     <button onclick="window.open('/rapor','_blank')" title="Deney iterasyonu: canlı baz vs önerilen varyant — ekonomist gözüyle detaylı karşılaştırma">📊 Rapor</button>
     <button onclick="window.open('/adaylar','_blank')" title="Canlı sistemin yanına çıkan aday alternatifler — basit dille karşılaştırma">🏁 Adaylar</button>
     <button onclick="window.open('/yeni-deneyler','_blank')" title="20 Temmuz Qulla-21 deney sonuçları — fundamentaller, momentum, bütçe-nötr kontrol">🧪 Yeni Deneyler</button>
+    <button onclick="window.open('/sistem-sagligi','_blank')" title="Qulla-21 ortak denetimi: veri, operasyon, performans ve açık riskler">🩺 Sistem Sağlığı</button>
     <button onclick="loadAll()">↻ Yenile</button>
   </div>
 </header>
+<div id="quoteWarn" hidden style="max-width:1180px;margin:12px auto 0;padding:10px 18px;
+ border:1px solid #b7791f;border-radius:8px;background:#2a2114;color:#ffd591"></div>
 <div class="wrap">
   <div class="race" id="race"></div>
 
@@ -799,7 +1121,12 @@ async function loadAll(){
   renderScan(s); renderMkt(p.market);
   loadEquity(); loadBreadth();
   $('meta').textContent=`başlangıç ${p.started||'?'} · ${p.slippage||'slippage kapalı'}`;
-  $('upd').textContent='güncellendi '+new Date().toLocaleTimeString('tr-TR');
+  const qw=$('quoteWarn'), missing=p.quote_missing||[];
+  if(missing.length){
+    qw.hidden=false;
+    qw.textContent=`⚠️ Canlı fiyat kapsamı ${p.quote_count}/${p.quote_total}. Eksik: ${missing.join(', ')}. Bu semboller giriş fiyatıyla değerleniyor; özsermaye gerçek anlık değer değildir.`;
+  }else{qw.hidden=true;qw.textContent='';}
+  $('upd').textContent=`fiyat ${p.quote_count}/${p.quote_total} · quote yaşı ${p.quote_age_seconds??'—'} sn · sayfa ${new Date().toLocaleTimeString('tr-TR')}`;
 }
 // ---- açılır/kapanır liste panelleri (tercih localStorage'da kalıcı) ----
 function togglePanel(id){
@@ -915,7 +1242,7 @@ function renderMkt(m){
   el.innerHTML=`<span class="dot"></span>${m.label}${m.et?' · '+m.et:''}`;
 }
 function renderKpis(p,el,other){
-  const k=[['Özsermaye','$'+f(p.equity)],['Genel K/Z',sign(p.total_pl)+'$ ('+sign(p.total_pl_pct)+'%)',cls(p.total_pl)],
+  const k=[[(p.quote_complete?'Özsermaye (canlı fiyat)':'Özsermaye (eksik fiyat)'),'$'+f(p.equity)],['Genel K/Z',sign(p.total_pl)+'$ ('+sign(p.total_pl_pct)+'%)',cls(p.total_pl)],
    ['Gerçekleşmemiş',sign(p.unrealized)+'$',cls(p.unrealized)],['Gerçekleşen',sign(p.realized)+'$',cls(p.realized)],
    ['Nakit','$'+f(p.cash)],['Pozisyon',p.n_open+' açık · '+p.n_closed+' kapanan']];
   if(p.trading_days!=null)k.push(['📅 Sistem açık (işlem günü)',p.trading_days+' gün']);
@@ -1096,7 +1423,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
         self.wfile.write(body)
 
@@ -1113,6 +1439,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._send(200, json.dumps(equity_json(), ensure_ascii=False), "application/json")
             elif path == "/api/breadth":
                 self._send(200, json.dumps(breadth_json(), ensure_ascii=False), "application/json")
+            elif path == "/api/system-health":
+                self._send(200, json.dumps(system_health_json(), ensure_ascii=False), "application/json")
             elif path == "/static/lwc.js":
                 self._send(200, _LWC_JS, "application/javascript; charset=utf-8")
             elif path == "/rapor":
@@ -1155,6 +1483,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         self._send(200, fh.read(), "text/html; charset=utf-8")
                 else:
                     self._send(404, "Yeni deneyler sayfası henüz üretilmedi", "text/plain; charset=utf-8")
+            elif path == "/sistem-sagligi":
+                rp = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                  "dashboard_static", "system_health.html")
+                if os.path.exists(rp):
+                    with open(rp, "rb") as fh:
+                        self._send(200, fh.read(), "text/html; charset=utf-8")
+                else:
+                    self._send(404, "Sistem sağlığı sayfası bulunamadı", "text/plain; charset=utf-8")
             elif path == "/adaylar-ml":
                 # 🤖 ML gölge-mod sahte-kırılım raporu (statik, ml_shadow_report.py üretir) — salt-okur
                 rp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dashboard_static", "adaylar-ml.html")
@@ -1188,8 +1524,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._send(404, "yok", "text/plain; charset=utf-8")
         except Exception as e:
             import traceback
-            traceback.print_exc()
-            self._send(500, f"hata: {e}", "text/plain; charset=utf-8")
+            print(_safe_error(traceback.format_exc()), file=sys.stderr)
+            self._send(500, f"hata: {_safe_error(e)}", "text/plain; charset=utf-8")
 
 
 def main():

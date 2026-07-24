@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Qulla-21 Sistem Sağlığı</title>
+  <style>
+    :root{--bg:#0f1217;--card:#171c24;--card2:#1d2430;--line:#2b3543;--fg:#edf1f7;
+      --mut:#9ba7b7;--ok:#37c987;--warn:#f2b84b;--bad:#f06f73;--blue:#72a7ff}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 system-ui,-apple-system,sans-serif}
+    header{border-bottom:1px solid var(--line);padding:22px max(20px,calc((100% - 1120px)/2));
+      background:linear-gradient(180deg,#171c24,#10141a)}
+    h1{font-size:24px;margin:0 0 4px}.sub,.mut{color:var(--mut)}
+    main{max-width:1120px;margin:auto;padding:24px 20px 50px}
+    .verdict{border:1px solid var(--warn);background:#2a2317;border-radius:12px;padding:16px 18px;margin-bottom:18px}
+    .verdict.bad{border-color:var(--bad);background:#2b191d}.verdict.ok{border-color:var(--ok);background:#15271f}
+    .verdict b{display:block;font-size:18px;margin-bottom:3px}
+    .grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+    .metric,.panel{border:1px solid var(--line);background:var(--card);border-radius:10px}
+    .metric{padding:13px}.metric span{display:block;color:var(--mut);font-size:12px}.metric b{font-size:20px}
+    .panel{padding:18px;margin-top:16px}h2{font-size:17px;margin:0 0 12px}
+    .check,.finding{padding:12px 0;border-top:1px solid var(--line);display:grid;grid-template-columns:auto 1fr;gap:10px}
+    .check:first-of-type,.finding:first-of-type{border-top:0}
+    .dot{width:10px;height:10px;border-radius:50%;margin-top:7px;background:var(--warn)}
+    .dot.ok{background:var(--ok)}.dot.bad{background:var(--bad)}
+    .check b,.finding b{display:block}.detail{color:var(--mut);font-size:14px}
+    .sev{font-size:11px;border-radius:99px;padding:3px 7px;align-self:start;margin-top:2px;
+      color:#14171b;background:var(--warn);font-weight:750}
+    .sev.high{background:var(--bad)}.sev.medium{background:var(--warn)}
+    .two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    ul{margin:0;padding-left:20px}li{margin:8px 0}
+    code{color:#b9d2ff;background:var(--card2);padding:2px 5px;border-radius:4px}
+    a{color:var(--blue)}.foot{margin-top:18px;color:var(--mut);font-size:13px}
+    @media(max-width:850px){.grid{grid-template-columns:repeat(2,1fr)}.two{grid-template-columns:1fr}}
+    @media(max-width:470px){.grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+<header>
+  <h1>🩺 Qulla-21 Sistem Sağlığı</h1>
+  <div class="sub">Codex + Claude ortak denetimi · canlı dosyalardan salt-okur kontrol</div>
+</header>
+<main>
+  <div id="loading" class="panel">Rapor hazırlanıyor…</div>
+  <div id="app" hidden>
+    <div id="verdict" class="verdict"></div>
+    <div id="metrics" class="grid"></div>
+    <section class="panel"><h2>Operasyonel kontroller</h2><div id="checks"></div></section>
+    <section class="panel"><h2>Açık zayıflıklar</h2><div id="findings"></div></section>
+    <div class="two">
+      <section class="panel"><h2>Bu denetimde iyileştirilenler</h2><ul id="improvements"></ul></section>
+      <section class="panel"><h2>Sağlam bulunan taraflar</h2><ul id="strengths"></ul></section>
+    </div>
+    <section class="panel">
+      <h2>Veri inceleme listesi</h2>
+      <div id="dataNotes" class="detail"></div>
+    </section>
+    <div class="foot">Bu sayfa yatırım tavsiyesi değildir. “Operasyonel olarak sağlıklı”, stratejinin gelecekte kâr edeceği anlamına gelmez.
+      <a href="/">Ana dashboarda dön</a>.</div>
+  </div>
+</main>
+<script>
+const esc=v=>String(v??'—').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money=v=>v==null?'—':'$'+Number(v).toLocaleString('tr-TR',{maximumFractionDigits:0});
+const pct=v=>v==null?'—':(v>=0?'+':'')+Number(v).toFixed(2)+'%';
+const metric=(label,value,note='')=>`<div class="metric"><span>${esc(label)}</span><b>${esc(value)}</b>${note?`<span>${esc(note)}</span>`:''}</div>`;
+fetch('/api/system-health',{cache:'no-store'}).then(r=>{if(!r.ok)throw Error('HTTP '+r.status);return r.json()}).then(d=>{
+  const m=d.metrics||{};
+  const verdict=document.getElementById('verdict'); verdict.className='verdict '+esc(d.overall);
+  verdict.innerHTML=`<b>${d.overall==='bad'?'🔴 Müdahale gerekli':d.overall==='ok'?'🟢 Kontroller temiz':'🟠 Çalışıyor; kanıt sınırlı'}</b>${esc(d.verdict)}`;
+  document.getElementById('metrics').innerHTML=[
+    metric('Kapanış özsermayesi',money(m.close_equity),'piyasa değeri'),
+    metric('Tüm defter',pct(m.all_pct),'bootstrap dahil'),
+    metric('Aday-3 ileri dönem',pct(m.forward_pct),`${m.forward_sessions??'—'} seans · ${m.forward_start??'—'} sonrası`),
+    metric('Açık pozisyon',m.positions??'—',`${m.signal_slots??'—'} sinyal slotu · ${m.runner_only??'—'} runner-only`),
+    metric('Veri kapsamı',`${m.fresh_series??'—'}/${m.total_series??'—'}`,'güncel seri')
+  ].join('');
+  document.getElementById('checks').innerHTML=(d.checks||[]).map(x=>
+    `<div class="check"><i class="dot ${esc(x.status)}"></i><div><b>${esc(x.label)}</b><div class="detail">${esc(x.detail)}</div></div></div>`).join('');
+  document.getElementById('findings').innerHTML=(d.findings||[]).map(x=>
+    `<div class="finding"><span class="sev ${esc(x.severity)}">${x.severity==='high'?'YÜKSEK':'ORTA'}</span><div><b>${esc(x.title)}</b><div class="detail">${esc(x.detail)}</div></div></div>`).join('');
+  document.getElementById('improvements').innerHTML=(d.improvements||[]).map(x=>`<li>${esc(x)}</li>`).join('');
+  document.getElementById('strengths').innerHTML=(d.strengths||[]).map(x=>`<li>${esc(x)}</li>`).join('');
+  const stale=(m.stale_symbols||[]).join(', ')||'yok';
+  const jumps=(m.anomaly_symbols||[]).join(', ')||'yok';
+  document.getElementById('dataNotes').innerHTML=`Uzun süre eski semboller: <code>${esc(stale)}</code><br>Geçmişte &gt;%40 tek-gün hareketi olan ve split/veri kontrolü isteyen semboller: <code>${esc(jumps)}</code><br>Rapor zamanı: ${esc(d.generated_at)}`;
+  document.getElementById('loading').hidden=true; document.getElementById('app').hidden=false;
+}).catch(e=>{document.getElementById('loading').textContent='Rapor yüklenemedi: '+e.message});
+</script>
+</body>
+</html>

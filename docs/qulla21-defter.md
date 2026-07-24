@@ -17,8 +17,12 @@ Qullamaggie tarzı momentum kırılımı. Her akşam (15:45 ET / 22:45 TR) otoma
 | **2. En güçlüler** | Son 60 günde piyasadan (SPY) en çok ayrışan **50 hisse** = günün izleme listesi (RS top-50). |
 | **3. Rejim** | SPY 200 günlük ortalamanın **üstünde mi?** Altındaysa o gün **yeni alım yok**. |
 | **4. Sinyal** | İzleme listesinde **63 günün zirvesini kıran** + 52H'ye yakın + trendi yukarı hisseler aday. |
-| **5. Alım** | Boş yer varsa (en fazla **20 hisse**) en güçlüler alınır; her birine paranın **%5'i**. |
-| **6. Satış (split)** | Pozisyon ikiye bölünür: **yarısı +2R hedefte** satılır, **yarısı 21-EMA altına kapanana kadar** tutulur (runner). |
+| **5. Alım** | Boş yer varsa en güçlüler alınır; taban tahsis her yeni pozisyon için özsermayenin **%7,5'i**. +2R bacağı bitmiş runner slotu boşaltır; nakit yoksa yeni alım yapılmaz. |
+| **6. Satış (split)** | Pozisyon ikiye bölünür: **%60 +2R hedefte** satılır, **%40 21-EMA altına kapanana kadar** tutulur (runner). |
+
+Canlı seçim ayrıca iki Aday 3 kuralı kullanır: kalabalık günde kalite+hareket
+karışımıyla sıralama ve `SPY>SMA200` kapısına ek olarak havuzun en az %50'sinin
+kendi SMA200'ü üzerinde olması (`A200≥%50`).
 
 Para: sanal **$10.000** ile başlar, bileşik büyür.
 
@@ -36,6 +40,10 @@ canlı açılmış bir pozisyon sonradan kaybolabiliyordu. Bu, paper trade için
 - Sonraki her gün → defter motora yüklenir, **yalnız yeni gün** işlenir (`bt._step`).
 - Bir kez işlenen gün **kilitlenir**: veri sonradan değişse bile geçmiş **değişmez**,
   açık pozisyon **gerçekten satılana kadar düşmez**.
+- Her commit atomiktir ve önceki kilitli gün `.bak.YYYY-MM-DD` olarak saklanır.
+  Ana defter kaybolmuş ama yedek varsa sistem sessizce sıfırdan başlamayı reddeder.
+- Yeni giriş, açık pozisyon ve yeni/replay çıkış fiyatları quote endpoint'iyle çapraz
+  kontrol edilir; `%25` üstü ölçek sapmasında yayın ve commit durur.
 
 Sonuç: K/Z artık **sadece** gerçek alım/satım ve fiyat hareketiyle değişir — veri
 revizyonları geçmişi bozamaz.
@@ -59,6 +67,8 @@ yenilenir; haftada bir tam yenileme güvenlik ağı vardır.
 
 - **Telegram**: her akşam alım/satım + portföy durumu (sahip + aboneler).
 - **Dashboard** (web): açık pozisyonlar, anlık K/Z, günlük K/Z, grafikler.
+- **Sistem Sağlığı** (`/sistem-sagligi`): veri/defter uyumu, açık zayıflıklar,
+  uygulanan korumalar ve bootstrap–forward sonuç ayrımı.
 - **Komutlar**: `/portfolio`, `/lastscan`.
 
 ## İlgili dosyalar

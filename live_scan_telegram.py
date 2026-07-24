@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""qswing KIRILIM canlı tarayıcı → TELEGRAM (grafik + H/R detayı).
-Strateji: Qullamaggie 40-gün tepe KIRILIM girişi + şampiyon ATR-trail çıkış
-(hedef +2R · %50 kâr-al sonrası breakeven · +1R sonrası KAPANIŞ−2.5×ATR trailing).
+"""Qulla-21 canlı tarayıcı → TELEGRAM (grafik + H/R detayı).
+Strateji: RS top-50 + Qullamaggie 63-gün tepe kırılımı + split çıkış
+(%60 +2R hedef · %40 kapanış<21-EMA runner) + Aday 3 sıralama/A200 freni.
 Veri: FMP /stable, 5 yıl (sağlayıcı varsayılan-azamisi → sağlam indikatör).
 
 Kapanışa ~15 dk kala (15:45 ET) cron ile çağrılır:
   1) canlı günlük bar (son bar = gün-içi snapshot = 'kapanış' varsayımı)
-  2) run_live_qswing_scan → KIRILIM + İZLE (backtest qswing_breakout ile aynı kapı)
-  3) Telegram'a: özet + her KIRILIM için mum grafiği (giriş/stop/+2R hedef/40g-tepe) + H/R detayı
+  2) kalıcı Qulla defterini yalnız yeni günle ilerlet
+  3) Telegram'a: özet + her KIRILIM için mum grafiği (giriş/stop/+2R hedef/63g-tepe)
 
 Gizli (~/.portfolio_keys.json | env): TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, FMP_API_KEY
 Açık pozisyonlar (ops.): ~/.swing_held.json → ["AAPL","MSFT"]  (KIRILIM listesinden düşülür)
 Kullanım: python3 live_scan_telegram.py [--test] [--asof YYYY-MM-DD] [--demo-watch] [--et-window]
 """
-import os, sys, json, html, time
+import os, sys, json, html, re, time
 import matplotlib; matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
@@ -42,12 +42,21 @@ def _secret(name):
     return None
 
 
+def _safe_error(exc):
+    """İstisna URL'lerinde olabilecek Telegram/FMP anahtarlarını logdan ayıkla."""
+    text = str(exc)
+    text = re.sub(r"(api\.telegram\.org/bot)[^/\s]+", r"\1<REDACTED>", text)
+    text = re.sub(r"\b\d{7,12}:[A-Za-z0-9_-]{20,}\b", "<REDACTED>", text)
+    text = re.sub(r"([?&]apikey=)[^&\s]+", r"\1<REDACTED>", text, flags=re.I)
+    return text
+
+
 def _filter_glitches(buyable, quotes, tol=0.25):
     """Veri-glitch çapraz kontrolü: tarama kapanışını BAĞIMSIZ gerçek-zamanlı FMP
     quote ile karşılaştır; oran (büyük/küçük) > 1+tol ise veri hatası say → AL
     listesinden DÜŞ. (2026-06-11 KLAC olayı: bulk veri hattı KLAC'ı 10× ölçekle
     verdi, quote gerçekti; sahte fiyat üç kağıt portföye de bulaştı.)
-    Referans yoksa (quote dönmemişse) MUHAFAZAKÂR: adayı KORU → yanlış pozitif yok.
+    Referans yoksa adayı korur; bu durumda çapraz korumanın uygulanamadığı kabul edilir.
     Dönen: (temiz_liste, [(sembol, tarama_close, quote), ...])"""
     clean, dropped = [], []
     for c in buyable:
@@ -58,6 +67,65 @@ def _filter_glitches(buyable, quotes, tol=0.25):
         else:
             clean.append(c)
     return clean, dropped
+
+
+def _qulla_price_glitches(cands, quotes, tol=0.25):
+    """Qulla chart adaylarını ortak glitch filtresinin beklediği biçime çevir.
+
+    Qulla'da `entry`, tarama anındaki fiyat + giriş kaymasıdır. %25 eşik normal
+    fiyat hareketini değil, KLAC-tipi ölçek/split veri bozulmasını hedefler."""
+    rows = [{"symbol": c["symbol"], "close": c.get("entry")} for c in cands]
+    _clean, dropped = _filter_glitches(rows, quotes, tol=tol)
+    return dropped
+
+
+def _qulla_validation_rows(qr, previous_ledger):
+    """Commit öncesi çapraz kontrol satırları + quote'u zorunlu değişen semboller.
+
+    Yalnız yeni adayları değil, önceki defterde açık olanları, bugün hâlâ açık
+    pozisyonları ve önceki commit'ten sonra oluşan TÜM çıkışları kapsar. Son grup
+    özellikle bir gecikme gününün ertesi gün replay edilip sessizce commit edilmesini
+    önler: eski çıkış fiyatı bugünkü quote'tan 10× farklıysa kapı yine kapanır.
+    """
+    previous_ledger = previous_ledger or {}
+    old_positions = {p.get("symbol") for p in previous_ledger.get("positions", [])}
+    current_positions = {getattr(p, "symbol", None) for p in qr.get("positions", [])}
+    opened = {getattr(p, "symbol", None) for p in qr.get("opened", [])}
+    all_trades = list(qr.get("closed_all") or [])
+    old_trade_n = len(previous_ledger.get("trades") or [])
+    new_trades = (all_trades[old_trade_n:]
+                  if previous_ledger and old_trade_n <= len(all_trades)
+                  else list(qr.get("exited") or []))
+    changed = opened | {getattr(t, "symbol", None) for t in new_trades}
+    symbols = (old_positions | current_positions | changed) - {None}
+    rows = []
+    asof = pd.Timestamp(qr["asof"])
+    data = (qr.get("market") or {}).get("data") or {}
+    for sym in sorted(symbols):
+        df = data.get(sym)
+        try:
+            sub = df.loc[:asof].dropna(subset=["Close"])
+            if len(sub):
+                rows.append({"symbol": sym, "close": float(sub["Close"].iloc[-1]),
+                             "source": "günlük"})
+        except Exception:
+            continue
+    # Replay'de ara gün glitchi bugün normale dönmüş olabilir. Yeni trade'in gerçek
+    # deftere yazılacak çıkış fiyatını da bugünkü bağımsız quote ile karşılaştır.
+    for trade in new_trades:
+        sym, px = getattr(trade, "symbol", None), getattr(trade, "exit", None)
+        if sym and px:
+            rows.append({"symbol": sym, "close": float(px), "source": "yeni çıkış"})
+    return rows, sorted(changed - {None}), sorted(symbols)
+
+
+def _qulla_validation_issues(rows, required_symbols, quotes, tol=0.25):
+    """Sapma, eksik quote ve eksik günlük/çıkış satırlarını birlikte döndür."""
+    _clean, bad = _filter_glitches(rows, quotes, tol=tol)
+    missing_quotes = [sym for sym in required_symbols if sym not in quotes]
+    row_symbols = {row.get("symbol") for row in rows}
+    missing_rows = [sym for sym in required_symbols if sym not in row_symbols]
+    return bad, missing_quotes, missing_rows
 
 
 def _held():
@@ -194,12 +262,12 @@ def _bcast(fn, *args, token=None, chats=()):
                     pt.remove_subscriber(c)
                     print(f"[abone düşürüldü] {c}", flush=True)
         except Exception as e:
-            print(f"[send hata] chat={c} {e}", flush=True)
+            print(f"[send hata] chat={c} {_safe_error(e)}", flush=True)
 
 
 def draw_chart(sym, df, c, asof, path, nbars=50):
-    """Son nbars Heikin Ashi mumu + SMA50 + giriş/stop/+2R hedef/40g-tepe çizgileri → PNG.
-    (Çıkış = şampiyon ATR-trail; +2R hedef çizgisi gösterilir, EMA çıkış çizgileri kaldırıldı.)
+    """Son nbars Heikin Ashi mumu + SMA50 + giriş/stop/+2R hedef/63g-tepe çizgileri → PNG.
+    (Çıkış = %60 +2R / %40 EMA21; grafikte giriş/stop/+2R/63g seviyeleri gösterilir.)
     Mumlar HA (görsel yumuşatma); SMA ve yatay çizgiler HAM fiyat. Trade mantığı/veri değişmez."""
     full = df.loc[:asof].dropna(subset=["Open", "High", "Low", "Close"])
     if len(full) < 5:
@@ -229,76 +297,6 @@ def draw_chart(sym, df, c, asof, path, nbars=50):
     return True
 
 
-def candidate_caption(c, watch=False):
-    e = html.escape
-    if watch:
-        if c.get("watch_reason") == "overext":
-            head = "⚠️ <i>İZLE — {0}g tepeyi kırdı AMA aşırı uzamış (SMA20'ye %{1})</i>\n".format(
-                c["breakout_lb"], c["dist_sma20_pct"])
-        else:
-            head = "🟡 <i>İZLE — {0}g tepeye %{1} kala</i>\n".format(
-                c["breakout_lb"], c["dist_to_breakout_pct"])
-    else:
-        head = ""
-    sc = c.get("score")
-    rank = c.get("_rank")
-    score_line = ""
-    if sc is not None and not watch:
-        p = c.get("score_parts") or {}
-        rk = f"#{rank} · " if rank else ""
-        score_line = (f"🏆 <b>{rk}Puan {sc}/100</b> "
-                      f"<i>(RS {p.get('rs','?')}/45 · 52H {p.get('near52','?')}/20 · "
-                      f"taze {p.get('fresh','?')}/20 · risk {p.get('risk','?')}/15)</i>\n")
-    cap = (head +
-           f"<b>{e(c['symbol'])}</b> · {e(c['sector_etf'])} · "
-           f"{'🟡 İZLE' if watch else '🚀 KIRILIM'}\n"
-           + score_line +
-           f"🎯 Giriş <code>${c['entry']}</code> · Stop <code>${c['stop']}</code> "
-           f"(risk %{c['risk_pct']})\n"
-           f"📈 {c['breakout_lb']}g tepe <code>${c['high40']}</code>"
-           f"{' aşıldı' if not watch else ''} · 52H'ye %{c['dist_52h_pct']} · "
-           f"SMA20'ye %{c['dist_sma20_pct']}\n"
-           f"⚖️ RS <b>+{c['rs']}</b> (60g · SPY'a karşı) · 3a getiri %{c['ret_3m']}\n"
-           f"📤 Çıkış (şampiyon · ATR-trail {c.get('atr_trail_mult', 2.5)}×): "
-           f"hedef <b>+2R</b> <code>${c.get('partial_target','—')}</code> · "
-           f"+1R sonrası stop <b>KAPANIŞ−{c.get('atr_trail_mult', 2.5)}×ATR</b>'ye trailing "
-           f"(ATR <code>${c.get('atr','—')}</code>) · %50 kâr-al sonrası girişe (breakeven) · "
-           f"ilk koruma stopu <code>${c['stop']}</code>")
-    if c.get("overext"):
-        cap += (f"\n⚠️ <b>AŞIRI UZAMIŞ</b> (SMA20'ye %{c['dist_sma20_pct']}) — "
-                f"parabolik/climax, geri çekilmeyi bekle.")
-    return cap
-
-
-def summary_text(res, demo=False):
-    flag = "🟢 AÇIK" if res["regime_open"] else "🔴 KAPALI"
-    L = [f"<b>🚀 qswing Kırılım Tarayıcı ({res['asof']})</b>",
-         f"🕒 15:45 ET · Rejim: {flag} · SPY ${res['spy_close']} · {res['n_universe']} hisse"]
-    if not res["regime_open"]:
-        L.append("\n⚠️ <b>Rejim KAPALI</b> (SPY&lt;SMA200) → momentum stratejisinde yeni alım YOK.")
-    n = len(res["buyable"])
-    L.append(f"\n🚀 <b>KIRILIM: {n}</b>" + (" — puana göre sıralı, aşağıda grafik+detay 👇" if n else
-             f" ({res['breakout_lb']}g tepe kırılımı + 52H yakın + SPY'ı geçen momentum koşulunu geçen yok)"))
-    if n:
-        rank = " · ".join(f"{i}.{html.escape(r['symbol'])} <b>{r.get('score','?')}</b>"
-                          for i, r in enumerate(res["buyable"], 1))
-        L.append(f"🏆 <b>Sıralama (puan):</b> {rank}")
-    if demo and not n:
-        L.append("🟡 Demo: tepeye en yakın <b>İZLE</b> adayları tam detayla gönderiliyor.")
-    near = [r for r in res["watch"] if r.get("watch_reason") == "near"]
-    over = [r for r in res["watch"] if r.get("watch_reason") == "overext"]
-    if near:
-        w = " · ".join(f"{html.escape(r['symbol'])}(tepeye %{r['dist_to_breakout_pct']})" for r in near[:10])
-        L.append(f"🟡 <b>İZLE — tepeye ≤%3:</b> {w}")
-    if over:
-        w = " · ".join(f"{html.escape(r['symbol'])}(SMA20'ye %{r['dist_sma20_pct']})" for r in over[:10])
-        L.append(f"⚠️ <b>İZLE — kırdı ama AŞIRI UZAMIŞ:</b> {w}")
-    L.append("\n<i>Strateji: Qullamaggie 40g kırılım girişi · şampiyon ATR-trail çıkış "
-             "(hedef +2R · %50 kâr-al sonrası breakeven · +1R sonrası KAPANIŞ−2.5×ATR trailing). "
-             "Sinyal 15:45 anlık fiyatına göre — geçici. Eğitim amaçlı.</i>")
-    return "\n".join(L)
-
-
 def send_message(text, token, chat):
     return requests.post(TG.format(tok=token, method="sendMessage"),
                          data={"chat_id": chat, "text": text, "parse_mode": "HTML",
@@ -312,12 +310,6 @@ def send_photo(path, caption, token, chat):
                              files={"photo": ph}, timeout=60)
 
 
-def _scan_text(summ, cands, demo):
-    """22:45 mesajının tek-metin sürümü (özet + her aday caption'ı) → /lastscan için."""
-    parts = [summ] + [candidate_caption(c, watch=demo) for c in cands]
-    return "\n\n".join(parts)
-
-
 def main():
     test = "--test" in sys.argv
     asof = sys.argv[sys.argv.index("--asof") + 1] if "--asof" in sys.argv else None
@@ -329,10 +321,11 @@ def main():
                   f"(15:30–16:05 ET, hafta içi bekleniyor)")
             return
 
-    # 👑 Qulla-21 (TEK yöntem): backtest-replay 2026-06-04→asof
-    #    RS top-50 sistematik evren + 63g kırılım girişi + split çıkış (yarı +2R / kalan 21-EMA runner)
+    # 👑 Qulla-21 (TEK yöntem): kilitli defter START→asof
+    #    RS top-50 sistematik evren + 63g kırılım girişi + split çıkış (%60 +2R / %40 21-EMA runner)
     auto = asof is None                                   # cron modu: asof otomatik çözülür
-    prev_locked = (qp.load_ledger() or {}).get("last_date")
+    prev_ledger = qp.load_ledger() or {}
+    prev_locked = prev_ledger.get("last_date")
     qr = qp.run_qulla(asof)
     market = qr["market"]
     asof = qr["asof"]
@@ -390,6 +383,34 @@ def main():
     if not token:
         print("HATA: TELEGRAM_BOT_TOKEN/CHAT_ID yok.", file=sys.stderr); sys.exit(2)
 
+    # ÜRETİM GLITCH KAPISI: açık pozisyon + yeni giriş + yeni/replay çıkış fiyatlarını
+    # bağımsız FMP quote endpoint'iyle karşılaştır. Referans veya günlük satır eksikse de
+    # commit edilmez; böylece kontrol edilemeyen değer deftere sessizce kilitlenmez.
+    validation_rows, _changed_symbols, validation_symbols = _qulla_validation_rows(
+        qr, prev_ledger)
+    key = _secret("FMP_API_KEY")
+    quotes = pt.quote_fmp(validation_symbols, key) if (key and validation_symbols) else {}
+    # Geçici tek-sembol quote hatasını yanlış alarm yapmamak için eksikleri bir kez daha dene.
+    retry_symbols = [sym for sym in validation_symbols if sym not in quotes]
+    if key and retry_symbols:
+        quotes.update(pt.quote_fmp(retry_symbols, key))
+    bad, missing_quotes, missing_rows = _qulla_validation_issues(
+        validation_rows, validation_symbols, quotes)
+    if bad or missing_quotes or missing_rows:
+        details = [f"{sym}: günlük/çıkış ${scan:.2f} / quote ${quote:.2f}"
+                   for sym, scan, quote in bad]
+        if missing_quotes:
+            details.append("quote alınamadı: " + ", ".join(missing_quotes))
+        if missing_rows:
+            details.append("günlük/çıkış satırı yok: " + ", ".join(missing_rows))
+        detail = " · ".join(details)
+        alert = ("<b>🚨 Qulla-21 VERİ DOĞRULAMA — İŞLEM DURDU</b>\n"
+                 f"{html.escape(detail)}\n"
+                 "<b>Yayın yok, defter commit edilmedi.</b> Veri kaynağını kontrol et.")
+        _bcast(send_message, alert, token=token, chats=chats)
+        print(f"[KRİTİK] veri doğrulama; yayın/commit yok: {detail}", file=sys.stderr)
+        sys.exit(3)
+
     _bcast(send_message, summ, token=token, chats=chats)
     for c in cands:
         cap = qp.chart_caption(c)
@@ -400,26 +421,57 @@ def main():
             _bcast(send_message, cap, token=token, chats=chats)
     _bcast(send_message, msg, token=token, chats=chats)
 
-    # /lastscan için son mesajı + dashboard için Qulla durumunu + yapısal tarama verisini kaydet
-    pt.save_last_scan("\n\n".join([summ] + [qp.chart_caption(c) for c in cands] + [msg]), asof)
+    # ZORUNLU ADIM: yayınlanan günü önce gerçek deftere kilitle. Başarısızsa dashboard
+    # snapshot'ını ilerletme; kullanıcıya açık alarm gönder ve non-zero çık.
     try:
-        qp.commit_ledger(qr)   # GERÇEK DEFTERİ İLERLET: bugünü kilitle (yalnız gerçek gönderimde)
+        qp.commit_ledger(qr)
     except Exception as _e:
-        print(f"[qulla defter commit atlandı] {_e}", flush=True)
+        alert = ("<b>🚨 Qulla-21 DEFTER COMMIT HATASI</b>\n"
+                 f"Yayın gönderildi ama gün kilitlenemedi: <code>{html.escape(_safe_error(_e))}</code>\n"
+                 "<b>Dashboard ilerletilmedi; yeniden çalıştırmadan önce defteri kontrol et.</b>")
+        _bcast(send_message, alert, token=token, chats=chats)
+        print(f"[KRİTİK] qulla defter commit başarısız: {_safe_error(_e)}", file=sys.stderr)
+        sys.exit(4)
+
+    # Defter kilitlendikten sonra türetilmiş dashboard/komut-botu önbellekleri.
     try:
         qp.write_state(qr)
     except Exception as _e:
-        print(f"[qulla state kaydı atlandı] {_e}", flush=True)
+        print(f"[qulla state kaydı atlandı] {_safe_error(_e)}", flush=True)
+        _bcast(send_message,
+               f"<b>⚠️ Qulla dashboard state yazılamadı</b>\n<code>{html.escape(_safe_error(_e))}</code>",
+               token=token, chats=chats)
+    try:
+        pt.save_last_scan("\n\n".join([summ] + [qp.chart_caption(c) for c in cands] + [msg]), asof)
+    except Exception as _e:
+        print(f"[lastscan kaydı atlandı] {_safe_error(_e)}", flush=True)
     try:
         pt.save_scan_data({"asof": asof, "regime_open": qr["regime_open"],
                            "buyable": cands, "watch": []})
     except Exception as _e:
-        print(f"[scan_data kaydı atlandı] {_e}", flush=True)
+        print(f"[scan_data kaydı atlandı] {_safe_error(_e)}", flush=True)
 
     print(f"Gönderildi ({len(chats)} alıcı) · asof {asof} · 👑 Qulla-21 · "
           f"giriş={len(cands)} · çıkış={len(qr['exited'])} · açık={len(qr['positions'])} · "
-          f"toplam {(qr['cost_equity']/qp.INITIAL-1)*100:+.1f}% vs SPY {qr['spy_roi']:+.1f}%")
+          f"toplam {(qr['mkt_equity']/qp.INITIAL-1)*100:+.1f}% vs SPY {qr['spy_roi']:+.1f}%")
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except (KeyboardInterrupt, SystemExit):
+        raise
+    except Exception as _e:
+        # Bar-gecikmesi dışındaki beklenmeyen çökmeler artık sessiz kalmaz.
+        print(f"[KRİTİK] beklenmeyen canlı tarama hatası: {_safe_error(_e)}", file=sys.stderr)
+        try:
+            _token, _chats = _tg_targets()
+            if _token:
+                _bcast(send_message,
+                       "<b>🚨 Qulla-21 CANLI TARAMA ÇÖKTÜ</b>\n"
+                       f"<code>{html.escape(type(_e).__name__ + ': ' + _safe_error(_e))}</code>\n"
+                       "<b>Defterin son kilitli günü korunuyor; logu kontrol et.</b>",
+                       token=_token, chats=_chats)
+        except Exception:
+            pass
+        raise

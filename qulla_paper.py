@@ -29,7 +29,7 @@ DEFTER MİMARİSİ (önceki "durumsuz replay" değiştirildi):
 
 CLI:  python3 qulla_paper.py [--asof YYYY-MM-DD]   (salt-okunur simülasyon; commit etmez)
 """
-import sys, os, json, html
+import glob, sys, os, json, html
 import pandas as pd
 import swing2_backtest as s
 
@@ -357,6 +357,11 @@ def _d_to_trade(d):
 def load_ledger(path=PAPER_QULLA_LEDGER):
     """Defteri oku; yoksa None (→ bootstrap gerekir)."""
     if not os.path.exists(path):
+        backups = sorted(glob.glob(path + ".bak.*"))
+        if backups:
+            raise RuntimeError(
+                f"ana Qulla defteri yok ama {len(backups)} yedek var; sessiz yeniden-bootstrap "
+                "reddedildi, önce doğru yedeği geri yükle")
         return None
     with open(path) as fh:
         return json.load(fh)
@@ -374,10 +379,28 @@ def _build_ledger(bt, last_date):
 
 def commit_ledger(r):
     """run_qulla sonucundaki defteri ATOMİK diske yaz. Yalnız gerçek gönderimde çağrılmalı
-    (kuru test/dashboard yenilemesi defteri İLERLETMEZ)."""
+    (kuru test/dashboard yenilemesi defteri İLERLETMEZ).
+
+    Mevcut defter geçerliyse üzerine yazmadan önce last_date etiketli, değişmez bir
+    günlük yedek oluşturur. Böylece dosya sağlam olsa bile hatalı bir canlı commit'i
+    önceki günün kilitli durumunu geri döndürülemez biçimde ezmez."""
     led = r.get("_ledger"); path = r.get("_ledger_path", PAPER_QULLA_LEDGER)
     if led is None:
         return
+    if os.path.exists(path):
+        try:
+            with open(path, "rb") as fh:
+                old_raw = fh.read()
+            old = json.loads(old_raw.decode("utf-8"))
+            old_date = str(old["last_date"])
+        except Exception as e:
+            raise RuntimeError(f"mevcut defter geçersiz; üzerine yazma reddedildi: {e}") from e
+        backup = f"{path}.bak.{old_date}"
+        if not os.path.exists(backup):
+            btmp = backup + ".tmp"
+            with open(btmp, "wb") as fh:
+                fh.write(old_raw)
+            os.replace(btmp, backup)
     tmp = path + ".tmp"
     with open(tmp, "w") as fh:
         json.dump(led, fh, ensure_ascii=False, indent=2)
@@ -559,7 +582,7 @@ def chart_caption(c):
            + (f" (risk %{c['risk_pct']})" if c.get('risk_pct') else "") + "\n"
            f"📈 63g tepe <code>${c.get('high40','—')}</code> aşıldı · RS <b>+{c['rs']}</b>\n"
            f"📤 Çıkış (split): %60 <b>+2R</b> <code>${c.get('partial_target','—')}</code> hedef · "
-           f"kalan yarı <b>kapanış &lt; 21-EMA</b> runner (ATR <code>${c.get('atr','—')}</code>)")
+           f"kalan %40 <b>kapanış &lt; 21-EMA</b> runner (ATR <code>${c.get('atr','—')}</code>)")
     return cap
 
 
@@ -693,10 +716,10 @@ def _cli():
                  ("<code>", ""), ("</code>", ""), ("&lt;", "<")):
         txt = txt.replace(a, b)
     print(txt)
-    tot = (r["cost_equity"] / INITIAL - 1) * 100
+    tot = (r["mkt_equity"] / INITIAL - 1) * 100
     print(f"\n[özet] {r['asof']} · açılan {len(r['opened'])} · çıkan {len(r['exited'])} · "
           f"açık {len(r['positions'])} · toplam {tot:+.1f}% (SPY {r['spy_roi']:+.1f}%) · "
-          f"özsermaye(maliyet) ${r['cost_equity']:.0f}")
+          f"özsermaye(piyasa) ${r['mkt_equity']:.0f}")
 
 
 if __name__ == "__main__":
