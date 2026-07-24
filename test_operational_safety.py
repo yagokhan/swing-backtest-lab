@@ -28,7 +28,8 @@ class GlitchGateTests(unittest.TestCase):
             [])
 
     def test_replay_exit_scale_error_is_also_caught(self):
-        trade = SimpleNamespace(symbol="ENPH", exit=900.0)
+        trade = SimpleNamespace(
+            symbol="ENPH", exit=900.0, exit_date=pd.Timestamp("2026-07-22"))
         qr = {
             "asof": "2026-07-23", "positions": [], "opened": [],
             "exited": [trade], "closed_all": [trade],
@@ -46,6 +47,17 @@ class GlitchGateTests(unittest.TestCase):
         self.assertEqual(missing, [])
         self.assertEqual(missing_rows, [])
         self.assertEqual([x[0] for x in bad], ["ENPH"])
+
+    def test_legitimate_30pct_replay_move_does_not_deadlock(self):
+        rows = [
+            {"symbol": "ARM", "close": 90.0, "source": "günlük"},
+            {"symbol": "ARM", "close": 117.0, "source": "replay çıkış"},
+        ]
+        bad, missing, missing_rows = live._qulla_validation_issues(
+            rows, ["ARM"], {"ARM": 90.0})
+        self.assertEqual(bad, [])
+        self.assertEqual(missing, [])
+        self.assertEqual(missing_rows, [])
 
     def test_changed_symbol_without_quote_blocks_validation(self):
         bad, missing, missing_rows = live._qulla_validation_issues(

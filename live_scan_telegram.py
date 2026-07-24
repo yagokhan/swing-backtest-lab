@@ -115,13 +115,25 @@ def _qulla_validation_rows(qr, previous_ledger):
     for trade in new_trades:
         sym, px = getattr(trade, "symbol", None), getattr(trade, "exit", None)
         if sym and px:
-            rows.append({"symbol": sym, "close": float(px), "source": "yeni çıkış"})
+            try:
+                exit_day = pd.Timestamp(getattr(trade, "exit_date")).normalize()
+            except Exception:
+                exit_day = asof.normalize()
+            source = "replay çıkış" if exit_day < asof.normalize() else "yeni çıkış"
+            rows.append({"symbol": sym, "close": float(px), "source": source})
     return rows, sorted(changed - {None}), sorted(symbols)
 
 
-def _qulla_validation_issues(rows, required_symbols, quotes, tol=0.25):
+def _qulla_validation_issues(rows, required_symbols, quotes, tol=0.25, replay_tol=0.50):
     """Sapma, eksik quote ve eksik günlük/çıkış satırlarını birlikte döndür."""
-    _clean, bad = _filter_glitches(rows, quotes, tol=tol)
+    current_rows = [row for row in rows if row.get("source") != "replay çıkış"]
+    replay_rows = [row for row in rows if row.get("source") == "replay çıkış"]
+    _clean, bad = _filter_glitches(current_rows, quotes, tol=tol)
+    # Replay çıkış fiyatı T gününe, quote T+1'e aittir. Meşru earnings gap'ini
+    # sonsuz alarm döngüsüne çevirmemek için burada yalnız daha büyük ölçek hatasını
+    # hedefle; bugünkü günlük satır aynı sembolü ayrıca normal %25 eşiğinde doğrular.
+    _replay_clean, replay_bad = _filter_glitches(replay_rows, quotes, tol=replay_tol)
+    bad.extend(replay_bad)
     missing_quotes = [sym for sym in required_symbols if sym not in quotes]
     row_symbols = {row.get("symbol") for row in rows}
     missing_rows = [sym for sym in required_symbols if sym not in row_symbols]
