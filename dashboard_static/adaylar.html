@@ -581,6 +581,50 @@ sonucu vererek doğrulandı. Eski baz defteri yedekte duruyor; ilk canlı tarama
 <p class="mut" style="font-size:12.5px">Kaynak: 3 turda yapılan ~135 geçmiş-veri karşılaştırma testi, sabit veri seti 373 hisse · 5 yıl,
 5 Temmuz 2026. Teknik ayrıntı ve sağlama testleri: <a href="/lab">🧪 /lab</a> bölüm 12 ve 12b.</p>
 
+<h2>🔎 Canlı ilk 56 gün "iç açıcı değil" mi? — beklenti karnesi (2026-08-16)</h2>
+<p class="note">Canlı pencere (27 May → 14 Ağu 2026): defter <b>+%2,2</b>, SPY +%3,4, en derin çukur <b>−%18,4</b>.
+Soru: bu tablo stratejinin normal dalgalanması mı, yoksa bir şey mi bozuldu? Ölçmek için aynı 5 yıllık veride,
+canlıyla birebir aynı kurallarla, <b>124 ayrı "sıfırdan başlangıç" koşusu</b> yapıldı: her 10 işlem gününde bir,
+boş defter + $10&#8239;bin ile tam 56 işlem günü. Canlı pencere bu 124 koşunun arasına kondu — kaçıncı sıradayız?</p>
+
+<div class="card">
+<b>Cevap: dağılımın ortasındayız — P10 kuralına göre NORMAL VARYANS, değişiklik önerilmedi.</b>
+<div class="tblwrap"><table>
+<tr><th>Ölçü</th><th>Canlı pencere</th><th>124 koşu içindeki yeri</th><th>Okunuşu</th></tr>
+<tr><td>Getiri (ROI)</td><td>+%2,2 (defter) · +%0,1 (yeniden koşum)</td><td><b>P63 · P55</b></td>
+<td>koşuların yarısından çoğu bundan kötüydü</td></tr>
+<tr><td>SPY'a karşı (alpha)</td><td>−1,2pp · −3,3pp</td><td><b>P58 · P40</b></td>
+<td>pencerelerin <b>%63'ünde alpha ≤ 0</b> — kısa pencerede SPY'a yenilmek bu stratejinin olağan hali</td></tr>
+<tr><td>En derin çukur</td><td>−%18,4</td><td><b>P99</b> ⚠️</td>
+<td>koşuların yalnız %1'inde daha derin — tek gerçek kuyruk değer, izlemede</td></tr>
+<tr><td>Forward (5 Tem kararı sonrası)</td><td>+%2,1 vs SPY +%4,2</td><td>30 gün — kısa</td>
+<td>seçim-sonrası saf test; henüz hüküm için erken</td></tr>
+</table></div>
+<p class="note">Strateji patlamalarla kazanıyor (örnek koşu: Mar→Haz 2026 <b>+%33,4</b>); aradaki düz dönemlerde
+SPY'ın gerisinde sürünmek dağılımın ta kendisi. "İki değer" gösteriliyor çünkü kilitli defter ile bugünkü
+(revize) veriyle yeniden koşum arasında −2,1 puanlık veri-revizyonu bandı ölçüldü (girişlerin %92,5'i özdeş,
+Temmuz öncesi eğri izlemesi %0,02 — kod farkı değil, veri farkı).</p>
+</div>
+
+<div class="card">
+<b>İki yan soru da sayıyla kapandı.</b>
+<div class="tblwrap"><table>
+<tr><th>Şüphe</th><th>Test</th><th>Sonuç</th></tr>
+<tr><td>"Aday 3'e geçiş hata mıydı?"</td><td>5 Tem yedeğinden eski yöntem ileri oynatıldı (gölge)</td>
+<td>eski yöntemle bugün $9.933 olurduk; canlı $10.225 — <b>geçiş +$292 kazandırdı</b></td></tr>
+<tr><td>"Temmuz'da piyasa mı düşürdü?"</td><td>Temmuz −$1.623 kalem kalem ayrıştırıldı</td>
+<td>SPY o ay <b>düzdü (%0,0)</b>; kaybın %95'i 6 isimden (GLW −458 · INTC −333 · LRCX −330 · TER −285 ·
+ENPH −75 · WDC −65), kalan 15 pozisyon topu topu −$77</td></tr>
+</table></div>
+<p class="note"><b>Dürüstlük notu.</b> Pencereler örtüşüyor → yüzdelikler betimseldir, istatistiksel güven
+aralığı değildir; 5 yıllık tarih Aday 3'ün seçildiği veriyi de içerir (forward satırı bu yüzden ayrı okunur).
+Karne "her şey yolunda" demiyor — "bu sonuç bu kuralların normal çıktısı" diyor; −%18,4 çukur ise dağılımın
+en ucunda ve combo'nun bilinen bedelinin ölçülmüş hali olarak izleme listesinde.</p>
+</div>
+
+<p class="mut" style="font-size:12.5px">Kaynak: <code>beklenti_lab.py</code> (124 koşu + gölge replay + Temmuz ayrıştırması,
+parite kapısı v2 ile doğrulandı) · çıktılar <code>swing2_out/beklenti/</code> · 16 Ağustos 2026.</p>
+
 </div>
 <div id="tip" role="tooltip"></div>
 <script>
