@@ -1,7 +1,21 @@
 import numpy as np
+import pandas as pd
 import pytest
 
 import yogunlasma_lab as yl
+
+
+def _sentetik_market():
+    """3 sembol: A ve B birebir aynı yönde, C ters. 100 iş günü."""
+    idx = pd.bdate_range("2026-01-01", periods=100)
+    # gerçekten dalgalanan günlük getiri (sabit seri korelasyonu dejenere eder)
+    base = pd.Series(np.sin(np.arange(100) / 3.0) * 0.01, index=idx)
+    up = (1 + base).cumprod() * 100
+    down = (1 - base).cumprod() * 100
+    mk = {"data": {}}
+    for sym, ser in (("A", up), ("B", up * 1.5), ("C", down)):
+        mk["data"][sym] = pd.DataFrame({"Close": ser}, index=idx)
+    return mk, idx
 
 
 def test_mean_corr_np_ozdes_seriler():
@@ -53,3 +67,35 @@ def test_size_multiplier():
     assert yl.size_multiplier(0.8, 0.6) == 0.5
     assert yl.size_multiplier(0.5, 0.6) == 1.0
     assert yl.size_multiplier(None, 0.6) == 1.0
+
+
+def test_corr_engine_ayni_yon_yuksek():
+    mk, idx = _sentetik_market()
+    ce = yl.CorrEngine(mk, window=60, min_obs=40)
+    mc = ce.mean_to(idx[-1], "A", ["B"])
+    assert mc is not None and mc > 0.99
+
+
+def test_corr_engine_ters_yon_negatif():
+    mk, idx = _sentetik_market()
+    ce = yl.CorrEngine(mk, window=60, min_obs=40)
+    mc = ce.mean_to(idx[-1], "A", ["C"])
+    assert mc is not None and mc < -0.99
+
+
+def test_corr_engine_bos_kitap_none():
+    mk, idx = _sentetik_market()
+    ce = yl.CorrEngine(mk, window=60, min_obs=40)
+    assert ce.mean_to(idx[-1], "A", []) is None
+
+
+def test_corr_engine_yetersiz_gecmis_none():
+    mk, idx = _sentetik_market()
+    ce = yl.CorrEngine(mk, window=60, min_obs=40)
+    assert ce.mean_to(idx[5], "A", ["B"]) is None      # 40 gözlem yok
+
+
+def test_corr_engine_bilinmeyen_sembol_none():
+    mk, idx = _sentetik_market()
+    ce = yl.CorrEngine(mk, window=60, min_obs=40)
+    assert ce.mean_to(idx[-1], "YOK", ["A"]) is None

@@ -17,6 +17,10 @@ LRCX (yarı-iletken ekipman) · WDC/STX (donanım) · GLW (bileşen) · ENPH (g�
 Kullanım: python3 yogunlasma_lab.py [--selftest|--etiket-cek|--grid|--jitter|--rapor|--all]
 """
 import numpy as np
+import pandas as pd
+
+CORR_WINDOW = 60      # RS penceresiyle hizalı
+CORR_MIN_OBS = 40     # en az ortak gözlem
 
 
 def mean_corr_np(cand, book):
@@ -56,3 +60,49 @@ def accept_label(book_labels, cand_label, kmax):
 def size_multiplier(mc, rho):
     """Yumuşak boyut: eşiği aşan aday yarım pozisyonla girer."""
     return 0.5 if (mc is not None and mc > rho) else 1.0
+
+
+class CorrEngine:
+    """Günlük getiri matrisinden aday↔kitap korelasyonu. Market başına BİR kez kurulur
+    (373 sembollük matris pahalıdır); tarih başına pencere önbelleklenir."""
+
+    def __init__(self, market, window=CORR_WINDOW, min_obs=CORR_MIN_OBS):
+        self.R = pd.DataFrame({sym: df["Close"].pct_change()
+                               for sym, df in market["data"].items()})
+        self.window = window
+        self.min_obs = min_obs
+        self._cache_date = None
+        self._W = None
+
+    def _win(self, date):
+        if date != self._cache_date:
+            self._W = self.R.loc[:date].tail(self.window)
+            self._cache_date = date
+        return self._W
+
+    def mean_to(self, date, cand, book):
+        """Adayın kitapla ortalama korelasyonu; hesaplanamıyorsa None."""
+        if not book:
+            return None
+        W = self._win(date)
+        if len(W) < self.min_obs or cand not in W.columns:
+            return None
+        cols = [b for b in book if b in W.columns and b != cand]
+        if not cols:
+            return None
+        sub = W[[cand] + cols].dropna()
+        if len(sub) < self.min_obs:
+            return None
+        arr = sub.to_numpy(dtype=float)
+        return mean_corr_np(arr[:, 0], arr[:, 1:].T)
+
+
+_CORR_CACHE = {}
+
+
+def get_corr_engine(market):
+    """Süreç ömrü boyunca market başına tek CorrEngine (matris yeniden kurulmasın)."""
+    key = id(market)
+    if key not in _CORR_CACHE:
+        _CORR_CACHE[key] = CorrEngine(market)
+    return _CORR_CACHE[key]
