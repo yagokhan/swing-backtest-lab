@@ -237,6 +237,173 @@ def run_windows(rho=None, kmax=0, soft=False, label=""):
     return rows
 
 
+# Eşikler ÖLÇÜLEN dağılıma göre (2026-08-20, 5y baz koşusu, giriş-anı kitap korelasyonu):
+# P50=0.238 · P70=0.311 · P80=0.363 · P90=0.444 · P95=0.546 · max=0.859
+# (Plandaki 0.60-0.80 aralığı bu dağılımda fiilen ölü — NO-OP olurdu, düşürüldü.)
+GRID = [
+    ("baz",   {}),
+    ("K0.25", {"rho": 0.25}), ("K0.30", {"rho": 0.30}), ("K0.35", {"rho": 0.35}),
+    ("K0.40", {"rho": 0.40}), ("K0.50", {"rho": 0.50}),
+    ("E3", {"kmax": 3}), ("E4", {"kmax": 4}),
+    ("E5", {"kmax": 5}), ("E6", {"kmax": 6}),
+    ("B0.30", {"rho": 0.30, "soft": True}), ("B0.40", {"rho": 0.40, "soft": True}),
+]
+
+
+def save_json(obj):
+    os.makedirs(OUT_DIR, exist_ok=True)
+    tmp = OUT_JSON + ".tmp"
+    with open(tmp, "w") as fh:
+        json.dump(obj, fh, ensure_ascii=False)
+    os.replace(tmp, OUT_JSON)
+    print("yazıldı:", OUT_JSON, flush=True)
+
+
+def load_json():
+    with open(OUT_JSON) as fh:
+        return json.load(fh)
+
+
+def grid():
+    """Tüm varyantlar × 5 pencere. Ara sonuç her varyanttan sonra kaydedilir."""
+    out = load_json() if os.path.exists(OUT_JSON) else {}
+    out.setdefault("grid", {})
+    for key, kw in GRID:
+        if key in out["grid"]:
+            print(f"[atlandı, zaten var] {key}", flush=True)
+            continue
+        out["grid"][key] = run_windows(label=key, **kw)
+        save_json(out)
+    _grid_ozet(out)
+    return out
+
+
+def _grid_ozet(out):
+    """Kapı etkinliği + kabul kriteri sayacı. no-op varyantlar işaretlenir."""
+    baz = out["grid"]["baz"]
+    bazcorr = np.mean([b["ort_corr"] for b in baz if b["ort_corr"] is not None])
+    print(f"\n{'varyant':8s}{'ROI ort':>9s}{'Calmar ort':>12s}{'MaxDD ort':>11s}"
+          f"{'corr':>7s}{'bazdan iyi':>12s}{'durum':>10s}")
+    for key, rows in out["grid"].items():
+        roi = np.mean([r["roi"] for r in rows])
+        cal = np.mean([r["calmar"] or 0 for r in rows])
+        dd = np.mean([r["max_dd"] for r in rows])
+        corrs = [r["ort_corr"] for r in rows if r["ort_corr"] is not None]
+        corr = np.mean(corrs) if corrs else float("nan")
+        iyi = sum(1 for r, b in zip(rows, baz) if (r["calmar"] or 0) > (b["calmar"] or 0))
+        noop = key != "baz" and sum(r["red"] + r["yarim"] for r in rows) == 0
+        durum = "NO-OP" if noop else ("finalist" if iyi >= 4 else "elendi")
+        if key == "baz":
+            durum = "baz"
+        print(f"{key:8s}{roi:+9.1f}{cal:12.2f}{dd:11.1f}{corr:7.3f}{iyi:9d}/5{durum:>10s}")
+    print(f"\n(baz ort. kitap korelasyonu: {bazcorr:.3f} — varyantların bundan düşük olması "
+          f"kapının gerçekten yoğunlaşmayı azalttığının teyididir)")
+
+
+def _variant_kw(key):
+    """Varyant anahtarından konfig; grid'de olmayan komşu eşikler de çözülür (K0.28 vb.)."""
+    for k, kw in GRID:
+        if k == key:
+            return kw
+    if key.startswith("K"):
+        return {"rho": float(key[1:])}
+    if key.startswith("B"):
+        return {"rho": float(key[1:]), "soft": True}
+    if key.startswith("E"):
+        return {"kmax": int(key[1:])}
+    raise ValueError(f"bilinmeyen varyant: {key}")
+
+
+def _finalistler(out):
+    """Grid'den kabul kriterini geçenler: 5 pencerenin ≥4'ünde Calmar bazdan iyi + kapı ısırmış."""
+    baz = out["grid"]["baz"]
+    return [k for k, rows in out["grid"].items()
+            if k != "baz"
+            and sum(1 for r, b in zip(rows, baz)
+                    if (r["calmar"] or 0) > (b["calmar"] or 0)) >= 4
+            and sum(r["red"] + r["yarim"] for r in rows) > 0]
+
+
+def jitter(finalists=None):
+    """5 farklı başlangıçtan tek pencere (5y tam) koşusu — dayanıklılık testi."""
+    out = load_json()
+    if finalists is None:
+        finalists = _finalistler(out)
+    print("jitter adayları:", finalists or "YOK (grid'den finalist çıkmadı)", flush=True)
+    if not finalists:
+        return out
+    out.setdefault("jitter", {})
+    ag.load_data()
+    for key in ["baz"] + list(finalists):
+        if key in out["jitter"]:
+            continue
+        kw = {} if key == "baz" else _variant_kw(key)
+        res = []
+        for sd in JITTER_STARTS:
+            c = copy.deepcopy(ag.base_cfg())
+            c.start_date = sd
+            c.end_date = ""
+            YogunlasmaBacktester.RHO = kw.get("rho")
+            YogunlasmaBacktester.KMAX = kw.get("kmax", 0)
+            YogunlasmaBacktester.SOFT = kw.get("soft", False)
+            YogunlasmaBacktester.LABELS = load_labels() if kw.get("kmax") else {}
+            bt = YogunlasmaBacktester(c, market=ag.MARKET)
+            bt.run()
+            m = bt.metrics()
+            res.append({"start": sd, "roi": round(m["roi"], 1), "max_dd": round(m["max_dd"], 1),
+                        "calmar": round(m["roi"] / abs(m["max_dd"]), 2) if m["max_dd"] else None})
+            print(f"  {key:8s} {sd} roi {res[-1]['roi']:+7.1f} · calmar {res[-1]['calmar']}",
+                  flush=True)
+        out["jitter"][key] = res
+        save_json(out)
+    for key, res in out["jitter"].items():
+        if key == "baz":
+            continue
+        kazanan = sum(1 for r, b in zip(res, out["jitter"]["baz"])
+                      if (r["calmar"] or 0) > (b["calmar"] or 0))
+        print(f"{key}: jitter {kazanan}/5 başlangıçta bazdan iyi "
+              f"→ {'GEÇTİ' if kazanan >= 4 else 'ÇÖKTÜ'}")
+    return out
+
+
+def rapor():
+    """Karar özeti: grid + jitter → KARAR satırı."""
+    out = load_json()
+    _grid_ozet(out)
+    ayakta = []
+    if out.get("jitter"):
+        print("\nJITTER:")
+        for key, res in out["jitter"].items():
+            if key == "baz":
+                continue
+            kaz = sum(1 for r, b in zip(res, out["jitter"]["baz"])
+                      if (r["calmar"] or 0) > (b["calmar"] or 0))
+            print(f"  {key}: {kaz}/5 → {'GEÇTİ' if kaz >= 4 else 'ÇÖKTÜ'}")
+            if kaz >= 4:
+                ayakta.append(key)
+    print("\nKARAR:", f"ADAY: {', '.join(ayakta)} (komşu kontrolü sonrası)" if ayakta
+          else "ADAY YOK — yoğunlaşma tavanı kabul kriterinden geçmedi.")
+
+
+def main():
+    import argparse
+    ap = argparse.ArgumentParser()
+    for f in ("selftest", "etiket-cek", "grid", "jitter", "rapor", "all"):
+        ap.add_argument("--" + f, action="store_true")
+    a = ap.parse_args()
+    hic = not any(vars(a).values())
+    if a.selftest or a.all or hic:
+        selftest()
+    if getattr(a, "etiket_cek"):
+        fetch_labels()
+    if a.grid or a.all or hic:
+        grid()
+    if a.jitter or a.all or hic:
+        jitter()
+    if a.rapor or a.all or hic:
+        rapor()
+
+
 def selftest():
     """SADAKAT KAPISI (fail-closed): kapılar kapalıyken sonuç EXPECTED ile birebir."""
     print("SADAKAT: kapılar kapalı → altguard EXPECTED çapaları")
@@ -246,3 +413,7 @@ def selftest():
         raise SystemExit("SADAKAT KAPISI DÜŞTÜ — deney durdu, önce fark teşhis edilmeli.")
     print("SADAKAT OK")
     return True
+
+
+if __name__ == "__main__":
+    main()
