@@ -52,6 +52,7 @@ Canlı kuralı değiştirmeden çalışan, jitter/komşuluk testli deney araçla
 ### Dokümantasyon + testler
 
 - **`docs/qulla21-defter.md`** — yöntem + gerçek defter mimarisi (sade dille, güncel tutulur).
+- **`docs/qulla21-yontem-llm.md`** — **LLM tartışma dokümanı:** yöntemin kendi başına yeterli, tam-parametreli spesifikasyonu + deneysel kanon (elenen fikirler) + açık sorular. Başka bir LLM'e yapıştırıp yöntemi tartışmak için.
 - **`docs/qulla21-metodoloji-devam-20260724.md`** — metodoloji bulguları + devam planı (tarihli eklerle).
 - **`test_glitch_guard.py` · `test_stale_guard.py` · `test_operational_safety.py` · `test_beklenti_lab.py`** — veri-glitch doğrulama kapısı, bar-gecikme davranışı, operasyonel güvenlik ve karne yardımcıları (pytest).
 
