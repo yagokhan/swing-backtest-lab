@@ -16,11 +16,27 @@ LRCX (yarı-iletken ekipman) · WDC/STX (donanım) · GLW (bileşen) · ENPH (g�
 
 Kullanım: python3 yogunlasma_lab.py [--selftest|--etiket-cek|--grid|--jitter|--rapor|--all]
 """
+import copy
+import json
+import os
+import sys
+
+sys.path.insert(0, "/home/gokhan")
+os.chdir("/home/gokhan")
+
 import numpy as np
 import pandas as pd
 
+import altguard_lab as ag
+import swing2_backtest as s
+
 CORR_WINDOW = 60      # RS penceresiyle hizalı
 CORR_MIN_OBS = 40     # en az ortak gözlem
+
+OUT_DIR = "/home/gokhan/swing2_out/yogunlasma"
+OUT_JSON = os.path.join(OUT_DIR, "results.json")
+LABELS_JSON = "/home/gokhan/swing2_cache/industry_labels.json"
+JITTER_STARTS = ["2021-05-01", "2021-05-08", "2021-05-15", "2021-05-22", "2021-06-01"]
 
 
 def mean_corr_np(cand, book):
@@ -106,3 +122,94 @@ def get_corr_engine(market):
     if key not in _CORR_CACHE:
         _CORR_CACHE[key] = CorrEngine(market)
     return _CORR_CACHE[key]
+
+
+def load_labels(path=LABELS_JSON):
+    """Etiket cache'i; yoksa boş sözlük (etiketsizlik ceza değildir)."""
+    if not os.path.exists(path):
+        return {}
+    with open(path) as fh:
+        return json.load(fh)
+
+
+class YogunlasmaBacktester(ag.GKX):
+    """Aday 3 + yoğunlaşma kapısı. Kapılar kapalıyken GKX ile BİREBİR aynı olmalıdır.
+
+    Tek kanca `_open()`: ag.GKX._step onu iki yerden çağırır (normal giriş + giyotin yolu)
+    ve False dönerse döngü SIRADAKİ adaya geçer → reddedilen sermaye boşta kalmaz."""
+
+    RHO = None        # korelasyon eşiği (None = kapalı)
+    KMAX = 0          # etiket tavanı (0 = kapalı)
+    SOFT = False      # True: reddetme yerine yarım poz
+    LABELS = {}       # sembol → endüstri etiketi
+
+    def __init__(self, *a, **kw):
+        super().__init__(*a, **kw)
+        self.corr = get_corr_engine(kw.get("market") or a[1])
+        self.gate_log = []     # (tarih, sembol, mc, karar)
+
+    def _open(self, sym, date, row, plan, score):
+        book = [x for x in self.positions if x != sym]
+        mc = self.corr.mean_to(date, sym, book)      # baz koşuda da ölçülür (kıyas metriği)
+        if self.RHO is not None and not self.SOFT and not accept_corr(mc, self.RHO):
+            self.gate_log.append((str(date)[:10], sym, mc, "red-corr"))
+            return False
+        if self.KMAX and not accept_label([self.LABELS.get(b) for b in book],
+                                          self.LABELS.get(sym), self.KMAX):
+            self.gate_log.append((str(date)[:10], sym, mc, "red-etiket"))
+            return False
+        mult = size_multiplier(mc, self.RHO) if (self.RHO is not None and self.SOFT) else 1.0
+        self.gate_log.append((str(date)[:10], sym, mc, "kabul" if mult == 1.0 else "yarim"))
+        if mult != 1.0:
+            old = self.cfg.max_position_pct
+            self.cfg.max_position_pct = old * mult
+            try:
+                return super()._open(sym, date, row, plan, score)
+            finally:
+                self.cfg.max_position_pct = old
+        return super()._open(sym, date, row, plan, score)
+
+
+def _ort_kitap_korelasyonu(bt):
+    """Kapı etkinlik metriği: kabul edilen girişlerdeki ortalama kitap korelasyonu."""
+    vals = [mc for _, _, mc, k in bt.gate_log if mc is not None and k in ("kabul", "yarim")]
+    return round(float(np.mean(vals)), 3) if vals else None
+
+
+def run_windows(rho=None, kmax=0, soft=False, label=""):
+    """5 pencerede tek varyant koşusu. altguard_lab.WINS + sabit cache kullanılır."""
+    ag.load_data()                       # attach_watchlist içeride — ZORUNLU
+    labels = load_labels() if kmax else {}
+    rows = []
+    for wn, sd, ed in ag.WINS:
+        c = copy.deepcopy(ag.base_cfg())
+        c.start_date = sd
+        c.end_date = ed
+        YogunlasmaBacktester.RHO = rho
+        YogunlasmaBacktester.KMAX = kmax
+        YogunlasmaBacktester.SOFT = soft
+        YogunlasmaBacktester.LABELS = labels
+        bt = YogunlasmaBacktester(c, market=ag.MARKET)
+        bt.run()
+        m = bt.metrics()
+        red = sum(1 for *_, k in bt.gate_log if k.startswith("red"))
+        yarim = sum(1 for *_, k in bt.gate_log if k == "yarim")
+        rows.append({"win": wn, "roi": round(m["roi"], 1), "max_dd": round(m["max_dd"], 1),
+                     "pf": round(m["profit_factor"], 2), "trades": m["trades"],
+                     "calmar": round(m["roi"] / abs(m["max_dd"]), 2) if m["max_dd"] else None,
+                     "ort_corr": _ort_kitap_korelasyonu(bt), "red": red, "yarim": yarim})
+        print("  %-10s %-12s roi %+7.1f · dd %6.1f · calmar %5.2f · n %4d · corr %s · red %d" %
+              (label, wn, rows[-1]["roi"], rows[-1]["max_dd"], rows[-1]["calmar"] or 0,
+               rows[-1]["trades"], rows[-1]["ort_corr"], red), flush=True)
+    return rows
+
+
+def selftest():
+    """SADAKAT KAPISI (fail-closed): kapılar kapalıyken sonuç EXPECTED ile birebir."""
+    print("SADAKAT: kapılar kapalı → altguard EXPECTED çapaları")
+    rows = run_windows(label="baz")
+    ok = ag.fidelity(rows)
+    if not ok:
+        raise SystemExit("SADAKAT KAPISI DÜŞTÜ — deney durdu, önce fark teşhis edilmeli.")
+    print("SADAKAT OK")
+    return True
