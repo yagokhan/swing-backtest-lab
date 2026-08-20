@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """live_scan_telegram._filter_glitches için birim test — veri-glitch çapraz kontrolü.
 Senaryo: 2026-06-11 KLAC olayı (bulk veri hattı 10×, bağımsız quote gerçek)."""
+import sys
+sys.path.insert(0, "/home/gokhan")
 import live_scan_telegram as L
 
 

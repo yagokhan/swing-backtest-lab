@@ -45,3 +45,17 @@ python3 exp_swing2.py phaseD
 ```
 
 Sonuç CSV'leri `/home/gokhan/swing2_out/exp_*_results.csv` altına yazılır. Canlı Qulla-21 kuralı, bağımsız doğrulama tamamlanmadan değiştirilmemelidir.
+
+## Güncelleme (2026-08-20)
+
+Bu nottan sonra yapılan çalışmaların özeti (ayrıntı: `/adaylar` sayfası):
+
+- **Deney 10–12 (2026-07-31):** atıf teşhisi (+2R-öncesi pay %94,3 → **%96,3**'e
+  netleşti), ters-boyutlandırma ve bekleyen-tahliye bataryaları. Üçünde de **aday
+  çıkmadı**; boyutlandırma, tahsis ve atıf dosyaları kapandı. Giyotin-2'nin +200
+  manşetinin 5 yılda 4 olaya dayandığı görüldü (statü düşürüldü).
+- **Beklenti karnesi (2026-08-16):** canlı ilk 56 gün, 124 taze-başlangıçlı aynı-konfig
+  koşuya karşı yargılandı → **normal varyans** (ROI P55–P63; pencerelerin %63'ünde
+  alpha ≤ 0 zaten olağan). Tek kuyruk bulgu: **MaxDD −%18,4 = P99** — izlemede.
+  Gölge replay: Aday 3'e geçiş eski yönteme göre **+$292 önde** (pişmanlık yok).
+- Sonuç: bu nottaki "kabul kriteri" hâlâ yürürlükte; canlı kural **değişmedi**.

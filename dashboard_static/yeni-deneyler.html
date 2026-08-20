@@ -93,7 +93,7 @@
  }
 </style></head><body>
 <header>
- <h1>🧪 Qulla-21 Yeni Deneyler<span class="alt">21 Temmuz 2026</span></h1>
+ <h1>🧪 Qulla-21 Yeni Deneyler<span class="alt">31 Temmuz 2026</span></h1>
  <button class="back" onclick="location.href='/'">← Geri</button>
 </header>
 
@@ -101,7 +101,10 @@
  <b>Sonuç:</b> Canlı sisteme yeni kural eklemedik. Mevcut Aday 3 değişmedi. <br>
  Runner için ATR 2.0 koruması araştırma adayı oldu; fakat getiri bedeli ve ileri-dönük doğrulama eksikliği nedeniyle yalnız paper-forward izlenecek.<br>
  <b>Deney 5 (21 Temmuz):</b> Runner'a <i>girişten</i> aktif sert taban ailesi denendi — <b>aday çıkmadı</b>. Ayrıca Deney 4'te "girişten aktif" diye tarif edilen kuralın aslında hiç test edilmemiş olduğu bulundu; gerçek hâli ölçüldüğünde ayı penceresinde getiriyi 21,3%'ten 4,5%'e düşürüyor.<br>
- <b>Deney 6–9 (21 Temmuz):</b> Dört yapısal fikir daha denendi — sermaye geri kazanımı, runner maruziyet tavanı, kademeli B aktivasyonu, gece boşluğu/bilanço riskine göre giriş boyutu. <b>Hiçbiri aday çıkmadı.</b> Karşılığında <a href="#kok-teshis" style="color:var(--kar)">kök teşhis</a> bulundu: zararın <b>%94,3'ü pozisyon +2R'ye ulaşmadan</b> oluşuyor ve kuyruğu üreten isimler kârı üreten isimlerle <b>aynı</b>.
+ <b>Deney 6–9 (21 Temmuz):</b> Dört yapısal fikir daha denendi — sermaye geri kazanımı, runner maruziyet tavanı, kademeli B aktivasyonu, gece boşluğu/bilanço riskine göre giriş boyutu. <b>Hiçbiri aday çıkmadı.</b> Karşılığında <a href="#kok-teshis" style="color:var(--kar)">kök teşhis</a> bulundu: zararın <b>%94,3'ü pozisyon +2R'ye ulaşmadan</b> oluşuyor ve kuyruğu üreten isimler kârı üreten isimlerle <b>aynı</b>.<br>
+ <b>Deney 10 (31 Temmuz):</b> <a href="#atif" style="color:var(--kar)">Atıf teşhisi</a> — kök teşhisin içine dolar dolar bakıldı. Tüm kitabın brüt zararının <b>%96,3'ü</b> +2R öncesi; bilanço günleri 3,7× yoğun ama kanamanın yalnız ≤%9'u; gece boşluğu azınlık kanalı (%38); kanama zamana dağınık. <b>Hedeflenebilir tek bir olay yok</b> — koruma ailesi üçüncü bağımsız kanaldan da kapandı. Yeni bulgu: <b>stopsuz bekleyen</b> pozisyonlar (B çıkmış, A dipte) slot kapasitesinin ~%15'ini işgal ediyor.<br>
+ <b>Deney 11 (31 Temmuz):</b> <a href="#ters" style="color:var(--kar)">Ters-boyutlandırma bataryası</a> — Deney 8 negatif kontrolünün ön-kayıtlı asıl testi. <b>Yön kesin doğrulandı</b> (eski "riskliyi kes" yönü Calmar 0/5 ile ezildi) ama <b>ADAY YOK</b>: en iyi varyant (T1 %50 serbest, 5y +200,9% · Calmar 12,30) tüm bireysel kapıları geçti, yoğunluk komşuları zikzakla çöktü (6,75 → 12,30 → 8,97) — yalnız-tepe/overfit imzası. Boyutlandırma dosyası da kapandı.<br>
+ <b>Deney 12 (31 Temmuz):</b> <a href="#bekleyen" style="color:var(--kar)">Bekleyen-tahliye bataryası</a> — Deney 10'un %14,8 slot-işgal bulgusunun tahsis testi. <b>ADAY YOK + Giyotin-2'nin maskesi düştü:</b> 5 yılda yalnız <b>4 tahliye</b> ateşliyor, +200 manşeti bu 4 olaya dayalı (Calmar 1/5, ateşlediği son-2y'de zarar). Gerçek işgalcileri tahliye etmek bile kaybettiriyor (bek40 medyan ROI korunum %85,6): <b>işgalcinin toparlanma opsiyonu koltuğundan değerli</b>. Koşulsuz timeout felaket (ROI korunum %41) — stopsuzluk dersinin 4. teyidi. Tahsis dosyası da kapandı.
 </div>
 
 <h2>Mevcut Sistem (Temel Durum)</h2>
@@ -530,6 +533,124 @@
 <div class="note-box">
  ⛔ <b>Karar: ADAY YOK — ve bu kesin bir olumsuz.</b> Kural, gerçekte sahip olamayacağı bir bilgiyle (orakl) çalıştığı hâlde kapıyı geçemedi: ≤5 seans kapısı risk 0/5 · medyan Calmar koruma %72,8; ≤10 seans 0/5 · %69,3; yarım açma 1/5 · %97,2. Negatif kontrol beklendiği gibi çöktü (%43,6). Orakl avantajıyla bile başarısız olan bir kuralın, gerçek bilgiyle daha iyi olması beklenemez.
 </div>
+
+<h2 id="atif">Deney 10: Atıf Teşhisi — +2R Öncesi Zarar Tam Olarak Nerede? (Saf Ölçüm)</h2>
+<div class="card">
+ <p><b>Amaç:</b> Kök teşhis zararın %94,3'ünün +2R öncesinde oluştuğunu söyledi ama <i>o bölgenin içini</i> kimse ölçmedi. Bu teşhis her zararlı bacağın <b>günlük</b> kâr/zarar yolunu gece (önceki kapanış→açılış) ve gün-içi (açılış→kapanış) bileşenlerine ayırıp dolarları güne, kanala, zamana ve sektöre atfeder. <b>Varyant yok, parametre taraması yok, aday çıkamaz</b> — yalnız sonraki deneyin nişangâhı.</p>
+ <p><b>Doğruluk:</b> Fidelity 166,3 / 3,67 / −19,6 / 482 birebir · her bacakta günlük bileşen toplamı = gerçekleşen P&L (0 mutabakat hatası) · <code>reached_2r</code> türetimi motorun kayıtlarıyla 232/232 eşleşti.</p>
+</div>
+
+<div class="row">
+ <div class="stat"><div class="lbl">Tüm Kitap: +2R Öncesi Zarar</div><div class="val"><span class="neg">%96,3</span></div><div class="note">Brüt zarar $62.332'nin payı (kök teşhis %94,3 yalnız B'ydi)</div></div>
+ <div class="stat"><div class="lbl">Bilanço Günlerinin Payı</div><div class="val">≤%9</div><div class="note">3,7× yoğun ama dolar olarak küçük</div></div>
+ <div class="stat"><div class="lbl">Gece Boşluğu Kanalı</div><div class="val">%37–39</div><div class="note">Kanamanın çoğu GÜN-İÇİ sürüklenme</div></div>
+ <div class="stat"><div class="lbl">Stopsuz Bekleyen İşgali</div><div class="val">~%15</div><div class="note">5y slot kapasitesinin payı (yalnız zararla bitenler)</div></div>
+</div>
+
+<details open>
+ <summary>🗺️ Kayıp Haritası: Zarar Dolarları Hangi Sınıfta?</summary>
+ <div class="table-wrap"><table>
+  <tr><th>Sınıf</th><th>Bacak</th><th>Net P&L</th><th>Brüt zarar</th><th>Zarar payı</th></tr>
+  <tr><td>B:EMA21 çıkışı, +2R öncesi (realize kanama)</td><td>139</td><td class="neg">−$36.876</td><td class="neg">−$37.079</td><td><b>%59,5</b></td></tr>
+  <tr><td><b>Stopsuz bekleyen</b> (B zararla çıkmış, A dipte — pencere sonunda tasfiye)</td><td>13</td><td class="neg">−$19.464</td><td class="neg">−$19.866</td><td><b>%31,9</b></td></tr>
+  <tr><td>Tam pozisyon pencere sonunda (hiç çıkış olmamış)</td><td>6</td><td class="neg">−$2.537</td><td class="neg">−$3.029</td><td>%4,9</td></tr>
+  <tr><td>B:EMA21 çıkışı, +2R sonrası (geri veriş)</td><td>93</td><td class="pos">+$58.137</td><td>−$2.358</td><td>%3,8</td></tr>
+  <tr><td>A:+2R hedef dolumu</td><td>225</td><td class="pos">+$150.907</td><td>0</td><td>—</td></tr>
+  <tr><td>Runner pencere sonunda (post-2R)</td><td>6</td><td class="pos">+$16.144</td><td>0</td><td>—</td></tr>
+ </table></div>
+ <p class="sec" style="margin-top:10px"><b>Motor gerçeği (bu teşhisle netleşti):</b> A bacağının tek çıkış kuralı +2R limitidir — hedef gelmezse A bacağı <b>stopsuz, süresiz</b> bekler. "+2R öncesi zarar" bu yüzden iki farklı hayvan: B'nin EMA21'le <i>realize ettiği</i> kanama (%59,5) ve aylarca dipte bekleyen A bacakları (%36,8). İkinci sınıf canlı defterdeki açık zararların birebir analoğudur: en kötü takvim günleri 2026 Mayıs–Temmuz düzeltmesinde kümeleniyor — <b>canlı forward'daki −%1,7 bu sınıfın gerçek zamanlı görüntüsü</b>.</p>
+</details>
+
+<details>
+ <summary>📉 Bilanço, Gece ve Zamanlama: Hedeflenebilir Olay Var mı? — YOK</summary>
+ <p class="sec" style="margin-top:8px">B bölgesi (realize kanama, brüt aşağı-yön $71.812) üzerinde:</p>
+ <div class="table-wrap"><table>
+  <tr><th>Boyut</th><th>Aşağı-yön payı</th><th>Taban oranı</th><th>Yoğunlaşma</th><th>Okuma</th></tr>
+  <tr><td>Bilanço tepki günleri</td><td>%8,6</td><td>%2,3</td><td><b>3,71×</b></td><td>Yoğun ama dolar küçük: mükemmel kalkan bile kanamanın ≤%9'una dokunur</td></tr>
+  <tr><td>SPY ≤ −1% günleri</td><td>%27,7</td><td>%12,6</td><td>2,20×</td><td>Sistemik bileşen var ama baskın değil</td></tr>
+  <tr><td>En kötü 20 takvim günü</td><td>%26,9</td><td>—</td><td>—</td><td>Güne yoğunlaşma yok, kanama dağınık</td></tr>
+  <tr><td>Gece boşluğu (kanal)</td><td>%37,1</td><td>—</td><td>—</td><td>Çoğunluk gün-içi sürüklenme; "gece boşluğuna emir konamaz" ana kanal değil</td></tr>
+ </table></div>
+ <p class="sec" style="margin-top:10px"><b>Zamanlama:</b> kanama giriş sonrası 1–14. seanslara <b>eşit yayılmış</b> (%87,7; tutulan-gün payı %77,7) — hedeflenebilir bir "erken ölüm penceresi" yok. Aşağı-yönün %61,1'i çıkışa son 3 seansta: EMA21 kırılımı hasarın habercisi değil, <b>hasarın kendisi</b>. <b>Sektör:</b> SMH (yarıiletken) tutulan-günün %9,5'inde aşağı-yönün %16,3'ü (~1,7×; tüm kapsamda %3,9'a karşı %10,8 = 2,8×) — bilinen yoğunlaşma riskinin dolar teyidi (eşleme kaba: tutulan-günlerin ~2/3'ü sektör haritasız).</p>
+</details>
+
+<div class="note-box">
+ 🎯 <b>Nişangâh sonucu:</b> Koruma ailesinin ölümü üçüncü bağımsız kanaldan teyit edildi — kaçınılabilir tek bir olay tipi, kanal veya zaman penceresi <b>yok</b>; kanama stratejinin kendi doğası (oynak isimlerde bulunmak = kâr motoru). Bilanço kapısı dosyası <b>kesin kapandı</b> (Deney 9 orakl + şimdi dolar atfı). Kalan gerçek kaldıraçlar: <b>(1)</b> ters-boyutlandırma bataryası (Deney 8 negatif kontrolünün ön-kayıtlı asıl testi), <b>(2)</b> stopsuz bekleyenlerin <i>fırsat maliyeti</i> — 16 zararla biten bekleyen ortalama ~239 işlem günü slot işgal etti (3.830 slot-günü ≈ kapasitenin ~%15'i); bu bir koruma sorunu değil <b>tahsis</b> sorunu (Giyotin-2 çizgisi), <b>(3)</b> A200 frenini ikiliden sürekli boyutlandırmaya çevirmek (sistemik 2,2× yoğunlaşmaya orantılı yanıt).
+</div>
+
+<details>
+ <summary>⚠️ Deney 10 Sınırları</summary>
+ <p class="sec" style="margin-top:8px">Bilanço takvimi 367/373 sembol; kapsam dışı günler "tepki günü değil" sayılır → bilanço yoğunlaşması <b>alt sınırdır</b>. Stopsuz bekleyen zararı pencere-sonu tasfiye artefaktıdır (gerçekte pozisyon açık kalırdı) — açık-zarar analoğu olarak okunmalı. Günlük OHLC bar-içi sırayı göstermez; gece/gün-içi ayrımı kesin, bar-içi değil. Survivorship'li evren, tek 5y pencere, SPY eşiği −1% önceden sabitlenmiş tek seçim. Üretim: <code>atif_lab.py --run</code> · rapor <code>atif_report.md</code> · veri <code>atif_results.json</code>.</p>
+</details>
+
+<h2 id="ters">Deney 11: Ters-Boyutlandırma Bataryası (Sakinde Kıs, Sıçrayanda Tam Kal)</h2>
+<div class="card">
+ <p><b>Fikir:</b> Deney 8'in negatif kontrolü ("kesintiyi ters yöne uygula") tek kolda bazdan iyi çıkmıştı; Deney 10 atıf teşhisi de aynı yönü işaret etti (kuyruk = kâr motoru, aynı isimler). Bu batarya o gözlemin <b>ön-kayıtlı asıl testi</b>: sakin (T1) isimleri girişte kıs, sıçrayan (T3) isimlerde tam kal. İki kol: <b>kilitli</b> (kısılan dolar rezervde — saf eğim etkisi, bütçe-nötr) ve <b>serbest</b> (nakit yeni girişlere akar — gerçek kâr adayı).</p>
+ <p><b>Ön-bilgi dürüstlüğü:</b> T1 %50-kilitli, Deney 8'de <i>görülmüş</i> ctrl_inv'in ta kendisi (5y 162,6 / Calmar 9,94 ama pencere 3/5). Seçilim riskine karşı kapı gevşetilmedi: Calmar ≥4/5 + medyan ROI korunum ≥%95 & min ≥%80 + yön kontrolünü ≥4/5 geç + <b>ailede ≥2 uygun komşu</b> + jitter 6/8.</p>
+</div>
+
+<div class="note-box">
+ ⛔ <b>Karar: ADAY YOK — komşu yanıtı zikzak.</b> En iyi varyant (T1 %50 SERBEST) tüm bireysel kapıları geçti: 5y <b>+200,9%</b> (baz 166,3) · Calmar <b>12,30</b> (baz 8,48) · Calmar 4/5 · yön 5/5 · medyan ROI korunum %107,5 · min %86,4. Ama yoğunluk komşuları çöktü: %25 → Calmar 1/5 (5y 6,75, bazdan <i>kötü</i>) · %75 → 1/5 (8,97). Yanıt yüzeyi tek noktada sivri — Deney 2'nin k=0,40'ı ve Deney 6'nın tavan-%15'iyle aynı <b>yalnız-tepe imzası</b>. Serbest kolda +34,6 puanlık fark, işlem zinciri kaosunun (577 vs 482 işlem) şansı; sinyal değil.
+</div>
+
+<div class="row">
+ <div class="stat"><div class="lbl">Yön Bulgusu</div><div class="val">Kesin</div><div class="note">Eski yön (T3 kes): Calmar 0/5, ROI korunum %43 — ezildi</div></div>
+ <div class="stat"><div class="lbl">En İyi Tek Kol</div><div class="val">+200,9%</div><div class="note">T1 %50 serbest — ama komşusuz tepe</div></div>
+ <div class="stat"><div class="lbl">Komşu Yanıtı</div><div class="val">6,75 → 12,30 → 8,97</div><div class="note">%25/%50/%75 · 5y Calmar zikzak</div></div>
+ <div class="stat"><div class="lbl">Sonuç</div><div class="val">0 aday</div><div class="note">9 varyantın hiçbiri (2 dalga)</div></div>
+</div>
+
+<details>
+ <summary>🔍 Deney 11 Detayı: Beş Pencere Özeti ve Dalga 2</summary>
+ <div class="table-wrap"><table>
+  <tr><th>Varyant</th><th>5y ROI</th><th>5y Calmar</th><th>Calmar iyi</th><th>Yön</th><th>Medyan ROI koru</th><th>Min</th><th>Karar</th></tr>
+  <tr><td>Baz</td><td>166,3%</td><td>8,48</td><td>—</td><td>—</td><td>—</td><td>—</td><td><span class="badge b-ok">Canlı</span></td></tr>
+  <tr><td>T1 %25 kilitli</td><td>192,4%</td><td>10,12</td><td>2/5</td><td>4/5</td><td>81,7%</td><td>67,9%</td><td><span class="badge b-reject">Düştü</span></td></tr>
+  <tr><td>T1 %50 kilitli</td><td>162,6%</td><td>9,94</td><td>3/5</td><td>4/5</td><td>82,9%</td><td>63,8%</td><td><span class="badge b-reject">Düştü</span></td></tr>
+  <tr><td>T1 %75 kilitli</td><td>174,4%</td><td>12,40</td><td>3/5</td><td>4/5</td><td>81,7%</td><td>70,0%</td><td><span class="badge b-reject">Düştü</span></td></tr>
+  <tr><td>Kademeli kilitli</td><td>124,9%</td><td>8,85</td><td>3/5</td><td>5/5</td><td>72,3%</td><td>63,8%</td><td><span class="badge b-reject">Düştü</span></td></tr>
+  <tr><td><b>T1 %50 SERBEST</b></td><td class="pos">200,9%</td><td class="pos">12,30</td><td>4/5</td><td>5/5</td><td>107,5%</td><td>86,4%</td><td><span class="badge b-reject">E4 aile düştü</span></td></tr>
+  <tr><td>Kademeli SERBEST</td><td>176,8%</td><td>11,79</td><td>2/5</td><td>4/5</td><td>88,3%</td><td>69,0%</td><td><span class="badge b-reject">Düştü</span></td></tr>
+  <tr><td>T1 %25 SERBEST (dalga 2)</td><td>137,5%</td><td class="neg">6,75</td><td>1/5</td><td>4/5</td><td>84,7%</td><td>70,8%</td><td><span class="badge b-reject">Düştü</span></td></tr>
+  <tr><td>T1 %75 SERBEST (dalga 2)</td><td>144,4%</td><td>8,97</td><td>1/5</td><td>4/5</td><td>82,7%</td><td>72,0%</td><td><span class="badge b-reject">Düştü</span></td></tr>
+  <tr><td>YÖN KONTROLÜ (T3 %50)</td><td class="neg">66,1%</td><td class="neg">5,54</td><td>0/5</td><td>—</td><td>43,2%</td><td>35,1%</td><td><span class="badge b-untrust">Kontrol kolu</span></td></tr>
+ </table></div>
+ <p class="sec" style="margin-top:10px"><b>Dalga 2 neden eklendi:</b> Dalga 1'de kilitli aileye yoğunluk komşuları verilmiş (25/50/75), serbest aileye verilmemişti — T1 %50 SERBEST yalnız E4'te (aile istikrarı) düşünce doğru soru "bu yalnız şanslı bir tepe mi?" oldu. rev25f/rev75f <b>sonuç görülmeden</b> ön-kayıtla eklendi, kapı değişmedi. Cevap net: tepe yalnız. Kilitli ailenin tümü E2'de düştü (ROI korunum ~%82 — rezerv kilidinin mekanik kullanım bedeli).</p>
+ <p class="sec"><b>Kalıcı kazanım:</b> Yön bilgisi artık iki bağımsız kanıtla kesin — "riskli isimleri küçült" ailesi (ısı, gap, momentum-k) tümüyle ölü; kâr sıçrayan isimlerde tam kalmaktan geliyor. Ama bunu <i>boyut kuralına</i> çevirmenin her denemesi komşu/zikzak testine takılıyor: mevcut eşit-ağırlık zaten yaklaşık optimum. Boyutlandırma dosyası kapandı.</p>
+</details>
+
+<h2 id="bekleyen">Deney 12: Bekleyen-Tahliye Tahsis Bataryası (İşgalcinin Koltuğu)</h2>
+<div class="card">
+ <p><b>Fikir:</b> Deney 10 ölçtü — +2R görmemiş, aylarca su altında bekleyen pozisyonlar slot kapasitesinin <b>%14,8</b>'ini işgal ediyor. Stop ailesi dört kanaldan öldüğüne göre kalan tek müdahale <b>tahsis</b>: işgalcinin koltuğunu yeni nitelikli kırılıma vermek. Üç aile: <b>Giyotin-2 + komşuları</b> (eski jitter-geçen aday, ilk kez yeni katı kapıyla), <b>bekleyen-tahliye</b> (su-altı ≥40/80 gün işgalcinin koltuğu herhangi bir nitelikli adaya el değiştirir) ve <b>koşulsuz timeout</b> (mekanizma kontrolü: aday beklemeden tahliye).</p>
+ <p><b>Sadakat:</b> kurallar kapalıyken 5 pencerede ROI+N birebir (5/5). Çıkış kuralları (+2R, EMA21) hiçbir varyantta değişmedi.</p>
+</div>
+
+<div class="note-box">
+ ⛔ <b>Karar: ADAY YOK — ve Giyotin-2'nin maskesi düştü.</b> Giyotin-2 beş yılda yalnız <b>4 kez</b> ateşliyor (kurban medyanı −%49,5); +166→+200 manşetinin tamamı bu 4 olaya dayalı. Ateşlemediği pencerelerde (topar, son-1y) bazla birebir; ateşlediği son-2y'de <b>zarar</b> (81,3→71,2). Eski "jitter 5/5" doğrulaması, aynı 4 olayı 5 yakın başlangıçtan saymaktan ibaretti — <b>n≈4'lük kural, aday statüsü düşürüldü</b>. Yeni kapıda Calmar 1/5.
+</div>
+
+<div class="row">
+ <div class="stat"><div class="lbl">Giyotin-2 Gerçeği</div><div class="val">n≈4</div><div class="note">5y'de 4 tahliye; manşet tamamen bunlara dayalı</div></div>
+ <div class="stat"><div class="lbl">bek40 (gerçek işgalci tahliyesi)</div><div class="val" style="color:var(--zarar)">%85,6</div><div class="note">Medyan ROI korunum — kaybettiriyor</div></div>
+ <div class="stat"><div class="lbl">Koşulsuz Timeout</div><div class="val" style="color:var(--zarar)">%41</div><div class="note">ROI korunum — stopsuzluk dersinin 4. teyidi</div></div>
+ <div class="stat"><div class="lbl">Mekanizma</div><div class="val">5/5</div><div class="note">Yeniden-konuşlandırma &gt; emeklilik; ama ikisi de bazdan kötü</div></div>
+</div>
+
+<details>
+ <summary>🔍 Deney 12 Detayı: İşgalcinin Toparlanma Opsiyonu Koltuğundan Değerli</summary>
+ <div class="table-wrap"><table>
+  <tr><th>Varyant</th><th>5y ROI</th><th>5y Calmar</th><th>Calmar iyi</th><th>Tahliye (5y)</th><th>Medyan ROI koru</th><th>Min</th><th>Karar</th></tr>
+  <tr><td>Baz</td><td>166,3%</td><td>8,48</td><td>—</td><td>0</td><td>—</td><td>—</td><td><span class="badge b-ok">Canlı</span></td></tr>
+  <tr><td>Giyotin-2 (q90·1,2)</td><td class="pos">200,1%</td><td>10,50</td><td>1/5</td><td><b>4</b></td><td>100,0%</td><td>87,6%</td><td><span class="badge b-reject">Düştü</span></td></tr>
+  <tr><td>Giyotin-2 komşu (q85·1,2)</td><td>—</td><td>—</td><td>1/5</td><td>—</td><td>99,1%</td><td>81,3%</td><td><span class="badge b-reject">Düştü</span></td></tr>
+  <tr><td>Giyotin-2 komşu (q90·1,1)</td><td>—</td><td>—</td><td>1/5</td><td>—</td><td>100,0%</td><td>84,3%</td><td><span class="badge b-reject">Düştü</span></td></tr>
+  <tr><td>Bekleyen-tahliye N=40</td><td class="neg">142,4%</td><td class="neg">6,70</td><td>2/5</td><td>37</td><td>85,6%</td><td>63,3%</td><td><span class="badge b-reject">Düştü</span></td></tr>
+  <tr><td>Bekleyen-tahliye N=80</td><td>—</td><td>—</td><td>1/5</td><td>—</td><td class="neg">53,2%</td><td>37,1%</td><td><span class="badge b-reject">Düştü</span></td></tr>
+  <tr><td>KONTROL: koşulsuz N=40</td><td class="neg">62,4%</td><td class="neg">3,37</td><td>0/5</td><td>184</td><td class="neg">41,3%</td><td>6,5%</td><td><span class="badge b-untrust">Kontrol kolu</span></td></tr>
+ </table></div>
+ <p class="sec" style="margin-top:10px"><b>Okuma:</b> bek40 gerçek işgalcileri hedefliyor (37 tahliye, kurban medyanı −%29,7) ve mekanizma çalışıyor — koşulsuz timeout'u <b>5/5</b> yeniyor (yeniden-konuşlandırma &gt; risk emekliliği). Ama ikisi de bazdan kötü: ayı penceresinde 21,3→13,6, toparlanmada 43,3→27,4. Neden: işgalciler tam da ayı/dip dönemlerinde birikiyor ve piyasa dönünce <b>toparlanıyor</b> — tahliye, stopsuzluk motorunun beslendiği toparlanma opsiyonunu öldürüyor. Deney 10'un %14,8 slot-işgal maliyeti, bu opsiyonun fiyatıymış ve <b>değiyormuş</b>.</p>
+ <p class="sec"><b>Seri genelinde meta-sonuç (Deney 11+12):</b> Aday-3'ün eşit-ağırlık + müdahalesiz yapısı, kâr-arayışlı her değişikliğe karşı komşu/pencere disiplinlinde ayakta kaldı. Sistemin kenarı giriş sıralaması + rejim freni + stopsuz sağ kuyruk; gerisi madencilik alanı.</p>
+</details>
 
 <h2 id="data-yok">📡 Veri Rotaları: Neyin Erişimi Yok?</h2>
 <div class="card note">
