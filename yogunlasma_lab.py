@@ -132,6 +132,39 @@ def load_labels(path=LABELS_JSON):
         return json.load(fh)
 
 
+def fetch_labels(symbols=None, path=LABELS_JSON):
+    """FMP stable/profile → sembol başına industry etiketi; tek seferlik, cache'lenir."""
+    import concurrent.futures as cf
+    import urllib.request
+    key = s._fmp_key()
+    symbols = symbols or list(ag.base_cfg().universe)
+    out = load_labels(path)
+    todo = [x for x in symbols if x not in out]
+    print(f"etiket çekiliyor: {len(todo)} sembol (cache'te {len(out)})")
+
+    def one(sym):
+        url = f"https://financialmodelingprep.com/stable/profile?symbol={sym}&apikey={key}"
+        try:
+            with urllib.request.urlopen(url, timeout=20) as r:
+                d = json.loads(r.read())
+            it = d[0] if isinstance(d, list) and d else d
+            return sym, (it.get("industry") or None)
+        except Exception:
+            return sym, None
+
+    with cf.ThreadPoolExecutor(max_workers=8) as ex:
+        for sym, lbl in ex.map(one, todo):
+            out[sym] = lbl
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w") as fh:
+        json.dump(out, fh, ensure_ascii=False, indent=1)
+    os.replace(tmp, path)
+    bilinen = sum(1 for v in out.values() if v)
+    print(f"etiket cache: {len(out)} sembol · {bilinen} etiketli")
+    return out
+
+
 class YogunlasmaBacktester(ag.GKX):
     """Aday 3 + yoğunlaşma kapısı. Kapılar kapalıyken GKX ile BİREBİR aynı olmalıdır.
 

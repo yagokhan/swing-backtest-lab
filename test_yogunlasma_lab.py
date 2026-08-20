@@ -95,6 +95,23 @@ def test_corr_engine_yetersiz_gecmis_none():
     assert ce.mean_to(idx[5], "A", ["B"]) is None      # 40 gözlem yok
 
 
+def test_load_labels_dosya_yoksa_bos(tmp_path):
+    p = tmp_path / "yok.json"
+    assert yl.load_labels(str(p)) == {}
+
+
+def test_load_labels_okur(tmp_path):
+    p = tmp_path / "lbl.json"
+    p.write_text('{"LRCX": "Semiconductors", "XYZ": null}')
+    d = yl.load_labels(str(p))
+    assert d["LRCX"] == "Semiconductors"
+    assert d["XYZ"] is None
+
+
+def test_fetch_labels_var():
+    assert hasattr(yl, "fetch_labels")
+
+
 def test_corr_engine_bilinmeyen_sembol_none():
     mk, idx = _sentetik_market()
     ce = yl.CorrEngine(mk, window=60, min_obs=40)
