@@ -625,6 +625,79 @@ en ucunda ve combo'nun bilinen bedelinin ölçülmüş hali olarak izleme listes
 <p class="mut" style="font-size:12.5px">Kaynak: <code>beklenti_lab.py</code> (124 koşu + gölge replay + Temmuz ayrıştırması,
 parite kapısı v2 ile doğrulandı) · çıktılar <code>swing2_out/beklenti/</code> · 16 Ağustos 2026.</p>
 
+<h2>🧬 "Aynı işlemin altı kopyasını mı tutuyoruz?" — yoğunlaşma deneyi (2026-08-20)</h2>
+
+<p class="note">Temmuz kaybının %95'i altı isimden gelmişti. Bu kez o altı ismin <b>günlerine</b> bakıldı ve
+şu çıktı: kaybın neredeyse tamamı her ismin <b>en kötü 3 gününden</b> geliyor — ve o günler
+<b>isimler arasında ortak</b>. Yani altı ayrı talihsizlik değil, tek bir temanın çözülmesi.
+Soru netleşti: <b>yığılma ödediğimiz bir bedel mi, yoksa kazancın kaynağı mı?</b></p>
+
+<div class="card">
+<b>Önce olayın fotoğrafı.</b> SPY dümdüz dururken portföyün yarısı birlikte çakılıyor:
+<div class="tblwrap"><table>
+<tr><th>gün</th><th>INTC</th><th>LRCX</th><th>TER</th><th>STX</th><th>WDC</th><th>GLW</th><th>SPY</th></tr>
+<tr><td>1 Tem 2026</td><td>−9,0</td><td>−9,7</td><td>−11,7</td><td>−5,2</td><td>−6,3</td><td>−13,6</td><td><b>−0,1</b></td></tr>
+<tr><td>2 Tem 2026</td><td>−5,3</td><td>−10,2</td><td>−13,6</td><td>−10,4</td><td>−9,9</td><td>−10,8</td><td><b>−0,1</b></td></tr>
+<tr><td>23 Haz 2026</td><td>−6,1</td><td>−9,3</td><td>−8,1</td><td>−5,1</td><td>−8,4</td><td>−7,5</td><td>−1,5</td></tr>
+</table></div>
+<p class="note">Bu isimlerin sektör etiketleri <b>ayrı</b> (yarı-iletken ekipman · donanım · elektronik
+bileşen · güneş enerjisi) — etikete bakan bir kural bunları aynı kümeye koymazdı. Bu yüzden deneyin
+merkezine <b>gerçekleşen korelasyon</b> kondu: veriden ölçülür, etikete muhtaç değildir.</p>
+</div>
+
+<div class="card">
+<b>11 varyant, 5 pencere, kanon standardı.</b> Üç aile denendi: <b>K</b> — aday açık portföyle fazla
+eş-hareketliyse alma · <b>E</b> — endüstri başına en fazla N pozisyon · <b>B</b> — reddetme yerine yarım
+pozisyonla gir.
+<div class="tblwrap"><table>
+<tr><th>Varyant</th><th>Ort. ROI</th><th>Ort. Calmar</th><th>Ort. çukur</th><th>Portföy korelasyonu</th><th>5 pencerede</th></tr>
+<tr><td><b>baz (canlı kural)</b></td><td>+%73,9</td><td>4,32</td><td>−%16,8</td><td>0,242</td><td>—</td></tr>
+<tr><td>K — korelasyon kapısı (en sıkı)</td><td>+%57,2</td><td>3,67</td><td>−%15,6</td><td><b>0,158</b></td><td>1/5</td></tr>
+<tr><td>K — korelasyon kapısı (en gevşek)</td><td>+%60,6</td><td>3,41</td><td>−%19,6</td><td>0,226</td><td>2/5</td></tr>
+<tr><td>E4 — endüstri başına 4 poz</td><td>+%74,8</td><td><b>4,88</b></td><td><b>−%14,8</b></td><td>0,239</td><td><b>4/5</b></td></tr>
+<tr><td>B — yumuşak yarım poz</td><td>+%56,2</td><td>3,49</td><td>−%16,2</td><td>0,256</td><td>1/5</td></tr>
+</table></div>
+<p class="note">Korelasyon kapısı <b>işini yaptı</b>: portföy eş-hareketliliğini 0,242'den 0,158'e indirdi
+ve çukuru azalttı. Ama getiriyi daha çok kesti — yani yığılmayı azaltmak <b>net zarar</b>. Tek bir varyant
+(E4) elemeyi geçti ve ilk bakışta harika görünüyordu: 5 yılda +%166 yerine <b>+%186</b>, Calmar 8,48 yerine
+<b>11,09</b>.</p>
+</div>
+
+<div class="card">
+<b>Ve E4 maskesi düştü.</b> İki kontrol aynı anda konuştu:
+<div class="tblwrap"><table>
+<tr><th>Kontrol</th><th>Sonuç</th></tr>
+<tr><td>Başlangıç günü kaydırma (jitter, 5 başlangıç)</td>
+<td>baz her başlangıçta sağlam (Calmar 7,91–8,48). E4 savruldu: <b>11,09 · 11,09 · 5,96 · 7,99 · 6,38</b>
+— manşet yalnız iki bitişik başlangıçta var, iki hafta kaydırınca bazın <b>altına</b> düşüyor. <b>2/5 → ÇÖKTÜ</b></td></tr>
+<tr><td>Kural 5 yılda kaç kez devreye girdi?</td>
+<td>Topu topu <b>13 giriş</b> engellendi — ve <b>12'si yarı-iletken</b>. Yani kuralın tüm etkisi
+"4'ten fazla çip hissesi tutma"dan ibaret. Engellenenler arasında <b>2023 Mayıs ve Temmuz'da iki NVDA
+girişi</b> var: AI patlamasının tam başlangıcı.</td></tr>
+</table></div>
+<p class="note">+20 puanlık fark 13 olaya dayanıyordu; 13 olay, 5 yıllık bir sonucu taşıyacak kadar
+kalabalık değil. Bu, <a href="#tahsis" style="color:var(--kar)">Giyotin-2</a>'nin n≈4 ile maskesinin
+düştüğü ile aynı desen — bu kez kontrol en baştan kuruluydu.</p>
+</div>
+
+<div class="card">
+<b>KARAR: ADAY YOK — canlı kural değişmedi.</b>
+<p class="note">Ama soru cevapsız kalmadı, tam tersi: <b>yığılma ödediğimiz bir bedel değil, kazancın
+kaynağı.</b> Portföyün eş-hareketliliğini azaltan her varyant çukuru gerçekten sığlaştırdı — ve her
+seferinde getiriden daha fazlasını götürdü. Momentum stratejisinin liderleri aynı temada toplanır;
+o temayı seyreltmek, kuyruğu keserken kârı da kesiyor. Temmuz'da acıtan yoğunlaşma ile
+Mart–Haziran'da <b>+%33</b> kazandıran yoğunlaşma aynı şey.</p>
+<p class="note"><b>Dürüstlük notu.</b> Bu deney canlı sonuçları iyileştirmedi ve iyileştirmeyeceği de
+kanıtlanmadı — yalnızca <i>bu üç kural ailesinin</i> kabul kriterinden geçmediği gösterildi. 5 yıllık
+tarih canlı kuralın seçildiği veriyi içerir. Kapının gerçekten ısırdığı ölçüldü (korelasyon 0,242→0,158),
+yani sonuç "kural çalışmadı" değil, <b>"kural çalıştı ve zarar ettirdi"</b>. Sektör tavanı fikri bir daha
+açılırsa, kanıt yükü bu tabloyu aşmak zorunda.</p>
+</div>
+
+<p class="mut" style="font-size:12.5px">Kaynak: <code>yogunlasma_lab.py</code> (11 varyant × 5 pencere +
+jitter + engellenen-giriş adli tıbbı; sadakat kapısı: kapılar kapalıyken sonuç Aday 3 çapalarıyla birebir) ·
+çıktılar <code>swing2_out/yogunlasma/</code> · 20 Ağustos 2026.</p>
+
 </div>
 <div id="tip" role="tooltip"></div>
 <script>

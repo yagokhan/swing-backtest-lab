@@ -417,3 +417,26 @@ def selftest():
 
 if __name__ == "__main__":
     main()
+
+
+def adli_tip(kmax=4, start="2021-05-01"):
+    """DÜRÜSTLÜK ADIMI: kazanan varyantın engellediği girişleri tek tek çıkar.
+
+    Üstünlük az sayıda olaya dayanıyorsa (kanon: Giyotin-2 n≈4 maskesi) bunu
+    saklamak yerine görünür kılar — engellenen her giriş, tarihi ve sembolüyle."""
+    ag.load_data()
+    c = copy.deepcopy(ag.base_cfg())
+    c.start_date = start
+    c.end_date = ""
+    YogunlasmaBacktester.RHO = None
+    YogunlasmaBacktester.KMAX = kmax
+    YogunlasmaBacktester.SOFT = False
+    YogunlasmaBacktester.LABELS = load_labels()
+    bt = YogunlasmaBacktester(c, market=ag.MARKET)
+    bt.run()
+    red = [(d, sym) for d, sym, _, k in bt.gate_log if k == "red-etiket"]
+    lbl = load_labels()
+    print(f"E{kmax} · {start}→ : {len(red)} giriş engellendi")
+    for d, sym in red:
+        print(f"  {d}  {sym:6s} ({lbl.get(sym)})")
+    return red
