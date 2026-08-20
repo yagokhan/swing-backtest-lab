@@ -60,10 +60,15 @@ kaynağı" cevabı da bilgidir ve yayınlanır.
 ## Bileşenler
 
 ### §1 Motor entegrasyonu
-`YogunlasmaBacktester(qp.DengeBacktester)` — `DengeBacktester`'ın `Swing2Backtester`'ı
-genişletmesiyle **aynı kalıp**. Tek fark: `_step` içindeki aday listesi sıralandıktan sonra,
-`_open` çağrılmadan önce bir **kabul kapısı** uygulanır. Sıralama, kapılar, tahsis, çıkış —
-hiçbiri değişmez.
+`YogunlasmaBacktester(altguard_lab.GKX)` — `DengeBacktester`'ın `Swing2Backtester`'ı
+genişletmesiyle **aynı kalıp**. Tek kanca `_open()`: aday reddedilirse `False` döner ve
+`_step` döngüsü sıradaki adaya geçer. Sıralama, kapılar, tahsis, çıkış — hiçbiri değişmez.
+
+**Neden `ag.GKX` (canlı `DengeBacktester` değil, plan yazımında düzeltildi):** altguard_lab'ın
+Aday 3 kopyası **sabit cache** üzerinde çalışır ve `EXPECTED` çapalarıyla **kesin** sadakat kapısı
+verir (ROI farkı <0,05 **ve** işlem sayısı birebir). Canlı `DengeBacktester` artımlı depoyu
+kullandığından FMP veri revizyonları bu kesinliği imkânsız kılar (bkz. beklenti karnesi, parite
+kapısı v2 dersi). Diğer laboratuvarlar (tahsis_lab, karkilit_lab) da bu yolu kullanır.
 
 Kritik davranış: aday reddedilince döngü **sıradaki adaya** geçer (sermaye boşta kalmaz). Yani bu
 savunma değil, **sahip olunan şeyi değiştiren** bir müdahale; ölçüm bunu içerir.
