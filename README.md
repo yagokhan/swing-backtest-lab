@@ -1,14 +1,17 @@
 # Swing Backtest Lab
 
-Momentum/breakout **swing trading backtest motoru** + tek dosya web arayüzü.
-İki giriş stratejisi, çoklu çıkış modu, FMP (Financial Modeling Prep) günlük verisi.
-Portföy takip uygulamasından **bağımsız**, kendi başına çalışır.
+Momentum/breakout **swing trading backtest motoru** + **canlı kağıt-trade sistemi
+(👑 Qulla-21)** + deney arşivi. FMP (Financial Modeling Prep) günlük verisi,
+Türkçe web arayüzleri, Telegram yayını. Portföy takip uygulamasından **bağımsız**,
+kendi başına çalışır.
 
-> Eğitim/araştırma amaçlıdır. Yatırım tavsiyesi değildir. Geçmiş performans gelecek getiriyi garanti etmez.
+> Eğitim/araştırma amaçlıdır. Yatırım tavsiyesi değildir. Geçmiş performans gelecek getiriyi garanti etmez. Kağıt-trade tarafında gerçek para kullanılmaz.
 
 ---
 
 ## Ne içerir
+
+### Backtest motoru + arayüz
 
 - **`swing2_backtest.py`** — çoklu-hisse, günlük-bar portföy backtest motoru. Tüm trade mantığı + FMP veri hattı burada. İki **giriş** modu:
   - `swing2` — 8-katman skor (24p) + kill-switch (Weinstein Aşama analizi, VCP, momentum, R/R…).
@@ -19,6 +22,38 @@ Portföy takip uygulamasından **bağımsız**, kendi başına çalışır.
 - **`server.py`** — minimal API + statik sunucu (`/api/backtest`, `/api/qswing`, `/api/qswing/scan`).
 - **`calibrate_fmp.py`** — şampiyon parametre kalibrasyonu (2y+5y ızgara).
 - **`qswing_grid.py`** — qswing kırılım eşik ızgarası (kırılım periyodu × VDU × RS × çıkış).
+- **`rs_universe.py`** — sistematik evren: S&P 500 + Nasdaq 100 (~373 sembol) → günlük RS top-50 izleme listesi (seçim-yanlılığı gidermek için).
+
+### Canlı kağıt-trade sistemi (👑 Qulla-21)
+
+Kırılım stratejisinin **canlı, defter-tabanlı** kağıt-trade uygulaması — sanal $10.000,
+her akşam 15:45 ET'de cron ile çalışır, Telegram'a yayınlar. Sade anlatım:
+[`docs/qulla21-defter.md`](docs/qulla21-defter.md).
+
+- **`qulla_paper.py`** — kalıcı **gerçek defter** (ledger; geçmiş kilitli, atomik commit + otomatik yedek), artımlı veri deposu, günlük ilerletme (`run_qulla`, `commit_ledger`).
+- **`live_scan_telegram.py`** — akşam cron'u: veri → tarama → doğrulama kapıları → defter commit → Telegram yayını. Bar gecikmesinde tekrar dener, sessiz atlamaz.
+- **`paper_trader.py`** — durum/abone/lastscan yardımcıları + FMP quote katmanı.
+- **`paper_dashboard.py`** — salt-okur web dashboard (portföy, equity, sağlık; `/adaylar`, `/sistem-sagligi`, `/yeni-deneyler` sayfaları `dashboard_static/`'ten).
+- **`telegram_command_bot.py`** — `/portfolio`, `/lastscan` komutları.
+- **`paper_keepalive.sh`** — @reboot + 5dk watchdog: bot/dashboard/backtest sunucusu ayakta kalır.
+
+### Deney arşivi (laboratuvarlar)
+
+Canlı kuralı değiştirmeden çalışan, jitter/komşuluk testli deney araçları; sonuçlar
+`dashboard_static/adaylar.html` sayfasında (karar günlüğü + dürüstlük notlarıyla):
+
+- **`beklenti_lab.py`** — beklenti karnesi: canlı pencere, 124 taze-başlangıçlı aynı-konfig koşuya karşı (dağılım + gölge replay + ay ayrıştırma).
+- **`splitstop_lab.py` · `altguard_lab.py`/`altguard_jitter.py` · `karkilit_lab.py`** — stop/koruma varyantları (hepsi bazdan kötü çıktı; stopsuzluk dersinin kaynağı).
+- **`bleg_lab.py`/`bleg_report.py`** — runner (B bacağı) anatomisi.
+- **`tahsis_lab.py`** — slot/tahsis kuralları (Giyotin-2, VIX şalteri).
+- **`ml_*_lab.py` + `ml_backfill.py` + `ml_shadow_report.py`** — sahte-kırılım ML gölge hattı (walk-forward AUC≈0.47 → kestirim gücü yok; sayfada uyarıyla).
+- **`exp_swing2*.py` + `exp_analyze.py` + `gen_*_report.py`** — parametre bataryaları ve rapor üreticileri.
+
+### Dokümantasyon + testler
+
+- **`docs/qulla21-defter.md`** — yöntem + gerçek defter mimarisi (sade dille, güncel tutulur).
+- **`docs/qulla21-metodoloji-devam-20260724.md`** — metodoloji bulguları + devam planı (tarihli eklerle).
+- **`test_glitch_guard.py` · `test_stale_guard.py` · `test_operational_safety.py` · `test_beklenti_lab.py`** — veri-glitch doğrulama kapısı, bar-gecikme davranışı, operasyonel güvenlik ve karne yardımcıları (pytest).
 
 ## Kurulum
 
@@ -61,6 +96,23 @@ python3 calibrate_fmp.py                 # şampiyon kalibrasyon
 python3 qswing_grid.py                   # qswing eşik ızgarası
 python3 -c "import swing2_backtest as s; print(s.run_backtest_api({'preset':'mega','period':'2y','entry_mode':'qswing'})['metrics'])"
 ```
+
+## Canlı kağıt-trade (özet)
+
+Kural seti (⭐ "Aday 3", 2026-07-06'dan beri): RS top-50 izleme listesi · **63 gün**
+tepe kırılımı · rejim `SPY>SMA200` **+** havuz genişliği `A200≥%50` · en fazla
+**20 slot**, taban tahsis **%7,5**/poz (+2R bacağı bitmiş runner slot açar) ·
+split çıkış **%60 @ +2R** limit + **%40 runner** (21-EMA altına kapanışta) ·
+$10.000 bileşik. Ayrıntı ve gerekçeler: [`docs/qulla21-defter.md`](docs/qulla21-defter.md).
+
+- **Zamanlama:** hafta içi 22:45/23:45 TR (≈15:45 ET) cron → `live_scan_telegram.py --et-window`; kalibrasyon "15:45 girişi ≈ kapanış" gösterdi.
+- **Defter:** `~/.swing_paper_qulla_ledger.json` tek doğruluk kaynağı; geçmiş kilitli, her commit atomik + yedekli. Veri revizyonları geçmişi değiştiremez.
+- **Doğrulama kapıları:** giriş/açık/replay-çıkış fiyatları bağımsız quote ile çapraz kontrol (fail-closed); bar gecikmesinde 4×120sn tekrar + Telegram uyarısı.
+- **Dashboard:** `python3 paper_dashboard.py` → portföy/equity/sağlık + `/adaylar` (deney arşivi ve karne).
+- **Testler:** `python3 -m pytest test_glitch_guard.py test_stale_guard.py test_operational_safety.py test_beklenti_lab.py`
+
+Durum (2026-08-20): canlı pencere 2026-05-27'den beri işliyor; 2026-08-16 beklenti
+karnesi kararı **normal varyans** — kurallar değişmedi (tek izleme kalemi: MaxDD P99).
 
 ## Backtest parametreleri (özet)
 
