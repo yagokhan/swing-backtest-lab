@@ -419,24 +419,54 @@ if __name__ == "__main__":
     main()
 
 
-def adli_tip(kmax=4, start="2021-05-01"):
-    """DÜRÜSTLÜK ADIMI: kazanan varyantın engellediği girişleri tek tek çıkar.
+def _ileri_getiri(sym, date, n):
+    """Engellenen girişten sonraki n işlem günü getirisi (%). Yoksa None."""
+    df = ag.MARKET["data"].get(sym)
+    if df is None:
+        return None
+    cl = df["Close"].dropna()
+    idx = cl.index.searchsorted(pd.Timestamp(date))
+    if idx >= len(cl) or idx + n >= len(cl):
+        return None
+    return round(float(cl.iloc[idx + n] / cl.iloc[idx] - 1) * 100, 1)
 
-    Üstünlük az sayıda olaya dayanıyorsa (kanon: Giyotin-2 n≈4 maskesi) bunu
-    saklamak yerine görünür kılar — engellenen her giriş, tarihi ve sembolüyle."""
+
+def adli_tip(kmax=0, rho=None, start="2021-05-01"):
+    """DÜRÜSTLÜK ADIMI: varyantın engellediği girişleri tek tek çıkar + SONRASINI ölç.
+
+    Üstünlük az sayıda olaya dayanıyorsa (kanon: Giyotin-2 n≈4 maskesi) bunu saklamak
+    yerine görünür kılar. Her engellenen giriş için sonraki 21/63 günün getirisi de
+    yazılır: kural felaketi mi önledi, yoksa kazananı mı kaçırdı?"""
     ag.load_data()
     c = copy.deepcopy(ag.base_cfg())
     c.start_date = start
     c.end_date = ""
-    YogunlasmaBacktester.RHO = None
+    YogunlasmaBacktester.RHO = rho
     YogunlasmaBacktester.KMAX = kmax
     YogunlasmaBacktester.SOFT = False
-    YogunlasmaBacktester.LABELS = load_labels()
+    YogunlasmaBacktester.LABELS = load_labels() if kmax else {}
     bt = YogunlasmaBacktester(c, market=ag.MARKET)
     bt.run()
-    red = [(d, sym) for d, sym, _, k in bt.gate_log if k == "red-etiket"]
+    red = [(d, sym) for d, sym, _, k in bt.gate_log if k.startswith("red")]
     lbl = load_labels()
-    print(f"E{kmax} · {start}→ : {len(red)} giriş engellendi")
+    ad = f"E{kmax}" if kmax else f"K{rho}"
+    print(f"\n=== {ad} · {start}→ : {len(red)} giriş engellendi ===")
+    print(f"{'tarih':12s}{'sembol':8s}{'endüstri':34s}{'+21g':>7s}{'+63g':>7s}")
+    r21, r63 = [], []
     for d, sym in red:
-        print(f"  {d}  {sym:6s} ({lbl.get(sym)})")
+        a, b = _ileri_getiri(sym, d, 21), _ileri_getiri(sym, d, 63)
+        if a is not None:
+            r21.append(a)
+        if b is not None:
+            r63.append(b)
+        print(f"{d:12s}{sym:8s}{str(lbl.get(sym))[:32]:34s}"
+              f"{(f'{a:+.1f}%' if a is not None else '-'):>7s}"
+              f"{(f'{b:+.1f}%' if b is not None else '-'):>7s}")
+    if r21:
+        print(f"\nEngellenen girişlerin SONRASI (kural haklı mıydı?):")
+        print(f"  +21 gün: ortalama {np.mean(r21):+.1f}% · medyan {np.median(r21):+.1f}% · "
+              f"yükselen {sum(1 for x in r21 if x > 0)}/{len(r21)}")
+        print(f"  +63 gün: ortalama {np.mean(r63):+.1f}% · medyan {np.median(r63):+.1f}% · "
+              f"yükselen {sum(1 for x in r63 if x > 0)}/{len(r63)}")
+        print("  (pozitif = kural KAZANANI kaçırdı · negatif = kural felaketi önledi)")
     return red
