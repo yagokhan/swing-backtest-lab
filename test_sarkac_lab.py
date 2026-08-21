@@ -241,3 +241,58 @@ def test_exit_signals_alternans_bozulmaz():
 def test_signal_mode_gecersizse_hata():
     with pytest.raises(ValueError):
         sl.run_api({"period": "1y", "signal_mode": "saçma"})
+
+
+# ═══════════════════════ EMA TRAILING STOP ═══════════════════════
+def test_ema_kapaliyken_sonuc_degismez():
+    q, t = _synth(400)
+    a = sl.backtest(q, t)
+    b = sl.backtest(q, t, ema_len=0)
+    assert a["trades"] == b["trades"]
+    assert [x["why"] for x in b["trades"]] == ["RSI"] * len(b["trades"])
+
+
+def test_ema_stop_kurulma_sarti():
+    """RSI 30'da alırken fiyat EMA ALTINDADIR; stop, fiyat EMA üstüne
+    kapanana kadar TETİKLENMEMELİ — yoksa ertesi bar çıkar."""
+    idx = _idx(200)
+    # önce sert düşüş (RSI dibe iner, fiyat EMA altında), sonra toparlanma
+    px = np.r_[np.linspace(100, 60, 60), np.linspace(60, 130, 140)]
+    q = pd.Series(px, index=idx)
+    t = pd.DataFrame({"Open": q * 3, "High": q * 3, "Low": q * 3,
+                      "Close": q * 3, "Volume": 1e7}, index=idx)
+    r = sl.backtest(q, t, ema_len=8, ema_mode="replace")
+    for x in r["trades"]:
+        assert x["bars"] > 1, "stop kurulmadan tetiklendi (ertesi bar çıkış)"
+
+
+def test_ema_src_kendi_serisiyle_kiyaslanir():
+    """EMA hangi seriden hesaplanıyorsa kıyas fiyatı da o seriden olmalı.
+    (TQQQ fiyatını QQQ EMA'sıyla kıyaslamak stop'u sessizce ölü bırakır.)"""
+    q, t = _synth(400)
+    sig = sl.backtest(q, t, ema_len=8, ema_src="signal", ema_mode="replace")
+    duz = sl.backtest(q, t, ema_len=0)
+    assert sig["trades"] != duz["trades"], "signal kaynaklı EMA hiç tetiklenmemiş"
+
+
+def test_ema_replace_rsi_satisini_yoksayar():
+    q, t = _synth(400)
+    r = sl.backtest(q, t, ema_len=8, ema_mode="replace")
+    assert all(x["why"].startswith("EMA") for x in r["trades"])
+
+
+def test_ema_combine_iki_nedeni_de_uretebilir():
+    q, t = _synth(600)
+    r = sl.backtest(q, t, ema_len=8, ema_mode="combine")
+    nedenler = {x["why"] for x in r["trades"]}
+    assert nedenler <= {"RSI", "EMA8"}
+
+
+def test_ema_gecersiz_uzunluk_hata():
+    with pytest.raises(ValueError):
+        sl.run_api({"period": "1y", "ema_len": 500})
+
+
+def test_ema_gecersiz_kaynak_hata():
+    with pytest.raises(ValueError):
+        sl.run_api({"period": "1y", "ema_len": 8, "ema_src": "saçma"})

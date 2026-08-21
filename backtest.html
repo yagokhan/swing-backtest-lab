@@ -110,6 +110,12 @@ th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:
           <input type="number" id="rsiOS" value="30" min="1" max="49" step="1"></label>
         <label class="fld" title="Sinyal ne zaman doğsun? Pine göstergesinin kendisi bölgeye GİRİŞTE tetikler (RSI 30'a değdiği ilk bar AL). 'Çıkışta' seçeneği dip teyidini bekler — ölçüldü, daha kötü (CAGR %16,4 vs %23,4)."><span class="kicker">Sinyal anı</span>
           <select id="rsiSigMode"><option value="touch" selected>bölgeye GİRİŞTE (Pine göstergesi)</option><option value="exit">bölgeden ÇIKIŞTA (teyit bekler)</option></select></label>
+        <label class="fld" title="0 = kapalı (yalnız RSI ile sat). >0 ise fiyat EMA'nın altına KAPANINCA satar. Stop KURULMA şartlıdır: RSI 30'da alırken fiyat zaten EMA altındadır, o yüzden stop ancak fiyat EMA üstüne kapandıktan sonra aktif olur. Ölçüm (2010-2026, replace/TQQQ): EMA5 0,87 · EMA6 0,90 · EMA7 0,88 · EMA8 0,92 · EMA9 0,18 · EMA21 0,29 (CAGR/DD). 5-8 platosu al-tut'un 0,51'ini 5/5 pencerede geçiyor."><span class="kicker">EMA trailing stop <span style="opacity:.6;font-weight:400">(0=kapalı)</span></span>
+          <input type="number" id="emaLen" value="0" min="0" max="200" step="1"></label>
+        <label class="fld" title="EMA hangi seriden hesaplansın? TQQQ = tuttuğun enstrüman (daha oynak, kısa EMA gerekir) · QQQ = sinyal enstrümanı (TQQQ-EMA8 ≈ QQQ-EMA10)."><span class="kicker">EMA kaynağı</span>
+          <select id="emaSrc"><option value="trade" selected>TQQQ (tutulan)</option><option value="signal">QQQ (sinyal)</option></select></label>
+        <label class="fld" title="replace = RSI 70 satışı YOK SAYILIR, çıkış yalnız EMA'dan (ölçümde daha iyi) · combine = ikisi birlikte, hangisi önce gelirse."><span class="kicker">EMA çıkış modu</span>
+          <select id="emaMode"><option value="replace" selected>replace — yalnız EMA ile çık</option><option value="combine">combine — RSI veya EMA</option></select></label>
         <label class="fld" title="pine = katı Pine okuması (ilk aşırı satım alım üretmez) · flat = nakitken ilk aşırı satım da alır."><span class="kicker">Başlangıç kuralı</span>
           <select id="rsiStart"><option value="flat" selected>flat — ilk aşırı satım da alır</option><option value="pine">pine — katı Pine okuması</option></select></label>
       </div>
@@ -240,6 +246,9 @@ function buildSarkacPayload(){
     rsi_oversold: Math.max(1, Math.min(49, parseInt($('rsiOS').value||'30',10))),
     start_mode: $('rsiStart').value || 'flat',
     signal_mode: $('rsiSigMode') ? ($('rsiSigMode').value || 'touch') : 'touch',
+    ema_len: $('emaLen') ? Math.max(0, Math.min(200, parseInt($('emaLen').value||'0',10))) : 0,
+    ema_src: $('emaSrc') ? ($('emaSrc').value || 'trade') : 'trade',
+    ema_mode: $('emaMode') ? ($('emaMode').value || 'replace') : 'replace',
     period: $('period').value,
   };
   const sd=$('start').value, ed=$('end').value;
@@ -539,14 +548,18 @@ function renderSigCharts(){
     sigMarkerDS('AL (aşırı satım)', SIG.buy_px, '#27c281', false),
     sigMarkerDS('SAT (aşırı alım)', SIG.sell_px, '#ff5d6c', true),
   ];
-  if(showT) pds.push({label:'TQQQ (işlem)', data:SIG.tqqq, borderColor:'#c08bff',
+  const emaOnTqqq = SIG.ema && SIG.ema_src !== 'signal';
+  if(showT || emaOnTqqq) pds.push({label:'TQQQ (işlem)', data:SIG.tqqq, borderColor:'#c08bff',
      borderWidth:1.1, pointRadius:0, tension:.1, spanGaps:true, yAxisID:'y2', order:4});
+  if(SIG.ema) pds.push({label:'EMA'+SIG.ema_len+(emaOnTqqq?' (TQQQ)':' (QQQ)'), data:SIG.ema,
+     borderColor:'#e8c46a', borderWidth:1.3, borderDash:[6,3], pointRadius:0, tension:.1,
+     spanGaps:true, yAxisID: emaOnTqqq?'y2':'y', order:4});
 
   const scalesP={
     x:{ticks:{color:AXIS,maxTicksLimit:9,maxRotation:0,autoSkip:true},grid:{color:GRID}},
     y:{position:'left', ticks:{color:AXIS,callback:v=>'$'+v},grid:{color:GRID},
        title:{display:true,text:'QQQ (sinyal)',color:AXIS}}};
-  if(showT) scalesP.y2={position:'right', type:'logarithmic',
+  if(showT || emaOnTqqq) scalesP.y2={position:'right', type:'logarithmic',
        ticks:{color:'#c08bff',callback:v=>'$'+v}, grid:{drawOnChartArea:false},
        title:{display:true,text:'TQQQ (log)',color:'#c08bff'}};
 
@@ -586,6 +599,7 @@ function renderSarkac(d){
     + ` · AL ≤${c.rsi_oversold} · SAT ≥${c.rsi_overbought}`
     + ` · ${c.start}→${c.end}` + (c.date_range?' (el ile aralık)':' · '+c.period)
     + ` · sinyal: ${c.signal_mode==='exit'?'bölgeden ÇIKIŞTA':'bölgeye GİRİŞTE (Pine)'}`
+    + (c.ema_len ? ` · 🛑 EMA${c.ema_len} trailing (${c.ema_src==='signal'?'QQQ':'TQQQ'}, ${c.ema_mode})` : '')
     + ` · tam pozisyon, kapanıştan · başlangıç: ${c.start_mode}`;
 
   const cls=x=>x>=0?'pos':'neg';
@@ -620,6 +634,11 @@ function renderSarkac(d){
           + `≥ ${c.rsi_overbought} olduğu <b>İLK</b> bar (SAT).`)
       + ` Sinyal <b>${c.signal_sym}</b>'dan üretilir, işlem <b>${c.trade_sym}</b>'da yapılır.`
       + ` İki uç arasında sinyal yoktur — histerezis, arka arkaya gelen aşırı barlar tekrar tetiklemez.`
+      + (c.ema_len ? `<br><span style="opacity:.8">🛑 <b>EMA${c.ema_len} trailing stop açık</b> `
+          + `(${c.ema_src==='signal'?'QQQ':'TQQQ'} üzerinden, kesikli sarı çizgi). Stop <b>kurulma `
+          + `şartlıdır</b>: fiyat EMA'nın üstüne kapanana kadar pasif, sonra EMA altı kapanışta satar. `
+          + `${c.ema_mode==='replace'?'RSI 70 satışı devre dışı.':'RSI 70 veya EMA — hangisi önce gelirse.'}`
+          + `</span>` : '')
       + `<br><span style="opacity:.8">Sinyal sayısı az geliyorsa: kaynak Pine göstergesinin `
       + `varsayılan RSI uzunluğu <b>7</b>'dir (burada ${c.rsi_length} seçili). 7 ile RSI 30'a çok `
       + `daha sık iner — son 2 yılda 6 AL, 14 ile 2 AL. Daha fazla sinyal daha iyi sonuç demek `

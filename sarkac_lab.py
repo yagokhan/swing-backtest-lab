@@ -115,6 +115,11 @@ def rsi_tv(close: pd.Series, n: int = 14) -> pd.Series:
     return out
 
 
+def ema(x: pd.Series, n: int) -> pd.Series:
+    """Üstel hareketli ortalama (TradingView ta.ema ile aynı: adjust=False)."""
+    return x.astype(float).ewm(span=n, adjust=False).mean()
+
+
 # =========================================================================
 # PINE DURUM MAKİNESİ
 # =========================================================================
@@ -241,13 +246,27 @@ def load_data(force=False):
 # =========================================================================
 def backtest(sig_close, trade_ohlc, ob=70.0, os_=30.0, length=14,
              start=None, end=None, start_mode="flat", signal_mode="touch",
+             ema_len=0, ema_src="trade", ema_mode="combine",
              capital=INITIAL_CAPITAL, commission=COMMISSION,
              entry_bps=ENTRY_SLIP_BPS, exit_bps=EXIT_SLIP_BPS):
     """Sinyal serisi sig_close (QQQ) üzerinden trade_ohlc (TQQQ) al-sat.
 
     Fiyatlar sinyal barının KAPANIŞINDAN dolar; gelecek bar kullanılmaz.
     Takvim iki enstrümanın KESİŞİMİ (TQQQ 2010-02-11'de doğduğu için backtest
-    fiilen oradan başlar; RSI ise QQQ'nun tüm geçmişinden ısınmıştır)."""
+    fiilen oradan başlar; RSI ise QQQ'nun tüm geçmişinden ısınmıştır).
+
+    EMA TRAILING STOP (ema_len > 0 ile açılır)
+    ------------------------------------------
+      ema_src  : "trade" → EMA tutulan enstrümandan (TQQQ) · "signal" → QQQ'dan
+      ema_mode : "combine" → RSI hedefi DURUR, EMA ek koruma (hangisi önce gelirse)
+                 "replace" → RSI satış sinyali YOK SAYILIR, çıkış yalnız EMA'dan
+
+    KURULMA ŞARTI (önemli): RSI <= 30'da alırken fiyat zaten EMA'ların ALTINDADIR
+    (RSI o yüzden düşük). Kurulma şartı olmasa stop ertesi bar tetiklenir ve
+    yöntem hiç işlem taşıyamaz. Bu yüzden stop, fiyat EMA'nın ÜSTÜNE kapanana
+    kadar PASİF kalır; ancak kurulduktan sonra EMA altı kapanışta satar.
+    Kapanış teyitli (gün-içi iğne satmaz) — Qulla-21'in 21-EMA runner'ıyla aynı
+    konvansiyon."""
     rsi = rsi_tv(sig_close, length)
     sg = signals(rsi, ob, os_, start_mode, signal_mode)
 
@@ -264,11 +283,25 @@ def backtest(sig_close, trade_ohlc, ob=70.0, os_=30.0, length=14,
     sell = sg["sell"].reindex(cal).fillna(False)
     rsi_w = rsi.reindex(cal)
 
+    # EMA, kendi TAM serisinde hesaplanır (pencereye kırpılmadan) → pencere
+    # başında ısınmış gelir; sonra takvime hizalanır.
+    # HATA TUZAĞI: EMA hangi seriden hesaplanıyorsa KIYAS FİYATI DA o seriden
+    # olmalı. TQQQ fiyatını ($30) QQQ'nun EMA'sıyla ($400) karşılaştırmak stop'u
+    # sessizce ölü bırakır (kurulma şartı hiç sağlanmaz) — ölçüldü, tüm QQQ
+    # satırları bazla birebir aynı çıkmıştı.
+    if ema_len and ema_len > 0:
+        base = trade_ohlc["Close"] if ema_src == "trade" else sig_close
+        ema_w = ema(base, int(ema_len)).reindex(cal)
+        ref_w = base.reindex(cal)              # EMA ile AYNI serinin fiyatı
+    else:
+        ema_w = ref_w = None
+
     cash = float(capital)
     shares = 0.0
     trades, eq = [], []
     entry_px = entry_dt = None
     days_in = 0
+    armed = False                              # EMA stop kuruldu mu
 
     for d in cal:
         p = float(px.loc[d])
@@ -281,7 +314,8 @@ def backtest(sig_close, trade_ohlc, ob=70.0, os_=30.0, length=14,
             shares = max(0.0, (cash - commission) / fill)
             cash -= shares * fill + commission
             entry_px, entry_dt = fill, d
-        elif shares > 0.0 and bool(sell.loc[d]):
+            armed = False                      # stop henüz kurulmadı
+        elif shares > 0.0 and _exit_now(d, sell, ema_w, ref_w, ema_mode, armed):
             fill = p * (1 - exit_bps / 1e4)
             proceeds = shares * fill - commission
             cash += proceeds
@@ -292,9 +326,21 @@ def backtest(sig_close, trade_ohlc, ob=70.0, os_=30.0, length=14,
                 "pnl": round(proceeds - shares * entry_px, 2),
                 "pct": round((fill / entry_px - 1) * 100, 2),
                 "rsi_in": round(float(rsi_w.loc[entry_dt]), 1),
-                "rsi_out": round(float(rsi_w.loc[d]), 1)})
+                "rsi_out": round(float(rsi_w.loc[d]), 1),
+                # çıkış nedeni etiketi: EMA kapalıysa her zaman RSI; açıksa
+                # replace modunda hep EMA, combine modunda hangisi tetiklediyse
+                "why": ("RSI" if (not ema_len or ema_len <= 0)
+                        else (f"EMA{int(ema_len)}" if ema_mode == "replace"
+                              else ("RSI" if bool(sell.loc[d]) else f"EMA{int(ema_len)}")))})
             shares = 0.0
             entry_px = entry_dt = None
+            armed = False
+
+        # KURULMA: fiyat EMA'nın üstüne kapandıysa stop artık aktif
+        if shares > 0.0 and ema_w is not None:
+            e = ema_w.get(d, np.nan); c = ref_w.get(d, np.nan)
+            if np.isfinite(e) and np.isfinite(c) and float(c) > float(e):
+                armed = True
 
         if shares > 0.0:
             days_in += 1
@@ -317,6 +363,22 @@ def backtest(sig_close, trade_ohlc, ob=70.0, os_=30.0, length=14,
     return {"equity": equity, "trades": trades, "open": open_trade,
             "exposure": days_in / max(1, len(cal)), "calendar": cal,
             "rsi": rsi_w, "buy": buy, "sell": sell}
+
+
+def _exit_now(d, sell, ema_w, ref_w, ema_mode, armed):
+    """Bu barda çıkılsın mı? (RSI hedefi ve/veya kurulmuş EMA trailing stop)
+
+    ref_w, EMA ile AYNI serinin kapanışıdır — kıyas hep kendi içinde yapılır."""
+    rsi_hit = bool(sell.loc[d])
+    if ema_w is None:
+        return rsi_hit
+    ema_hit = False
+    if armed:
+        e = ema_w.get(d, np.nan); c = ref_w.get(d, np.nan)
+        ema_hit = bool(np.isfinite(e) and np.isfinite(c) and float(c) < float(e))
+    if ema_mode == "replace":
+        return ema_hit
+    return rsi_hit or ema_hit
 
 
 def buy_hold(price: pd.Series, cal, capital=INITIAL_CAPITAL,
@@ -580,10 +642,18 @@ def run_api(params: dict) -> dict:
     smode = p.get("signal_mode", "touch")
     if smode not in ("touch", "exit"):
         raise ValueError("signal_mode: 'touch' veya 'exit'")
+    elen = int(p.get("ema_len", 0) or 0)
+    if elen and not (2 <= elen <= 200):
+        raise ValueError("EMA uzunluğu 2-200 olmalı (0 = kapalı)")
+    esrc = p.get("ema_src", "trade")
+    emode = p.get("ema_mode", "replace")
+    if esrc not in ("trade", "signal") or emode not in ("combine", "replace"):
+        raise ValueError("ema_src: 'trade'|'signal' · ema_mode: 'combine'|'replace'")
     r = backtest(q, t, ob=ob, os_=os_, length=ln,
                  start=str(start_ts.date()), end=str(end_ts.date()),
                  start_mode=p.get("start_mode", "flat"),
-                 signal_mode=smode, capital=cap)
+                 signal_mode=smode, ema_len=elen, ema_src=esrc, ema_mode=emode,
+                 capital=cap)
     cal = r["calendar"]
     m = metrics(r["equity"], r["trades"], r["exposure"], capital=cap, open_trade=r["open"])
 
@@ -604,7 +674,7 @@ def run_api(params: dict) -> dict:
                "exit_date": x["out"], "entry": x["entry"], "exit": x["exit"],
                "pnl": x["pnl"], "pnl_pct": x["pct"],
                "outcome": ("AÇIK" if str(x["out"]).startswith("AÇIK")
-                           else f"RSI≥{int(ob)}"),
+                           else (x.get("why") or f"RSI≥{int(ob)}")),
                "sector": "—", "score": int(round(x["rsi_in"]))} for x in allt]
 
     return {
@@ -614,7 +684,8 @@ def run_api(params: dict) -> dict:
                    "signal_sym": SIGNAL_SYM, "trade_sym": TRADE_SYM,
                    "rsi_length": ln, "rsi_overbought": ob, "rsi_oversold": os_,
                    "start_mode": p.get("start_mode", "flat"),
-                   "signal_mode": smode},
+                   "signal_mode": smode, "ema_len": elen,
+                   "ema_src": esrc, "ema_mode": emode},
         "bench_label": f"{TRADE_SYM} al-tut",
         "metrics": {
             "roi": m["roi"], "spy_roi": bm.get("roi"),
@@ -637,11 +708,11 @@ def run_api(params: dict) -> dict:
         "monthly": _monthly_table(eq, bench),
         "trades": trades,
         "grid": [],
-        "chart": _chart_block(q, t, r, cal, ob, os_),
+        "chart": _chart_block(q, t, r, cal, ob, os_, elen, esrc),
     }
 
 
-def _chart_block(q, t, r, cal, ob, os_):
+def _chart_block(q, t, r, cal, ob, os_, ema_len=0, ema_src="trade"):
     """Sinyal grafiği için hizalı diziler: QQQ fiyatı, RSI, ve AL/SAT işaretleri.
 
     İşaretler tarih dizisiyle AYNI uzunlukta; sinyal olmayan günlerde None.
@@ -664,7 +735,15 @@ def _chart_block(q, t, r, cal, ob, os_):
     s_px = [qv[i] if bool(sell.iloc[i]) else None for i in range(len(cal))]
     b_rsi = [rv[i] if bool(buy.iloc[i]) else None for i in range(len(cal))]
     s_rsi = [rv[i] if bool(sell.iloc[i]) else None for i in range(len(cal))]
+    # trailing stop açıksa EMA'yı da çiz — hangi seriden hesaplandıysa
+    # grafikte o eksene oturur (QQQ paneli QQQ EMA'sını gösterir)
+    ev = None
+    if ema_len and ema_len > 0 and ema_src == "signal":
+        ev = [num(v) for v in ema(qq, int(ema_len))]
+    elif ema_len and ema_len > 0:
+        ev = [num(v) for v in ema(tt, int(ema_len))]
     return {"dates": dates, "qqq": qv, "tqqq": tv_, "rsi": rv,
             "buy_px": b_px, "sell_px": s_px, "buy_rsi": b_rsi, "sell_rsi": s_rsi,
-            "ob": ob, "os": os_,
+            "ob": ob, "os": os_, "ema": ev, "ema_len": int(ema_len or 0),
+            "ema_src": ema_src,
             "n_buy": int(buy.sum()), "n_sell": int(sell.sum())}
