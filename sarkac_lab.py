@@ -151,11 +151,55 @@ def swing_states(rsi: pd.Series, ob: float = 70.0, os_: float = 30.0) -> pd.Data
     return pd.DataFrame({"state": state, "to_ob": to_ob, "to_os": to_os}, index=rsi.index)
 
 
-def signals(rsi: pd.Series, ob=70.0, os_=30.0, start_mode="flat") -> pd.DataFrame:
+def exit_signals(rsi: pd.Series, ob=70.0, os_=30.0) -> pd.DataFrame:
+    """ALTERNATİF zamanlama: bölgeye GİRERKEN değil, bölgeden ÇIKARKEN.
+
+      AL  : RSI aşırı-satım bölgesindeyken YUKARI keserse (30'un üstüne dönerse)
+      SAT : RSI aşırı-alım bölgesindeyken AŞAĞI keserse (70'in altına dönerse)
+
+    Pine göstergesi bunu YAPMAZ — orada salınım bölgeye GİRİŞTE başlar. Ama
+    "düşen bıçağı yakalama" sorununa doğal cevap budur: dip teyit edilene kadar
+    beklenir. Karşılaştırma için kuruldu, varsayılan DEĞİL.
+    Ölçüldü (2010-2026): CAGR %16,4 vs %23,6 — daha kötü, üstelik 2022'yi de
+    kurtarmıyor (RSI Ocak 2022'de 30'un üstüne hemen döndü, teyit yanlış çıktı)."""
+    r = rsi.to_numpy(dtype=float)
+    n = len(r)
+    buy = np.zeros(n, dtype=bool)
+    sell = np.zeros(n, dtype=bool)
+    in_os = in_ob = False
+    long_ = False          # ALTERNANS: touch modundaki durum makinesiyle aynı disiplin —
+    for i in range(n):     # pozisyondayken AL, nakitteyken SAT üretilmez; yoksa grafikte
+        v = r[i]           # işleme dönüşmeyen hayalet işaretler çıkar
+        if np.isnan(v):
+            continue
+        if v <= os_:
+            in_os = True
+        elif in_os:                       # bölgeden yukarı çıktı → AL
+            in_os = False
+            if not long_:
+                buy[i] = True; long_ = True
+        if v >= ob:
+            in_ob = True
+        elif in_ob:                       # bölgeden aşağı indi → SAT
+            in_ob = False
+            if long_:
+                sell[i] = True; long_ = False
+    return pd.DataFrame({"buy": buy, "sell": sell}, index=rsi.index)
+
+
+def signals(rsi: pd.Series, ob=70.0, os_=30.0, start_mode="flat",
+            signal_mode="touch") -> pd.DataFrame:
     """Al/sat sinyalleri.
+
+    signal_mode="touch" : Pine göstergesinin KENDİSİ — bölgeye İLK TEMASTA
+                          (RSI <= 30 olduğu ilk bar AL, >= 70 olduğu ilk bar SAT).
+                          Histerezisli: arka arkaya aşırı barlar tekrar tetiklemez.
+    signal_mode="exit"  : bölgeden ÇIKIŞTA (bkz. exit_signals) — karşılaştırma için.
 
     start_mode="pine" : katı Pine okuması — ilk alım ancak OS→OB→OS'ten sonra
     start_mode="flat" : nakitken görülen İLK aşırı satım da alır (varsayılan)"""
+    if signal_mode == "exit":
+        return exit_signals(rsi, ob, os_)
     st = swing_states(rsi, ob, os_)
     buy = st["to_os"].copy()
     sell = st["to_ob"].copy()
@@ -196,7 +240,7 @@ def load_data(force=False):
 # BACKTEST — uzun/nakit, tam pozisyon
 # =========================================================================
 def backtest(sig_close, trade_ohlc, ob=70.0, os_=30.0, length=14,
-             start=None, end=None, start_mode="flat",
+             start=None, end=None, start_mode="flat", signal_mode="touch",
              capital=INITIAL_CAPITAL, commission=COMMISSION,
              entry_bps=ENTRY_SLIP_BPS, exit_bps=EXIT_SLIP_BPS):
     """Sinyal serisi sig_close (QQQ) üzerinden trade_ohlc (TQQQ) al-sat.
@@ -205,7 +249,7 @@ def backtest(sig_close, trade_ohlc, ob=70.0, os_=30.0, length=14,
     Takvim iki enstrümanın KESİŞİMİ (TQQQ 2010-02-11'de doğduğu için backtest
     fiilen oradan başlar; RSI ise QQQ'nun tüm geçmişinden ısınmıştır)."""
     rsi = rsi_tv(sig_close, length)
-    sg = signals(rsi, ob, os_, start_mode)
+    sg = signals(rsi, ob, os_, start_mode, signal_mode)
 
     cal = sig_close.index.intersection(trade_ohlc.index)
     if start:
@@ -533,9 +577,13 @@ def run_api(params: dict) -> dict:
     else:
         start_ts, date_range = max(_period_start(p.get("period", "2y"), end_ts), full[0]), False
 
+    smode = p.get("signal_mode", "touch")
+    if smode not in ("touch", "exit"):
+        raise ValueError("signal_mode: 'touch' veya 'exit'")
     r = backtest(q, t, ob=ob, os_=os_, length=ln,
                  start=str(start_ts.date()), end=str(end_ts.date()),
-                 start_mode=p.get("start_mode", "flat"), capital=cap)
+                 start_mode=p.get("start_mode", "flat"),
+                 signal_mode=smode, capital=cap)
     cal = r["calendar"]
     m = metrics(r["equity"], r["trades"], r["exposure"], capital=cap, open_trade=r["open"])
 
@@ -565,7 +613,8 @@ def run_api(params: dict) -> dict:
                    "period": p.get("period", "2y"), "date_range": date_range,
                    "signal_sym": SIGNAL_SYM, "trade_sym": TRADE_SYM,
                    "rsi_length": ln, "rsi_overbought": ob, "rsi_oversold": os_,
-                   "start_mode": p.get("start_mode", "flat")},
+                   "start_mode": p.get("start_mode", "flat"),
+                   "signal_mode": smode},
         "bench_label": f"{TRADE_SYM} al-tut",
         "metrics": {
             "roi": m["roi"], "spy_roi": bm.get("roi"),

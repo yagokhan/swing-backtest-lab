@@ -207,3 +207,37 @@ def test_json_safe_sonsuzu_temizler():
     assert temiz["b"][1] is None and temiz["b"][2]["c"] is None
     assert temiz["d"] == "metin" and temiz["e"] == 3
     _strict(temiz)
+
+
+# ═════════════════ giriş zamanlaması: bölgeye giriş vs bölgeden çıkış ═════════
+def test_exit_signals_bolgeden_cikista_tetikler():
+    """touch: 30'a değince AL · exit: 30'un üstüne DÖNÜNCE AL."""
+    r = pd.Series([50, 25, 22, 28, 45, 80, 75, 60], index=_idx(8), dtype=float)
+    touch = sl.signals(r, 70, 30, signal_mode="touch")
+    ex = sl.signals(r, 70, 30, signal_mode="exit")
+    assert touch["buy"].iloc[1] and not touch["buy"].iloc[4]      # ilk temas
+    assert ex["buy"].iloc[4] and not ex["buy"].iloc[1]            # bölgeden çıkış
+    assert touch["sell"].iloc[5]                                  # 80'e ilk temas
+    # i=6'da RSI 75, HÂLÂ bölge içinde → çıkış i=7'de (60) gerçekleşir
+    assert not ex["sell"].iloc[6]
+    assert ex["sell"].iloc[7]
+
+
+def test_exit_signals_bolgede_kalirken_tetiklemez():
+    r = pd.Series([50, 25, 24, 23, 22], index=_idx(5), dtype=float)
+    assert not sl.signals(r, 70, 30, signal_mode="exit")["buy"].any()
+
+
+def test_exit_signals_alternans_bozulmaz():
+    """Pozisyondayken ikinci AL, nakitteyken SAT üretilmemeli (hayalet işaret yok)."""
+    rng = np.random.default_rng(5)
+    r = pd.Series(rng.uniform(5, 95, 2000), index=_idx(2000))
+    sg = sl.signals(r, 70, 30, signal_mode="exit")
+    seq = sorted([(t, "AL") for t in sg.index[sg["buy"]]] +
+                 [(t, "SAT") for t in sg.index[sg["sell"]]])
+    assert not any(seq[i][1] == seq[i - 1][1] for i in range(1, len(seq)))
+
+
+def test_signal_mode_gecersizse_hata():
+    with pytest.raises(ValueError):
+        sl.run_api({"period": "1y", "signal_mode": "saçma"})

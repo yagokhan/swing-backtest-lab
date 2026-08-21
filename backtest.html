@@ -108,6 +108,8 @@ th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:
           <input type="number" id="rsiOB" value="70" min="51" max="100" step="1"></label>
         <label class="fld" title="Bu seviyeye değince AL (1-49)."><span class="kicker">Aşırı satım (AL ≤)</span>
           <input type="number" id="rsiOS" value="30" min="1" max="49" step="1"></label>
+        <label class="fld" title="Sinyal ne zaman doğsun? Pine göstergesinin kendisi bölgeye GİRİŞTE tetikler (RSI 30'a değdiği ilk bar AL). 'Çıkışta' seçeneği dip teyidini bekler — ölçüldü, daha kötü (CAGR %16,4 vs %23,4)."><span class="kicker">Sinyal anı</span>
+          <select id="rsiSigMode"><option value="touch" selected>bölgeye GİRİŞTE (Pine göstergesi)</option><option value="exit">bölgeden ÇIKIŞTA (teyit bekler)</option></select></label>
         <label class="fld" title="pine = katı Pine okuması (ilk aşırı satım alım üretmez) · flat = nakitken ilk aşırı satım da alır."><span class="kicker">Başlangıç kuralı</span>
           <select id="rsiStart"><option value="flat" selected>flat — ilk aşırı satım da alır</option><option value="pine">pine — katı Pine okuması</option></select></label>
       </div>
@@ -237,6 +239,7 @@ function buildSarkacPayload(){
     rsi_overbought: Math.max(51, Math.min(100, parseInt($('rsiOB').value||'70',10))),
     rsi_oversold: Math.max(1, Math.min(49, parseInt($('rsiOS').value||'30',10))),
     start_mode: $('rsiStart').value || 'flat',
+    signal_mode: $('rsiSigMode') ? ($('rsiSigMode').value || 'touch') : 'touch',
     period: $('period').value,
   };
   const sd=$('start').value, ed=$('end').value;
@@ -582,7 +585,8 @@ function renderSarkac(d){
     `🔔 Sarkaç-14 · sinyal ${c.signal_sym} RSI(${c.rsi_length}) → işlem ${c.trade_sym}`
     + ` · AL ≤${c.rsi_oversold} · SAT ≥${c.rsi_overbought}`
     + ` · ${c.start}→${c.end}` + (c.date_range?' (el ile aralık)':' · '+c.period)
-    + ` · tam pozisyon, kapanıştan · başlangıç kuralı: ${c.start_mode}`;
+    + ` · sinyal: ${c.signal_mode==='exit'?'bölgeden ÇIKIŞTA':'bölgeye GİRİŞTE (Pine)'}`
+    + ` · tam pozisyon, kapanıştan · başlangıç: ${c.start_mode}`;
 
   const cls=x=>x>=0?'pos':'neg';
   $('bt-metrics').innerHTML = [
@@ -609,10 +613,16 @@ function renderSarkac(d){
     $('sig-card').style.display='';
     $('sig-sub').textContent = `${c.signal_sym} fiyatı + RSI(${c.rsi_length}) · `
       + `${d.chart.n_buy} AL / ${d.chart.n_sell} SAT sinyali`;
-    $('sig-note').innerHTML = `Yeşil ▲ = RSI ≤ ${c.rsi_oversold} (AL) · kırmızı ▼ = RSI ≥ `
-      + `${c.rsi_overbought} (SAT). Sinyal <b>${c.signal_sym}</b>'dan üretilir, işlem `
-      + `<b>${c.trade_sym}</b>'da yapılır. İki uç arasında sinyal yoktur — durum makinesi `
-      + `histerezisli, arka arkaya gelen aşırı barlar tekrar tetiklemez.`;
+    $('sig-note').innerHTML = (c.signal_mode==='exit'
+        ? `Yeşil ▲ = RSI ${c.rsi_oversold} bölgesinden YUKARI döndüğü bar (AL) · kırmızı ▼ = `
+          + `${c.rsi_overbought} bölgesinden AŞAĞI döndüğü bar (SAT).`
+        : `Yeşil ▲ = RSI'ın ≤ ${c.rsi_oversold} olduğu <b>İLK</b> bar (AL) · kırmızı ▼ = `
+          + `≥ ${c.rsi_overbought} olduğu <b>İLK</b> bar (SAT).`)
+      + ` Sinyal <b>${c.signal_sym}</b>'dan üretilir, işlem <b>${c.trade_sym}</b>'da yapılır.`
+      + ` İki uç arasında sinyal yoktur — histerezis, arka arkaya gelen aşırı barlar tekrar tetiklemez.`
+      + `<br><span style="opacity:.8">Not: TradingView'de yeşil etiket sonradan <b>dibe kayar</b> `
+      + `(ortalama 30 gün, 2022'de 265 gün). Sinyal ilk temasta doğar; etiketin son yerinden almak `
+      + `gerçekleştirilemez — dibin nerede olduğu ancak sonradan bilinir.</span>`;
     try{ renderSigCharts(); }
     catch(e){ showErr('sinyal grafiği çizilemedi: '+e.message
         +(e.stack?('\n'+e.stack.split('\n')[1]):'')); }
