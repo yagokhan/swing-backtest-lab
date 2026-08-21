@@ -717,6 +717,110 @@ açılırsa, kanıt yükü bu tabloyu aşmak zorunda.</p>
 jitter + engellenen-giriş adli tıbbı; sadakat kapısı: kapılar kapalıyken sonuç Aday 3 çapalarıyla birebir) ·
 çıktılar <code>swing2_out/yogunlasma/</code> · 20 Ağustos 2026.</p>
 
+<h2>🪦 "Batanları hiç görmüyoruz" — hayatta kalma yanılgısı (2026-08-21)</h2>
+
+<p class="note">Sistem bugünün S&amp;P500+NDX listesini kullanıyor. 2021-2026 arasında batan ya da
+satın alınan şirketler — SIVB, First Republic, Activision, Twitter, VMware, Splunk — evrende
+<b>hiç yok</b>. Backtest onları hiç alamadı, dolayısıyla hiç kaybetmedi. <b>Stopsuz</b> bir sistemde
+bu ölçülmemiş bir kuyruk riski demek. Soru: <b>geçmiş sonuçlar ne kadar şişkin?</b></p>
+
+<div class="card">
+<b>Önce veriyi kurmak gerekti.</b> FMP'nin delist listesi bu planda sayfa 0 dışında kapalı ve o 100 kayıt
+yalnız son üç haftayı kapsıyor; geçmiş endeks üyeliği de paywall arkasında. Ama <code>stock-list</code>
+ölü tickerları <b>zaten içeriyor</b> ve fiyat geçmişleri tam öldükleri günde bitiyor — SIVB 9 Mart 2023,
+First Republic 23 Mayıs 2023. Havuz oradan kuruldu: <b>31.338 sembol tarandı, 3.741'i likidite eşiğini
+gördü</b> (fiyat ≥ $10, 20 günlük dolar hacmi ≥ $50M), 803'ü delist olmuş.
+<p class="note">Evren her gün yeniden hesaplanıyor ve maskenin tamamı bir gün geriden — bir günün
+uygunluğu yalnız <b>önceki</b> günlerin verisiyle belirleniyor. Ölü hissenin ölümünden sonra barı
+olmadığı için maske onu kendiliğinden eliyor; geleceğe bakma yapısal olarak imkânsız.</p>
+</div>
+
+<div class="card">
+<b>İlk bakışta yanlılık göründü: −11,8 puan.</b> Mevcut evrene dokunmadan, yalnız o dönem ölen
+83 büyük ismi ekleyince 5 yıllık getiri %201,5'ten %189,7'ye indi. Sonra <b>jitter</b> devreye girdi —
+bu projede hiçbir sonuç tek başlangıç tarihine dayanarak kabul edilmiyor:
+<div class="tblwrap"><table>
+<tr><th>başlangıç</th><th>ölüler yok</th><th>ölüler dahil</th><th>fark</th></tr>
+<tr><td>1 May 2021</td><td>%201,5</td><td>%189,7</td><td><b>−11,8p</b></td></tr>
+<tr><td>11 May 2021</td><td>%118,9</td><td>%203,2</td><td><b>+84,3p</b></td></tr>
+<tr><td>21 May 2021</td><td>%138,8</td><td>%153,0</td><td>+14,2p</td></tr>
+<tr><td>1 Haz 2021</td><td>%158,3</td><td>%163,7</td><td>+5,4p</td></tr>
+<tr><td>11 Haz 2021</td><td>%153,5</td><td>%204,0</td><td>+50,5p</td></tr>
+</table></div>
+<p class="note">Başlangıcı <b>10 gün</b> kaydırmak işareti çeviriyor ve büyüklüğü 96 puan savuruyor;
+5 denemenin <b>4'ünde ölüleri eklemek sonucu iyileştirdi</b>. Kontrolün kendisi de %118,9 ile %201,5
+arasında geziniyor. Yani etki, sistemin kendi yol-bağımlılığından küçük — <b>raporlanabilir bir yanlılık
+büyüklüğü yok</b>.</p>
+</div>
+
+<div class="card">
+<b>Nedeni basit: ölenler iflas etmedi, satın alındı.</b> Dokuz delist çıkışının dokuzu da nakit çıkış:
+<div class="tblwrap"><table>
+<tr><th>tarih</th><th>sembol</th><th>son fiyat</th><th>işlem sonucu</th></tr>
+<tr><td>20 Ara 2021</td><td>KSU</td><td>$293,59</td><td>−%6,4</td></tr>
+<tr><td>16 Eki 2023</td><td>HZNP</td><td>$116,30</td><td>+%2,1</td></tr>
+<tr><td>25 Mar 2024</td><td>SPLK</td><td>$156,90</td><td>+%3,7</td></tr>
+<tr><td>9 Nis 2025</td><td>ITCI</td><td>$131,87</td><td>+%2,9</td></tr>
+<tr><td>10 Eki 2025</td><td>VRNA</td><td>$106,79</td><td>+%9,8</td></tr>
+<tr><td>6 May 2026</td><td>ACLX</td><td>$115,07</td><td>+%7,9</td></tr>
+</table></div>
+<p class="note">Momentum sistemi için satın alma bir <b>kazançtır</b> — yükselen bir isim primle nakde
+çevrilir. İşlem gören 26 ölü sembolün net katkısı <b>+$22.253, yani toplam kârın %11,7'si</b>.
+Yanlılığın beklenen yönü tersine döndü. <b>Ama kuyruk koşullu olarak gerçek:</b> her delist tam kayıp
+sayılsaydı fark 5/5 negatif olurdu (ortalama −49 puan). SIVB tipi bir olay — fiyat anlamlıyken işlem
+durur, hissedar sıfır alır — bu pencerede portföye girmedi; sistemde bunu karşılayan bir mekanizma
+da yok.</p>
+</div>
+
+<div class="card">
+<b>Asıl kuyruk aradığımız yerde değildi.</b> Geniş evrende en kötü sekiz işlemin hepsi
+<b>pencere sonunda hâlâ açık</b> pozisyonlar ve <b>hiçbiri delist olmuş değil</b>:
+<div class="tblwrap"><table>
+<tr><th>sembol</th><th>tutuş süresi</th><th>sonuç</th></tr>
+<tr><td>ERNA</td><td>May 2021 → Tem 2026</td><td><b>−%100,0</b></td></tr>
+<tr><td>LCID</td><td>Kas 2021 → Tem 2026</td><td>−%98,8</td></tr>
+<tr><td>SPT</td><td>Eyl 2021 → Tem 2026</td><td>−%94,5</td></tr>
+<tr><td>AVXL</td><td>Haz 2021 → Tem 2026</td><td>−%91,1</td></tr>
+</table></div>
+<p class="note">Mevcut evrende bile aynı desen var: PAYC, Ekim 2021'den bugüne <b>−%74,5</b> ile
+taşınıyor. Yani stopsuz sistemin ölçülmemiş kuyruğu <b>delist değil, yaşayan kaybedeni yıllarca
+taşımak</b>. Bu aynı zamanda geniş evrende neredeyse hiç delist görülmemesini açıklıyor: slotlar
+zombi pozisyonlarla dolu, portföy dönmüyor.</p>
+</div>
+
+<div class="card">
+<b>Ve en pratik bulgu — evrenin kalitesi bir ayar değil, kenarın kaynağı.</b>
+<div class="tblwrap"><table>
+<tr><th>evren</th><th>5 yıl ROI</th><th>en derin çukur</th><th>Calmar</th></tr>
+<tr><td><b>sp500_ndx (373 isim, canlı kural)</b></td><td><b>+%166,3</b></td><td>−%19,6</td><td><b>8,48</b></td></tr>
+<tr><td>saf likidite taraması (günde ~910 uygun isim)</td><td>+%37,7</td><td>−%26,6</td><td>1,42</td></tr>
+</table></div>
+<p class="note">Statik endeks listesinden "fiyat ≥ $10 + hacim ≥ $50M" taramasına geçmek 5 yılda
+<b>−128,6 puan</b>. S&amp;P500/NDX üyeliği kendi başına bir kalite süzgeci — kârlı, kurumsal, oturmuş
+şirketler. Likidite eşiği bunu taklit etmiyor; spekülatif orta/küçük ölçeği içeri alıyor ve stopsuz
+sistem onları sıfıra kadar taşıyor.</p>
+</div>
+
+<div class="card">
+<b>KARAR: değişiklik yok.</b> Ne Point-in-Time evrene geçiliyor (−128,6 puan), ne de mevcut evren
+"düzeltilmiş" sayılıyor. Kayda geçen üç şey:
+<ol>
+<li>Qulla-21'in geçmiş sonuçları <b>ölçülebilir biçimde şişkin değil</b> — ölü isimler eklendiğinde
+sonuç gürültü içinde kalıyor, üstelik 5'te 4'ü pozitif.</li>
+<li>Sistemin gerçek kuyruk riski delistte değil, <b>stopsuz taşınan yaşayan kaybedende</b>.
+Bilinen dosya bir kez daha teyit edildi.</li>
+<li>Evreni genişletme önerileri, ödeyecekleri <b>−128,6 puanı</b> aşmak zorunda.</li>
+</ol>
+<p class="note">Yan çıktı: izleme listesini kuran hesap yeniden yazıldı — <b>136,7 saniye → 0,8 saniye
+(173×)</b>, 1543 günün 1543'ünde çıktı <b>birebir aynı</b>. Strateji değişmiyor; yalnız günlük koşu
+kısalıyor.</p>
+</div>
+
+<p class="mut" style="font-size:12.5px">Kaynak: <code>pit_universe.py</code> + <code>pit_lab.py</code>
+(31.338 sembol taraması · 8 kol × 5 pencere + 5 başlangıçlı jitter + delist adli tıbbı; sadakat kapıları:
+vektörel izleme listesi orijinaliyle 1543/1543 gün birebir, baz kol Aday 3 çapalarıyla 5/5) ·
+çıktılar <code>swing2_out/pit_results.json</code> · 21 Ağustos 2026.</p>
+
 </div>
 <div id="tip" role="tooltip"></div>
 <script>
