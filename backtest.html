@@ -102,7 +102,7 @@ th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:
         </div>
       </div>
       <div class="grid" id="sarkac-params" style="margin-top:12px;display:none;">
-        <label class="fld" title="RSI periyodu (Pine varsayılanı 14)."><span class="kicker">RSI uzunluğu</span>
+        <label class="fld" title="RSI periyodu. DİKKAT: kaynak Pine göstergesinin VARSAYILANI 7'dir (defval=7) — TradingView'de ayarı değiştirmediysen orada gördüğün 7'dir ve 14'ten ~3 kat fazla sinyal üretir (son 2 yılda 6 AL vs 2 AL). Ölçüm: 7 → CAGR %15,1 · 9 → %21,6 (en iyi CAGR/DD 0,36) · 14 → %23,6 · 21 → %11,4."><span class="kicker">RSI uzunluğu <span style="opacity:.6;font-weight:400">(Pine vars. 7)</span></span>
           <input type="number" id="rsiLen" value="14" min="2" max="100" step="1"></label>
         <label class="fld" title="Bu seviyeye değince SAT (51-100)."><span class="kicker">Aşırı alım (SAT ≥)</span>
           <input type="number" id="rsiOB" value="70" min="51" max="100" step="1"></label>
@@ -620,6 +620,10 @@ function renderSarkac(d){
           + `≥ ${c.rsi_overbought} olduğu <b>İLK</b> bar (SAT).`)
       + ` Sinyal <b>${c.signal_sym}</b>'dan üretilir, işlem <b>${c.trade_sym}</b>'da yapılır.`
       + ` İki uç arasında sinyal yoktur — histerezis, arka arkaya gelen aşırı barlar tekrar tetiklemez.`
+      + `<br><span style="opacity:.8">Sinyal sayısı az geliyorsa: kaynak Pine göstergesinin `
+      + `varsayılan RSI uzunluğu <b>7</b>'dir (burada ${c.rsi_length} seçili). 7 ile RSI 30'a çok `
+      + `daha sık iner — son 2 yılda 6 AL, 14 ile 2 AL. Daha fazla sinyal daha iyi sonuç demek `
+      + `değil: 7 → CAGR %15,1 · 14 → %23,6.</span>`
       + `<br><span style="opacity:.8">Not: TradingView'de yeşil etiket sonradan <b>dibe kayar</b> `
       + `(ortalama 30 gün, 2022'de 265 gün). Sinyal ilk temasta doğar; etiketin son yerinden almak `
       + `gerçekleştirilemez — dibin nerede olduğu ancak sonradan bilinir.</span>`;
