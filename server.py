@@ -3,6 +3,7 @@
 
 Uçlar (veri çekme + trade mantığı motorda; bu sunucu yalnız yönlendirir):
   POST /api/backtest            → swing2_backtest.run_backtest_api(params)
+  POST /api/sarkac              → sarkac_lab.run_api(params)  (🔔 Sarkaç-14)
   GET  /api/qswing?ticker=X     → qswing tek-hisse HTML raporu
   GET  /api/qswing/scan?...     → qswing küme tarama (preset=swing2|swing2_mega|swing2_tech | tickers=A,B)
   GET  /                        → backtest.html (statik)
@@ -72,6 +73,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def do_POST(self):
         if self.path.startswith("/api/backtest"):
             return self.handle_backtest()
+        if self.path.startswith("/api/sarkac"):
+            return self.handle_sarkac()
         self.send_json(404, {"error": "not found"})
 
     def do_OPTIONS(self):
@@ -94,6 +97,26 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         try:
             import swing2_backtest as s2
             self.send_json(200, s2.run_backtest_api(params))
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            self.send_json(502, {"error": str(e)})
+
+    # ---- /api/sarkac ----  🔔 Sarkaç-14: QQQ RSI salınımıyla TQQQ al-sat
+    def handle_sarkac(self):
+        """Qulla-21 ile AYNI yanıt sözleşmesi döner (config/metrics/equity/
+        monthly/trades) — backtest.html'in render kodu ortak."""
+        try:
+            n = int(self.headers.get("Content-Length", "0"))
+            if n < 0 or n > 200_000:
+                return self.send_json(400, {"error": "invalid body length"})
+            body = self.rfile.read(n).decode("utf-8") if n else "{}"
+            params = json.loads(body) if body.strip() else {}
+        except Exception as e:
+            return self.send_json(400, {"error": f"invalid JSON: {e}"})
+        try:
+            import sarkac_lab
+            self.send_json(200, sarkac_lab.run_api(params))
         except Exception as e:
             import traceback
             traceback.print_exc()

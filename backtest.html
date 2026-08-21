@@ -74,7 +74,7 @@ th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:
   <div id="panel-bt">
     <div class="card">
       <div class="grid">
-        <label class="fld"><span class="kicker">RS havuzu (evren)</span>
+        <label class="fld" id="fld-preset"><span class="kicker">RS havuzu (evren)</span>
           <select id="preset" title="Havuz = bu evrenden her gün göreli-güç (RS) ile en güçlü top-50 seçilir; yalnız o 50'ye giriş açılır (canlı Qulla-21 kapısı). Canlı = S&P500+NDX (~373). Küçük havuzlarda (≤50) kapı pasif kalır.">
             <option value="sp500_ndx" selected>S&P500+NDX (~373, canlı havuz) → RS top-50</option>
             <option value="sp500">Mega+Large (~350) → RS top-50</option>
@@ -83,7 +83,7 @@ th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:
             <option value="mega">Mega Cap (20)</option>
             <option value="tech">Teknoloji (18)</option>
           </select></label>
-        <label class="fld" title="Virgülle ayrılmış özel sembol listesi. Doluysa preset'i yok sayar (en çok 120 sembol)."><span class="kicker">Özel semboller (ops.)</span>
+        <label class="fld" id="fld-symbols" title="Virgülle ayrılmış özel sembol listesi. Doluysa preset'i yok sayar (en çok 120 sembol)."><span class="kicker">Özel semboller (ops.)</span>
           <input type="text" id="symbols" placeholder="AAPL,MSFT,... (preset'i ezer)"></label>
         <label class="fld" title="Geriye dönük test süresi. Aşağıdaki tarih aralığı girilirse bu yok sayılır."><span class="kicker">Dönem</span>
           <select id="period"><option value="2y">2 yıl</option><option value="1y">1 yıl</option><option value="5y">5 yıl</option><option value="10y">10 yıl</option></select></label>
@@ -91,19 +91,33 @@ th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:
         <label class="fld" title="El ile test aralığı bitişi. İkisi de doluysa 'Dönem'i ezer."><span class="kicker">Bitiş (ops.)</span><input type="date" id="end"></label>
       </div>
       <div class="grid" style="margin-top:12px;">
-        <div class="fld" style="flex:1 1 100%;background:var(--elev);border:1px solid var(--border);border-radius:8px;padding:10px 12px;" title="Backtest yalnız canlı kağıt-portföy yöntemini koşar — giriş/çıkış seçimi yoktur.">
-          <span class="kicker">Yöntem (canlı · sabit)</span>
-          <div style="font-size:15px;font-weight:800;margin-top:3px;">👑 Qulla-21</div>
-          <div class="muted" style="font-size:12px;margin-top:4px;"><b>RS top-50</b> sistematik evren (havuzdan günlük göreli-güç kapısı) · qswing <b>63g kırılım</b> girişi · <b>bölünmüş çıkış</b>: ½ <b>+2R hedef</b> · ½ <b>21-EMA runner</b> · kapanış teyidi açık · sabit <b>%5/slot · 20 slot · bileşik</b> — canlı kağıt-portföyle birebir.</div>
+        <div class="fld" style="flex:1 1 100%;background:var(--elev);border:1px solid var(--border);border-radius:8px;padding:10px 12px;">
+          <span class="kicker">Yöntem</span>
+          <select id="method" onchange="onMethodChange()" style="margin-top:4px;font-size:15px;font-weight:800;" title="Hangi yöntemin backtest'i koşulacak.">
+            <option value="qulla" selected>👑 Qulla-21 — çok hisseli momentum (canlı kağıt-portföy)</option>
+            <option value="sarkac">🔔 Sarkaç-14 — QQQ'nun RSI salınımıyla TQQQ al-sat</option>
+          </select>
+          <div class="muted" id="desc-qulla" style="font-size:12px;margin-top:6px;"><b>RS top-50</b> sistematik evren (havuzdan günlük göreli-güç kapısı) · qswing <b>63g kırılım</b> girişi · <b>bölünmüş çıkış</b>: ½ <b>+2R hedef</b> · ½ <b>21-EMA runner</b> · kapanış teyidi açık · sabit <b>%5/slot · 20 slot · bileşik</b> — canlı kağıt-portföyle birebir.</div>
+          <div class="muted" id="desc-sarkac" style="font-size:12px;margin-top:6px;display:none;">Sinyal <b>QQQ</b>'dan, işlem <b>TQQQ</b>'da: RSI(QQQ) <b>≤ aşırı satım</b> → AL · <b>≥ aşırı alım</b> → SAT. Aradaki barlarda işlem yok; pozisyon ya <b>tam açık ya tamamen nakit</b>. Durum makinesi <b>histerezisli</b> (arka arkaya aşırı barlar tekrar sinyal üretmez) — kaynak: BalintDavid "RSI Swing Indicator". Kıyas çizgisi <b>SPY değil TQQQ al-tut</b>: bu yöntemin dürüst alternatifi odur.</div>
         </div>
+      </div>
+      <div class="grid" id="sarkac-params" style="margin-top:12px;display:none;">
+        <label class="fld" title="RSI periyodu (Pine varsayılanı 14)."><span class="kicker">RSI uzunluğu</span>
+          <input type="number" id="rsiLen" value="14" min="2" max="100" step="1"></label>
+        <label class="fld" title="Bu seviyeye değince SAT (51-100)."><span class="kicker">Aşırı alım (SAT ≥)</span>
+          <input type="number" id="rsiOB" value="70" min="51" max="100" step="1"></label>
+        <label class="fld" title="Bu seviyeye değince AL (1-49)."><span class="kicker">Aşırı satım (AL ≤)</span>
+          <input type="number" id="rsiOS" value="30" min="1" max="49" step="1"></label>
+        <label class="fld" title="pine = katı Pine okuması (ilk aşırı satım alım üretmez) · flat = nakitken ilk aşırı satım da alır."><span class="kicker">Başlangıç kuralı</span>
+          <select id="rsiStart"><option value="flat" selected>flat — ilk aşırı satım da alır</option><option value="pine">pine — katı Pine okuması</option></select></label>
       </div>
       <!-- motor payload'ı için sabit yöntem değerleri (UI'da seçim yok) -->
       <input type="hidden" id="entry" value="qswing">
       <input type="hidden" id="exit" value="split">
       <input type="hidden" id="sizing" value="fixed">
       <div class="row" style="margin-top:14px;align-items:center;">
-        <label class="chk" title="Canlı paket: bileşik (kâr/zarar sermayeye eklenir) — sabit."><input type="checkbox" id="compound" checked disabled> Bileşik (sabit)</label>
-        <label class="chk" title="DENEYSEL kaldıraç: poz %5→%7.5 + +2R yarısı çıkınca slotu boşalt (boşalan sermaye yeniden konuşlanır). Getiriyi artırır AMA drawdown'ı ~%40 derinleştirir. Canlı paketi DEĞİŞTİRMEZ; yalnız backtest.">
+        <label class="chk" id="chk-compound" title="Canlı paket: bileşik (kâr/zarar sermayeye eklenir) — sabit."><input type="checkbox" id="compound" checked disabled> Bileşik (sabit)</label>
+        <label class="chk" id="chk-combo" title="DENEYSEL kaldıraç: poz %5→%7.5 + +2R yarısı çıkınca slotu boşalt (boşalan sermaye yeniden konuşlanır). Getiriyi artırır AMA drawdown'ı ~%40 derinleştirir. Canlı paketi DEĞİŞTİRMEZ; yalnız backtest.">
           <input type="checkbox" id="combo"> 🔓 Combo modu (deneysel: %7.5 + slot-serbest)</label>
         <button class="btn" id="run" onclick="runBacktest()" title="👑 Qulla-21 yöntemini seçili evren/dönemde koştur. Sonuç: metrikler + sermaye eğrisi + çıkış dağılımı + aylık tablo + işlemler.">Backtest Çalıştır</button>
       </div>
@@ -178,9 +192,39 @@ function showTab(t){
   $('panel-qs').classList.toggle('hide', t!=='qs');
 }
 $('qs-universe').onchange = e => $('qs-custom').classList.toggle('hide', e.target.value!=='custom');
+document.addEventListener('DOMContentLoaded', ()=>{ try{ onMethodChange(); }catch(e){} });
 
-// 👑 Qulla-21 — TEK yöntem (canlı kağıt-portföyle birebir). Backtest payload'ı sabittir;
-// yalnız evren/dönem/tarih kullanıcıdan gelir. Giriş/çıkış/boyutlandırma SEÇİLEMEZ.
+// ═════════ Yöntem seçimi ═════════
+// 👑 Qulla-21 : çok hisseli momentum, canlı kağıt-portföyle birebir (payload SABİT)
+// 🔔 Sarkaç-14: QQQ RSI salınımıyla TQQQ al-sat (yalnız RSI parametreleri açık)
+function isSarkac(){ const m=$('method'); return m && m.value==='sarkac'; }
+
+function onMethodChange(){
+  const s = isSarkac();
+  $('desc-qulla').style.display  = s ? 'none' : '';
+  $('desc-sarkac').style.display = s ? '' : 'none';
+  $('sarkac-params').style.display = s ? '' : 'none';
+  // evren alanları yalnız Qulla için anlamlı (Sarkaç tek enstrüman: TQQQ)
+  ['fld-preset','fld-symbols','chk-compound','chk-combo'].forEach(id=>{
+    const el=$(id); if(el) el.style.display = s ? 'none' : '';
+  });
+  $('run').title = s ? '🔔 Sarkaç-14 yöntemini seçili dönemde koştur (QQQ sinyali → TQQQ işlemi).'
+                     : '👑 Qulla-21 yöntemini seçili evren/dönemde koştur.';
+}
+
+function buildSarkacPayload(){
+  const p = {
+    rsi_length: Math.max(2, Math.min(100, parseInt($('rsiLen').value||'14',10))),
+    rsi_overbought: Math.max(51, Math.min(100, parseInt($('rsiOB').value||'70',10))),
+    rsi_oversold: Math.max(1, Math.min(49, parseInt($('rsiOS').value||'30',10))),
+    start_mode: $('rsiStart').value || 'flat',
+    period: $('period').value,
+  };
+  const sd=$('start').value, ed=$('end').value;
+  if(sd && ed){ p.start_date=sd; p.end_date=ed; }
+  return p;
+}
+
 function buildPayload(){
   const p = {
     preset: $('preset').value, period: $('period').value,
@@ -206,7 +250,7 @@ function buildPayload(){
   return p;
 }
 
-let eqChart=null, eqLabels=[], eqStrat=[], eqSpy=[];
+let eqChart=null, eqLabels=[], eqStrat=[], eqSpy=[], benchLabel='SPY';
 function renderEqChart(){
   if(!eqLabels.length) return;
   const logEl=$('eq-log'), log = logEl && logEl.checked;
@@ -214,7 +258,7 @@ function renderEqChart(){
   const yfmt = v => '$'+(v>=1000? (v/1000).toFixed(0)+'k' : v.toFixed(0));
   eqChart=new Chart($('eqchart'),{type:'line',data:{labels:eqLabels,datasets:[
     {label:'Strateji',data:eqStrat,borderColor:'#27c281',borderWidth:1.6,pointRadius:0,tension:.1,spanGaps:true},
-    {label:'SPY',data:eqSpy,borderColor:'#5aa2ff',borderWidth:1.2,pointRadius:0,tension:.1,borderDash:[4,3],spanGaps:true}]},
+    {label:benchLabel,data:eqSpy,borderColor:'#5aa2ff',borderWidth:1.2,pointRadius:0,tension:.1,borderDash:[4,3],spanGaps:true}]},
     options:{responsive:true,maintainAspectRatio:false,interaction:{intersect:false,mode:'index'},
       plugins:{legend:{labels:{color:'#8a95ad'}},
         tooltip:{callbacks:{label:c=>c.dataset.label+': $'+Math.round(c.parsed.y).toLocaleString('en-US')}}},
@@ -335,9 +379,13 @@ function drawTradeCandles(canvas,bars,trade){
 
 async function runBacktest(){
   const btn=$('run'); btn.disabled=true; const old=btn.textContent; btn.textContent='Çalışıyor…';
-  $('hint').textContent='Veri (FMP) indiriliyor, simülasyon koşuyor…';
+  $('hint').textContent = isSarkac() ? 'QQQ RSI hesaplanıyor, TQQQ üzerinde simülasyon koşuyor…'
+                                    : 'Veri (FMP) indiriliyor, simülasyon koşuyor…';
   try{
-    const r = await fetch('/api/backtest',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(buildPayload())});
+    const sarkac = isSarkac();
+    const url = sarkac ? '/api/sarkac' : '/api/backtest';
+    const payload = sarkac ? buildSarkacPayload() : buildPayload();
+    const r = await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     const d = await r.json();
     if(d.error){ $('hint').textContent='HATA: '+d.error; return; }
     renderBacktest(d);
@@ -349,6 +397,8 @@ async function runBacktest(){
 function renderBacktest(d){
   $('bt-results').classList.remove('hide');
   const c=d.config, m=d.metrics;
+  benchLabel = d.bench_label || 'SPY';
+  if(c.method === 'sarkac'){ renderSarkac(d); return; }
   $('bt-cfgline').textContent = `${c.universe_n} hisse · ${c.start}→${c.end}`+(c.date_range?' (el ile aralık)':' · '+c.period)
      + ` · 👑 Qulla-21: ${c.use_rs_universe?('RS top-'+(c.rs_n||50)+' + '):''}qswing 63g kırılım + bölünmüş (A:${c.split_a||'+2R'} · B:${c.split_b||'21-EMA'})`
      + ` · sabit %${(((c.max_position_pct||0.05)*100).toFixed(1)).replace('.0','')}/slot · 20 slot`
@@ -395,6 +445,65 @@ function renderBacktest(d){
   $('bt-trade-chart-card').style.display='none';              // önceki grafiği gizle
   $('bt-trades').innerHTML='<thead><tr><th title="Hisse sembolü">Sembol</th><th title="Pozisyon açılış tarihi">Giriş t.</th><th title="Pozisyon kapanış tarihi">Çıkış t.</th><th title="Giriş dolum fiyatı (+8bps slippage dahil)">Giriş</th><th title="Çıkış dolum fiyatı">Çıkış</th><th title="Kâr/zarar ($, komisyon+slippage dahil)">P&L</th><th title="İşlem getirisi (%)">%</th><th title="Kapanış nedeni: TP/PARTIAL/MA8/STOP/TRAIL/EMA21">Sonuç</th></tr></thead><tbody>'+
     tr.map((t,i)=>`<tr onclick="showTrade(${i})" style="cursor:pointer;" title="Mum grafiğini aç"><td>${t.symbol}</td><td>${t.entry_date}</td><td>${t.exit_date}</td><td>${F(t.entry)}</td><td>${F(t.exit)}</td><td class="${t.pnl>=0?'pos':'neg'}">${F(t.pnl,0)}</td><td class="${t.pnl_pct>=0?'pos':'neg'}">${Fp(t.pnl_pct)}</td><td><span class="pill ${t.pnl>=0?'g':'r'}">${t.outcome}</span></td></tr>`).join('')+'</tbody>';
+  $('bt-results').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+// ═════════ 🔔 Sarkaç-14 sonuç render'ı ═════════
+// Ortak parçalar (equity/aylık/işlemler) Qulla ile aynı; farklı olan üç şey:
+// kıyas SPY değil TQQQ al-tut · risk ölçütü CAGR/DD (çok yıllı bileşikte ROI/DD
+// yanıltıcıdır) · çıkış dağılımı yerine sinyal/maruziyet özeti.
+function renderSarkac(d){
+  const c=d.config, m=d.metrics;
+  $('bt-cfgline').textContent =
+    `🔔 Sarkaç-14 · sinyal ${c.signal_sym} RSI(${c.rsi_length}) → işlem ${c.trade_sym}`
+    + ` · AL ≤${c.rsi_oversold} · SAT ≥${c.rsi_overbought}`
+    + ` · ${c.start}→${c.end}` + (c.date_range?' (el ile aralık)':' · '+c.period)
+    + ` · tam pozisyon, kapanıştan · başlangıç kuralı: ${c.start_mode}`;
+
+  const cls=x=>x>=0?'pos':'neg';
+  $('bt-metrics').innerHTML = [
+    ['ROI', Fp(m.roi), cls(m.roi), 'Toplam getiri (bileşik).'],
+    ['CAGR', Fp(m.cagr), cls(m.cagr), 'Yıllık bileşik getiri — çok yıllı kıyasın doğru ölçüsü.'],
+    [benchLabel+' CAGR', Fp(m.bench_cagr), cls(m.bench_cagr), 'Aynı dönemde TQQQ al-tut yıllık bileşik getirisi.'],
+    ['Max DD', Fp(m.max_dd), 'neg', 'En büyük tepe→dip düşüş. TQQQ 3× kaldıraçlıdır.'],
+    ['CAGR/DD', F(m.cagr_dd), cls((m.cagr_dd||0)-(m.bench_cagr_dd||0)),
+     'Risk-ayarlı: yıllık getiri ÷ en derin çukur. Kıyas: '+F(m.bench_cagr_dd)+' (TQQQ al-tut).'],
+    ['Sharpe', F(m.sharpe), cls((m.sharpe||0)-(m.bench_sharpe||0)),
+     'Kıyas: '+F(m.bench_sharpe)+' (TQQQ al-tut).'],
+    ['İşlem', m.trades, '', 'Toplam işlem (açık pozisyon dahil).'],
+    ['Piyasada', (m.exposure==null?'—':m.exposure+'%'), '', 'Sermayenin piyasada olduğu gün oranı; kalanı nakit.'],
+    ['İsabet', (m.win_rate==null?'—':m.win_rate+'%'), '', 'Kazanan işlem oranı.'],
+    ['Son $', '$'+F(m.final,0), cls(m.final-m.initial), 'Dönem sonu sermaye.'],
+  ].map(([l,v,k,t])=>`<div class="mc" title="${t}"><div class="v ${k}">${v}</div><div class="l">${l}</div></div>`).join('');
+
+  eqLabels=d.equity.map(e=>e.date); eqStrat=d.equity.map(e=>e.equity); eqSpy=d.equity.map(e=>e.spy);
+  renderEqChart();
+
+  const better = (m.cagr_dd||0) >= (m.bench_cagr_dd||0);
+  $('bt-outcomes').innerHTML =
+    `<span class="pill b" title="Aşırı satımda alım sinyali">AL sinyali: ${m.trades}</span> `
+   +`<span class="pill b" title="Ortalama tutuş süresi (işlem günü)">ort. tutuş: ${F(m.avg_bars,0)} bar</span> `
+   +`<span class="pill g" title="En iyi tek işlem">en iyi: ${Fp(m.best)}</span> `
+   +`<span class="pill r" title="En kötü tek işlem — stop olmadığı için kuyruk buradadır">en kötü: ${Fp(m.worst)}</span> `
+   +`<span class="pill ${better?'g':'r'}" title="Risk-ayarlı karşılaştırma">`
+   +`CAGR/DD ${F(m.cagr_dd)} vs ${benchLabel} ${F(m.bench_cagr_dd)}</span>`
+   +` · <span class="muted">QQQ al-tut: ${Fp(m.qqq_cagr)} CAGR · ${Fp(m.qqq_dd)} DD · CAGR/DD ${F(m.qqq_cagr_dd)}</span>`;
+
+  $('bt-grid-wrap').style.display='none';
+
+  const mn=d.monthly||[]; const MO=['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
+  $('bt-monthly').innerHTML = '<thead><tr><th>Yıl</th>'+MO.map(x=>`<th>${x}</th>`).join('')
+    +`<th>Yıl%</th><th title="${benchLabel} aynı yıl">${c.trade_sym}%</th><th>Fark</th></tr></thead><tbody>`+
+    mn.map(r=>'<tr><td>'+r.year+'</td>'+r.months.map(v=>`<td class="${v>=0?'pos':'neg'}">${v==null?'':F(v,1)}</td>`).join('')
+      +`<td class="${r.year_pct>=0?'pos':'neg'}"><b>${Fp(r.year_pct)}</b></td>`
+      +`<td class="${r.spy_pct>=0?'pos':'neg'} muted">${r.spy_pct==null?'—':Fp(r.spy_pct)}</td>`
+      +`<td class="${r.alpha_pct>=0?'pos':'neg'}"><b>${r.alpha_pct==null?'—':Fp(r.alpha_pct)}</b></td></tr>`).join('')+'</tbody>';
+
+  const tr=d.trades||[]; $('bt-trade-n').textContent=tr.length;
+  btTradesBT = tr; btPeriodBT = c.period || '2y';
+  $('bt-trade-chart-card').style.display='none';
+  $('bt-trades').innerHTML='<thead><tr><th>Sembol</th><th>Giriş t.</th><th>Çıkış t.</th><th>Giriş</th><th>Çıkış</th><th>P&L</th><th>%</th><th title="RSI giriş seviyesi">RSI</th><th>Sonuç</th></tr></thead><tbody>'+
+    tr.map((t,i)=>`<tr onclick="showTrade(${i})" style="cursor:pointer;" title="Mum grafiğini aç"><td>${t.symbol}</td><td>${t.entry_date}</td><td>${t.exit_date}</td><td>${F(t.entry)}</td><td>${F(t.exit)}</td><td class="${t.pnl>=0?'pos':'neg'}">${F(t.pnl,0)}</td><td class="${t.pnl_pct>=0?'pos':'neg'}">${Fp(t.pnl_pct)}</td><td class="muted">${t.score}</td><td><span class="pill ${t.pnl>=0?'g':'r'}">${t.outcome}</span></td></tr>`).join('')+'</tbody>';
   $('bt-results').scrollIntoView({behavior:'smooth',block:'nearest'});
 }
 
