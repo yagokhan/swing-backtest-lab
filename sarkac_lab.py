@@ -586,4 +586,34 @@ def run_api(params: dict) -> dict:
         "monthly": _monthly_table(eq, bench),
         "trades": trades,
         "grid": [],
+        "chart": _chart_block(q, t, r, cal, ob, os_),
     }
+
+
+def _chart_block(q, t, r, cal, ob, os_):
+    """Sinyal grafiği için hizalı diziler: QQQ fiyatı, RSI, ve AL/SAT işaretleri.
+
+    İşaretler tarih dizisiyle AYNI uzunlukta; sinyal olmayan günlerde None.
+    Böylece arayüz tarafında x ekseni hizalaması için ek iş gerekmez."""
+    qq = q.reindex(cal)
+    tt = t["Close"].reindex(cal)
+    rsi = r["rsi"].reindex(cal)
+    buy = r["buy"].reindex(cal).fillna(False)
+    sell = r["sell"].reindex(cal).fillna(False)
+
+    def num(x):
+        v = float(x)
+        return round(v, 2) if np.isfinite(v) else None
+
+    dates = [str(d.date()) for d in cal]
+    qv = [num(v) for v in qq]
+    tv_ = [num(v) for v in tt]
+    rv = [num(v) for v in rsi]
+    b_px = [qv[i] if bool(buy.iloc[i]) else None for i in range(len(cal))]
+    s_px = [qv[i] if bool(sell.iloc[i]) else None for i in range(len(cal))]
+    b_rsi = [rv[i] if bool(buy.iloc[i]) else None for i in range(len(cal))]
+    s_rsi = [rv[i] if bool(sell.iloc[i]) else None for i in range(len(cal))]
+    return {"dates": dates, "qqq": qv, "tqqq": tv_, "rsi": rv,
+            "buy_px": b_px, "sell_px": s_px, "buy_rsi": b_rsi, "sell_rsi": s_rsi,
+            "ob": ob, "os": os_,
+            "n_buy": int(buy.sum()), "n_sell": int(sell.sum())}

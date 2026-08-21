@@ -103,6 +103,23 @@ Yanıt sözleşmesi Qulla-21 ile **aynı** (config/metrics/equity/monthly/trades
 render kodu ortak. Üç fark: kıyas çizgisi SPY değil **TQQQ al-tut**, risk ölçütü
 **CAGR/DD**, çıkış dağılımı yerine sinyal/maruziyet özeti.
 
+### Sinyal grafiği (2026-08-21)
+
+Sarkaç koşusunda eşitlik eğrisinin altına iki panelli grafik gelir:
+
+- **üst**: QQQ kapanışı + yeşil ▲ AL / kırmızı ▼ SAT işaretleri; isteğe bağlı
+  TQQQ katmanı (logaritmik sağ eksen — 320× aralık lineer eksende okunmaz)
+- **alt**: RSI(QQQ) + aşırı alım/satım eşik çizgileri + aynı işaretler
+
+Yanıta `chart` bloğu eklendi: `dates/qqq/tqqq/rsi/buy_px/sell_px/buy_rsi/sell_rsi`
+dizileri **aynı uzunlukta**, sinyal olmayan günde `None` → arayüzde x ekseni
+hizalaması için ek iş yok. 5 yıllık pencerede yanıt ~149 KB.
+
+Doğrulama: sahte DOM + sahte Chart.js ile render kodu **gerçek payload'la
+çalıştırıldı** — 3 grafik üretiliyor, işaret sayıları API'deki sayılarla birebir,
+Qulla'ya geçişte panel gizleniyor, geri dönüşte açılıyor. `node --check` ile
+sözdizimi temiz.
+
 ## Dosyalar
 
 - `sarkac_lab.py` — RSI (TV-birebir), Pine durum makinesi, motor, rapor, API

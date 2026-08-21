@@ -135,6 +135,19 @@ th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:
           <label class="chk" style="font-size:12px;cursor:pointer;" title="Logaritmik Y ekseni: eşit yüzde değişimleri eşit dikey mesafe gösterir → bileşik büyümeyi ve erken/küçük sermaye dönemlerini daha adil okutur."><input type="checkbox" id="eq-log" onchange="renderEqChart()"> Logaritmik</label>
         </div>
         <div style="position:relative;height:320px;width:100%;"><canvas id="eqchart"></canvas></div></div>
+
+      <!-- 🔔 Sarkaç-14: sinyal grafiği (yalnız Sarkaç yönteminde görünür) -->
+      <div class="card" id="sig-card" style="display:none;" title="Sinyalin ÜRETİLDİĞİ yer: üstte QQQ fiyatı, altta RSI. Yeşil ▲ = AL (aşırı satım), kırmızı ▼ = SAT (aşırı alım).">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:8px;">
+          <div class="kicker">Sinyal grafiği — <span id="sig-sub" class="muted" style="font-weight:400;"></span></div>
+          <label class="chk" style="font-size:12px;cursor:pointer;" title="İşlemin yapıldığı enstrümanı (TQQQ) sağ eksende üst üste çiz. Sinyal QQQ'dan gelir ama alım-satım TQQQ'da olur.">
+            <input type="checkbox" id="sig-tqqq" onchange="renderSigCharts()"> TQQQ'yu da göster</label>
+        </div>
+        <div style="position:relative;height:300px;width:100%;"><canvas id="sigprice"></canvas></div>
+        <div style="position:relative;height:190px;width:100%;margin-top:10px;"><canvas id="sigrsi"></canvas></div>
+        <div class="muted" style="font-size:12px;margin-top:8px;" id="sig-note"></div>
+      </div>
+
       <div class="card" title="İşlemlerin nasıl kapandığının dağılımı: TP=hedef, Kısmi=kısmi kâr, Trail=süren stop, Stop=ilk stop, MA8=MA altı kapanış, Gün-sonu."><div class="kicker" style="margin-bottom:8px;">Çıkış dağılımı</div><div id="bt-outcomes" class="mono"></div></div>
       <div class="card" id="bt-grid-wrap" style="display:none;" title="Grid-search açıkken: taranan parametre kombinasyonları, ROI'ye göre."><div class="kicker" style="margin-bottom:8px;">Grid-Search (ROI'ye göre)</div><div class="scroll"><table id="bt-grid"></table></div></div>
       <div class="card" title="Yıl × ay getiri ısı tablosu; sağda yıllık toplam."><div class="kicker" style="margin-bottom:8px;">Aylık getiri (%)</div><div class="scroll"><table id="bt-monthly"></table></div></div>
@@ -399,6 +412,7 @@ function renderBacktest(d){
   const c=d.config, m=d.metrics;
   benchLabel = d.bench_label || 'SPY';
   if(c.method === 'sarkac'){ renderSarkac(d); return; }
+  $('sig-card').style.display='none';        // sinyal grafiği yalnız Sarkaç'ta
   $('bt-cfgline').textContent = `${c.universe_n} hisse · ${c.start}→${c.end}`+(c.date_range?' (el ile aralık)':' · '+c.period)
      + ` · 👑 Qulla-21: ${c.use_rs_universe?('RS top-'+(c.rs_n||50)+' + '):''}qswing 63g kırılım + bölünmüş (A:${c.split_a||'+2R'} · B:${c.split_b||'21-EMA'})`
      + ` · sabit %${(((c.max_position_pct||0.05)*100).toFixed(1)).replace('.0','')}/slot · 20 slot`
@@ -448,6 +462,72 @@ function renderBacktest(d){
   $('bt-results').scrollIntoView({behavior:'smooth',block:'nearest'});
 }
 
+// ═════════ 🔔 Sarkaç-14 sinyal grafiği (QQQ + RSI, AL/SAT işaretli) ═════════
+// Sinyalin ÜRETİLDİĞİ yeri gösterir: fiyat QQQ'dan okunur, işlem TQQQ'da yapılır.
+// İşaret dizileri sunucudan tarih dizisiyle AYNI uzunlukta gelir (sinyal olmayan
+// günde null) → x ekseni hizalaması için ekstra iş yok.
+let SIG=null, sigPriceChart=null, sigRsiChart=null;
+const GRID='#1c2531', AXIS='#8a95ad';
+
+function sigMarkerDS(label, data, color, down){
+  return {label, data, showLine:false, borderColor:color, backgroundColor:color,
+          pointStyle:'triangle', pointRadius:8, pointHoverRadius:11,
+          rotation: down?180:0, borderWidth:1, order:0};
+}
+function constDS(label, val, n, color){
+  return {label, data:new Array(n).fill(val), borderColor:color, borderWidth:1,
+          borderDash:[5,4], pointRadius:0, fill:false, order:5};
+}
+
+function renderSigCharts(){
+  if(!SIG) return;
+  const n=SIG.dates.length, showT = $('sig-tqqq') && $('sig-tqqq').checked;
+  if(sigPriceChart) sigPriceChart.destroy();
+  if(sigRsiChart) sigRsiChart.destroy();
+
+  // ---- üst: QQQ fiyatı + AL/SAT ----
+  const pds=[
+    {label:'QQQ', data:SIG.qqq, borderColor:'#5aa2ff', borderWidth:1.5, pointRadius:0,
+     tension:.1, spanGaps:true, yAxisID:'y', order:3},
+    sigMarkerDS('AL (aşırı satım)', SIG.buy_px, '#27c281', false),
+    sigMarkerDS('SAT (aşırı alım)', SIG.sell_px, '#ff5d6c', true),
+  ];
+  if(showT) pds.push({label:'TQQQ (işlem)', data:SIG.tqqq, borderColor:'#c08bff',
+     borderWidth:1.1, pointRadius:0, tension:.1, spanGaps:true, yAxisID:'y2', order:4});
+
+  const scalesP={
+    x:{ticks:{color:AXIS,maxTicksLimit:9,maxRotation:0,autoSkip:true},grid:{color:GRID}},
+    y:{position:'left', ticks:{color:AXIS,callback:v=>'$'+v},grid:{color:GRID},
+       title:{display:true,text:'QQQ (sinyal)',color:AXIS}}};
+  if(showT) scalesP.y2={position:'right', type:'logarithmic',
+       ticks:{color:'#c08bff',callback:v=>'$'+v}, grid:{drawOnChartArea:false},
+       title:{display:true,text:'TQQQ (log)',color:'#c08bff'}};
+
+  sigPriceChart=new Chart($('sigprice'),{type:'line',data:{labels:SIG.dates,datasets:pds},
+    options:{responsive:true,maintainAspectRatio:false,animation:false,
+      interaction:{intersect:false,mode:'index'},
+      plugins:{legend:{labels:{color:AXIS,usePointStyle:true}},
+        tooltip:{callbacks:{label:c=>c.parsed.y==null?null:c.dataset.label+': $'+Number(c.parsed.y).toFixed(2)}}},
+      scales:scalesP}});
+
+  // ---- alt: RSI + eşik çizgileri + AL/SAT ----
+  sigRsiChart=new Chart($('sigrsi'),{type:'line',data:{labels:SIG.dates,datasets:[
+    {label:'RSI('+SIG.len+')', data:SIG.rsi, borderColor:'#e8c46a', borderWidth:1.4,
+     pointRadius:0, tension:.1, spanGaps:true, order:3},
+    constDS('aşırı alım '+SIG.ob, SIG.ob, n, '#ff5d6c'),
+    constDS('aşırı satım '+SIG.os, SIG.os, n, '#27c281'),
+    sigMarkerDS('AL', SIG.buy_rsi, '#27c281', false),
+    sigMarkerDS('SAT', SIG.sell_rsi, '#ff5d6c', true),
+  ]},
+    options:{responsive:true,maintainAspectRatio:false,animation:false,
+      interaction:{intersect:false,mode:'index'},
+      plugins:{legend:{labels:{color:AXIS,usePointStyle:true}},
+        tooltip:{callbacks:{label:c=>c.parsed.y==null?null:c.dataset.label+': '+Number(c.parsed.y).toFixed(1)}}},
+      scales:{x:{ticks:{color:AXIS,maxTicksLimit:9,maxRotation:0,autoSkip:true},grid:{color:GRID}},
+              y:{min:0,max:100,ticks:{color:AXIS,stepSize:20},grid:{color:GRID},
+                 title:{display:true,text:'RSI (QQQ)',color:AXIS}}}}});
+}
+
 // ═════════ 🔔 Sarkaç-14 sonuç render'ı ═════════
 // Ortak parçalar (equity/aylık/işlemler) Qulla ile aynı; farklı olan üç şey:
 // kıyas SPY değil TQQQ al-tut · risk ölçütü CAGR/DD (çok yıllı bileşikte ROI/DD
@@ -478,6 +558,19 @@ function renderSarkac(d){
 
   eqLabels=d.equity.map(e=>e.date); eqStrat=d.equity.map(e=>e.equity); eqSpy=d.equity.map(e=>e.spy);
   renderEqChart();
+
+  // sinyal grafiği
+  if(d.chart){
+    SIG = Object.assign({}, d.chart, {len:c.rsi_length});
+    $('sig-card').style.display='';
+    $('sig-sub').textContent = `${c.signal_sym} fiyatı + RSI(${c.rsi_length}) · `
+      + `${d.chart.n_buy} AL / ${d.chart.n_sell} SAT sinyali`;
+    $('sig-note').innerHTML = `Yeşil ▲ = RSI ≤ ${c.rsi_oversold} (AL) · kırmızı ▼ = RSI ≥ `
+      + `${c.rsi_overbought} (SAT). Sinyal <b>${c.signal_sym}</b>'dan üretilir, işlem `
+      + `<b>${c.trade_sym}</b>'da yapılır. İki uç arasında sinyal yoktur — durum makinesi `
+      + `histerezisli, arka arkaya gelen aşırı barlar tekrar tetiklemez.`;
+    renderSigCharts();
+  } else $('sig-card').style.display='none';
 
   const better = (m.cagr_dd||0) >= (m.bench_cagr_dd||0);
   $('bt-outcomes').innerHTML =
