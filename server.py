@@ -22,6 +22,18 @@ if DIRECTORY not in sys.path:
     sys.path.insert(0, DIRECTORY)
 
 
+def _json_safe(o):
+    """inf/-inf/NaN → None; dict/list içinde özyinelemeli."""
+    import math
+    if isinstance(o, float):
+        return o if math.isfinite(o) else None
+    if isinstance(o, dict):
+        return {k: _json_safe(v) for k, v in o.items()}
+    if isinstance(o, (list, tuple)):
+        return [_json_safe(v) for v in o]
+    return o
+
+
 def _html_mtime():
     """backtest.html'in DİSKTEKİ değişiklik zamanı (epoch sn).
 
@@ -216,7 +228,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     # ---- yardımcılar ----
     def send_json(self, code, data):
-        r = json.dumps(data, ensure_ascii=False).encode("utf-8")
+        # JSON'da Infinity/-Infinity/NaN YOKTUR. Python bunları sessizce
+        # "Infinity"/"NaN" diye yazar (json modülü kendi okurken de kabul eder),
+        # ama tarayıcının JSON.parse'ı REDDEDER → sayfada "Unexpected token 'I'".
+        # Kaynak tipik olarak sıfıra bölme: zarar eden işlem yoksa
+        # profit_factor = kâr/0 = inf. Burada tek noktadan temizlenir ki hiçbir
+        # uç nokta bu tuzağa düşmesin; allow_nan=False de ikinci bir bekçidir.
+        r = json.dumps(_json_safe(data), ensure_ascii=False, allow_nan=False).encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", len(r))

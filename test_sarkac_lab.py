@@ -161,3 +161,49 @@ def test_islem_fiyati_sinyal_gunu_kapanisindan():
         # defterde fiyatlar 4 haneye yuvarlanıyor
         assert x["entry"] == pytest.approx(
             round(float(t["Close"].loc[pd.Timestamp(x["in"])]), 4), abs=1e-4)
+
+
+# ═══════════════════ JSON GEÇERLİLİĞİ (tarayıcı katı, Python değil) ═══════════
+# Python'un json'ı Infinity/NaN'ı hem YAZAR hem OKUR — bu yüzden Python ile
+# yapılan doğrulama yalancı geçer. Tarayıcının JSON.parse'ı bunları REDDEDER
+# ("Unexpected token 'I'"). Testler bu yüzden allow_nan=False ile koşar.
+def _strict(obj):
+    import json
+    return json.dumps(obj, allow_nan=False)
+
+
+def test_pf_zarar_yoksa_none_olur():
+    """Zarar eden işlem yoksa PF sonsuzdur → JSON'da Infinity olamaz, None döner."""
+    tr = [{"pnl": 100.0, "pct": 5.0, "bars": 3, "in": "2020-01-01", "out": "2020-01-06"}]
+    m = sl.metrics(pd.Series([10000.0, 10100.0], index=_idx(2)), tr, 0.5)
+    assert m["profit_factor"] is None
+    _strict(m)
+
+
+def test_metrics_her_zaman_gecerli_json():
+    q, t = _synth(400)
+    r = sl.backtest(q, t)
+    m = sl.metrics(r["equity"], r["trades"], r["exposure"], open_trade=r["open"])
+    _strict(m)                                  # ValueError atarsa test kırılır
+
+
+def test_bh_metrics_gecerli_json():
+    q, t = _synth(400)
+    r = sl.backtest(q, t)
+    _strict(sl.bh_metrics(sl.buy_hold(t["Close"], r["calendar"])))
+
+
+def test_json_safe_sonsuzu_temizler():
+    """server._json_safe: inf/-inf/NaN → None, iç içe yapılarda da."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "srv_", "/home/gokhan/swing-backtest-lab/server.py")
+    srv = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(srv)
+    kirli = {"a": float("inf"), "b": [1.0, float("-inf"), {"c": float("nan")}],
+             "d": "metin", "e": 3, "f": None}
+    temiz = srv._json_safe(kirli)
+    assert temiz["a"] is None
+    assert temiz["b"][1] is None and temiz["b"][2]["c"] is None
+    assert temiz["d"] == "metin" and temiz["e"] == 3
+    _strict(temiz)

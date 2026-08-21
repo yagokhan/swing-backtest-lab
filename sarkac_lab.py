@@ -307,7 +307,9 @@ def metrics(equity: pd.Series, trades, exposure, capital=INITIAL_CAPITAL, open_t
         "sharpe": round(sharpe, 2),
         "trades": len(allt), "kapali": len(trades),
         "win_rate": round(100 * len(wins) / max(1, len(allt)), 1),
-        "profit_factor": round(gp / gl, 2) if gl else float("inf"),
+        # zarar eden işlem yoksa PF matematiksel olarak sonsuzdur; JSON'da
+        # Infinity diye bir şey olmadığı için None döner (arayüz '—' gösterir).
+        "profit_factor": round(gp / gl, 2) if gl else None,
         "exposure": round(100 * exposure, 1),
         "avg_bars": round(float(np.mean([t["bars"] for t in allt])), 0) if allt else 0,
         "best": round(max((t["pct"] for t in allt), default=0.0), 1),
