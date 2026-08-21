@@ -122,6 +122,9 @@ th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:
         <button class="btn" id="run" onclick="runBacktest()" title="👑 Qulla-21 yöntemini seçili evren/dönemde koştur. Sonuç: metrikler + sermaye eğrisi + çıkış dağılımı + aylık tablo + işlemler.">Backtest Çalıştır</button>
       </div>
       <div class="hint" id="hint"></div>
+      <div id="errbox" style="display:none;margin-top:10px;padding:10px 12px;border-radius:8px;
+           border:1px solid #ff5d6c;background:rgba(255,93,108,.08);color:#ff9aa4;
+           font-size:12.5px;font-family:ui-monospace,Menlo,monospace;white-space:pre-wrap;"></div>
     </div>
 
     <div id="bt-results" class="hide">
@@ -205,7 +208,10 @@ function showTab(t){
   $('panel-qs').classList.toggle('hide', t!=='qs');
 }
 $('qs-universe').onchange = e => $('qs-custom').classList.toggle('hide', e.target.value!=='custom');
-document.addEventListener('DOMContentLoaded', ()=>{ try{ onMethodChange(); }catch(e){} });
+// script body sonunda çalışıyorsa DOMContentLoaded ÇOKTAN geçmiş olabilir → doğrudan çağır
+if(document.readyState === 'loading'){
+  document.addEventListener('DOMContentLoaded', ()=>{ try{ onMethodChange(); }catch(e){} });
+} else { try{ onMethodChange(); }catch(e){} }
 
 // ═════════ Yöntem seçimi ═════════
 // 👑 Qulla-21 : çok hisseli momentum, canlı kağıt-portföyle birebir (payload SABİT)
@@ -279,6 +285,27 @@ function renderEqChart(){
               y:{type: log?'logarithmic':'linear',
                  ticks:{color:'#8a95ad', callback:yfmt},grid:{color:'#1c2531'}}}}});
 }
+// ═════════ Görünür hata bildirimi ═════════
+// Sessiz JS hatası "çalışmıyor" gibi görünür. Hata artık sayfada, düğmenin
+// altında, satır numarasıyla birlikte gösterilir.
+// Sayfanın yüklendiği andaki sürüm damgası (Last-Modified → epoch sn)
+const PAGE_MTIME = (function(){
+  const v = Date.parse(document.lastModified);
+  return isNaN(v) ? 0 : Math.floor(v/1000);
+})();
+
+function showErr(msg){
+  const b=$('errbox'); if(!b) return;
+  b.style.display=''; b.textContent=msg;
+}
+function clearErr(){ const b=$('errbox'); if(b){ b.style.display='none'; b.textContent=''; } }
+window.addEventListener('error', e=>{
+  showErr('JS HATASI: '+(e.message||'?')+'\n  '+(e.filename||'')+':'+(e.lineno||'?')+':'+(e.colno||'?'));
+});
+window.addEventListener('unhandledrejection', e=>{
+  showErr('YAKALANMAYAN PROMISE: '+((e.reason&&e.reason.message)||e.reason||'?'));
+});
+
 const F=(x,d=2)=> (x==null||isNaN(x))?'—':Number(x).toLocaleString('tr-TR',{minimumFractionDigits:d,maximumFractionDigits:d});
 const Fp=(x,d=1)=> (x==null||isNaN(x))?'—':((x>=0?'+':'')+Number(x).toLocaleString('tr-TR',{minimumFractionDigits:d,maximumFractionDigits:d})+'%');
 
@@ -394,16 +421,33 @@ async function runBacktest(){
   const btn=$('run'); btn.disabled=true; const old=btn.textContent; btn.textContent='Çalışıyor…';
   $('hint').textContent = isSarkac() ? 'QQQ RSI hesaplanıyor, TQQQ üzerinde simülasyon koşuyor…'
                                     : 'Veri (FMP) indiriliyor, simülasyon koşuyor…';
+  clearErr();
   try{
+    if(typeof Chart === 'undefined'){
+      throw new Error('Chart.js yüklenemedi (cdn.jsdelivr.net engelli/erişilemiyor olabilir). '
+        + 'Grafikler olmadan sonuç çizilemez.');
+    }
     const sarkac = isSarkac();
     const url = sarkac ? '/api/sarkac' : '/api/backtest';
     const payload = sarkac ? buildSarkacPayload() : buildPayload();
     const r = await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    if(!r.ok && r.status!==200 && r.status!==502){ throw new Error('sunucu HTTP '+r.status); }
     const d = await r.json();
-    if(d.error){ $('hint').textContent='HATA: '+d.error; return; }
+    if(d.error){ throw new Error('sunucu: '+d.error); }
+    // BAYAT SEKME: sayfa yüklendikten sonra backtest.html değiştiyse, sekmedeki
+    // JS eskidir ve sessizce yanlış davranabilir. Sunucu diskteki mtime'ı döner.
+    if(d.ui_mtime && PAGE_MTIME && Math.abs(d.ui_mtime - PAGE_MTIME) > 2){
+      showErr('⚠️ SAYFA ESKİ — arayüz sunucudaki sürümden farklı.\n'
+        + '   Ctrl+Shift+R ile sert yenile, sonra tekrar dene.\n'
+        + '   (sekme: '+new Date(PAGE_MTIME*1000).toLocaleString('tr-TR')
+        + ' · sunucu: '+new Date(d.ui_mtime*1000).toLocaleString('tr-TR')+')');
+    }
     renderBacktest(d);
     $('hint').textContent='';
-  }catch(e){ $('hint').textContent='HATA: '+e.message; }
+  }catch(e){
+    $('hint').textContent='HATA: '+e.message;
+    showErr('HATA: '+e.message+(e.stack?('\n'+e.stack.split('\n').slice(0,4).join('\n')):''));
+  }
   finally{ btn.disabled=false; btn.textContent=old; }
 }
 
@@ -557,9 +601,9 @@ function renderSarkac(d){
   ].map(([l,v,k,t])=>`<div class="mc" title="${t}"><div class="v ${k}">${v}</div><div class="l">${l}</div></div>`).join('');
 
   eqLabels=d.equity.map(e=>e.date); eqStrat=d.equity.map(e=>e.equity); eqSpy=d.equity.map(e=>e.spy);
-  renderEqChart();
+  try{ renderEqChart(); }catch(e){ showErr('sermaye eğrisi çizilemedi: '+e.message); }
 
-  // sinyal grafiği
+  // sinyal grafiği — çizim hatası TABLOLARI ÖLDÜRMESİN (izole)
   if(d.chart){
     SIG = Object.assign({}, d.chart, {len:c.rsi_length});
     $('sig-card').style.display='';
@@ -569,7 +613,9 @@ function renderSarkac(d){
       + `${c.rsi_overbought} (SAT). Sinyal <b>${c.signal_sym}</b>'dan üretilir, işlem `
       + `<b>${c.trade_sym}</b>'da yapılır. İki uç arasında sinyal yoktur — durum makinesi `
       + `histerezisli, arka arkaya gelen aşırı barlar tekrar tetiklemez.`;
-    renderSigCharts();
+    try{ renderSigCharts(); }
+    catch(e){ showErr('sinyal grafiği çizilemedi: '+e.message
+        +(e.stack?('\n'+e.stack.split('\n')[1]):'')); }
   } else $('sig-card').style.display='none';
 
   const better = (m.cagr_dd||0) >= (m.bench_cagr_dd||0);

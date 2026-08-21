@@ -22,6 +22,18 @@ if DIRECTORY not in sys.path:
     sys.path.insert(0, DIRECTORY)
 
 
+def _html_mtime():
+    """backtest.html'in DİSKTEKİ değişiklik zamanı (epoch sn).
+
+    Tarayıcıdaki sekme sayfayı yüklediği andaki sürümü tutar; dosya sonradan
+    değişirse sekme eskir ve kullanıcı "çalışmıyor" görür (eski JS koşar).
+    Sayfa bu değeri kendi Last-Modified'ıyla karşılaştırıp uyarır."""
+    try:
+        return int(os.path.getmtime(os.path.join(DIRECTORY, "backtest.html")))
+    except Exception:
+        return 0
+
+
 def _load_keys():
     """env > .env > ~/.portfolio_keys.json (mevcut env'i ezmez)."""
     envf = os.path.join(DIRECTORY, ".env")
@@ -96,7 +108,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self.send_json(400, {"error": f"invalid JSON: {e}"})
         try:
             import swing2_backtest as s2
-            self.send_json(200, s2.run_backtest_api(params))
+            res = s2.run_backtest_api(params)
+            res["ui_mtime"] = _html_mtime()          # bayat sekme tespiti
+            self.send_json(200, res)
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -116,7 +130,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self.send_json(400, {"error": f"invalid JSON: {e}"})
         try:
             import sarkac_lab
-            self.send_json(200, sarkac_lab.run_api(params))
+            res = sarkac_lab.run_api(params)
+            res["ui_mtime"] = _html_mtime()          # bayat sekme tespiti
+            self.send_json(200, res)
         except Exception as e:
             import traceback
             traceback.print_exc()
