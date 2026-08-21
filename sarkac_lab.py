@@ -657,10 +657,12 @@ def run_api(params: dict) -> dict:
     cal = r["calendar"]
     m = metrics(r["equity"], r["trades"], r["exposure"], capital=cap, open_trade=r["open"])
 
-    bench = buy_hold(t["Close"], cal, capital=cap)
+    # KIYAS = QQQ al-tut (piyasanın kendisi). TQQQ al-tut kıyas olarak
+    # KULLANILMAZ — kaldıraçlı bir ürünü yine kaldıraçlı hâline kıyaslamak
+    # "piyasayı geçtin mi" sorusunu cevaplamaz. TQQQ yalnız işlem yapılan
+    # enstrüman olarak sinyal grafiğinde görünür.
+    bench = buy_hold(q, cal, capital=cap)
     bm = bh_metrics(bench, capital=cap)
-    qbench = buy_hold(q, cal, capital=cap)
-    qm = bh_metrics(qbench, capital=cap)
 
     eq = r["equity"]
     equity = [{"date": str(dt.date()), "equity": round(float(v), 2),
@@ -686,7 +688,7 @@ def run_api(params: dict) -> dict:
                    "start_mode": p.get("start_mode", "flat"),
                    "signal_mode": smode, "ema_len": elen,
                    "ema_src": esrc, "ema_mode": emode},
-        "bench_label": f"{TRADE_SYM} al-tut",
+        "bench_label": f"{SIGNAL_SYM} al-tut",
         "metrics": {
             "roi": m["roi"], "spy_roi": bm.get("roi"),
             "alpha": round(m["roi"] - bm.get("roi", 0.0), 1),
@@ -699,8 +701,6 @@ def run_api(params: dict) -> dict:
             "best": m["best"], "worst": m["worst"],
             "bench_cagr": bm.get("cagr"), "bench_dd": bm.get("max_dd"),
             "bench_cagr_dd": bm.get("cagr_dd"), "bench_sharpe": bm.get("sharpe"),
-            "qqq_roi": qm.get("roi"), "qqq_cagr": qm.get("cagr"),
-            "qqq_dd": qm.get("max_dd"), "qqq_cagr_dd": qm.get("cagr_dd"),
             "tp": 0, "partial": 0, "trail": 0, "stop": 0,
             "eod": 1 if r["open"] else 0,
         },

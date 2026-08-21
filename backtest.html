@@ -98,7 +98,7 @@ th{color:var(--muted);background:var(--elev);cursor:pointer;position:sticky;top:
             <option value="sarkac">🔔 Sarkaç-14 — QQQ'nun RSI salınımıyla TQQQ al-sat</option>
           </select>
           <div class="muted" id="desc-qulla" style="font-size:12px;margin-top:6px;"><b>RS top-50</b> sistematik evren (havuzdan günlük göreli-güç kapısı) · qswing <b>63g kırılım</b> girişi · <b>bölünmüş çıkış</b>: ½ <b>+2R hedef</b> · ½ <b>21-EMA runner</b> · kapanış teyidi açık · sabit <b>%5/slot · 20 slot · bileşik</b> — canlı kağıt-portföyle birebir.</div>
-          <div class="muted" id="desc-sarkac" style="font-size:12px;margin-top:6px;display:none;">Sinyal <b>QQQ</b>'dan, işlem <b>TQQQ</b>'da: RSI(QQQ) <b>≤ aşırı satım</b> → AL · <b>≥ aşırı alım</b> → SAT. Aradaki barlarda işlem yok; pozisyon ya <b>tam açık ya tamamen nakit</b>. Durum makinesi <b>histerezisli</b> (arka arkaya aşırı barlar tekrar sinyal üretmez) — kaynak: BalintDavid "RSI Swing Indicator". Kıyas çizgisi <b>SPY değil TQQQ al-tut</b>: bu yöntemin dürüst alternatifi odur.</div>
+          <div class="muted" id="desc-sarkac" style="font-size:12px;margin-top:6px;display:none;">Sinyal <b>QQQ</b>'dan, işlem <b>TQQQ</b>'da: RSI(QQQ) <b>≤ aşırı satım</b> → AL · <b>≥ aşırı alım</b> → SAT. Aradaki barlarda işlem yok; pozisyon ya <b>tam açık ya tamamen nakit</b>. Durum makinesi <b>histerezisli</b> (arka arkaya aşırı barlar tekrar sinyal üretmez) — kaynak: BalintDavid "RSI Swing Indicator". Kıyas çizgisi <b>QQQ al-tut</b> (piyasanın kendisi). TQQQ grafikte yalnız <b>işlem yapılan enstrüman</b> olarak görünür — kaldıraçlı bir ürünü yine kaldıraçlı hâline kıyaslamak "piyasayı geçtin mi" sorusunu cevaplamaz.</div>
         </div>
       </div>
       <div class="grid" id="sarkac-params" style="margin-top:12px;display:none;">
@@ -590,7 +590,7 @@ function renderSigCharts(){
 
 // ═════════ 🔔 Sarkaç-14 sonuç render'ı ═════════
 // Ortak parçalar (equity/aylık/işlemler) Qulla ile aynı; farklı olan üç şey:
-// kıyas SPY değil TQQQ al-tut · risk ölçütü CAGR/DD (çok yıllı bileşikte ROI/DD
+// kıyas QQQ al-tut (piyasa) · risk ölçütü CAGR/DD (çok yıllı bileşikte ROI/DD
 // yanıltıcıdır) · çıkış dağılımı yerine sinyal/maruziyet özeti.
 function renderSarkac(d){
   const c=d.config, m=d.metrics;
@@ -606,12 +606,12 @@ function renderSarkac(d){
   $('bt-metrics').innerHTML = [
     ['ROI', Fp(m.roi), cls(m.roi), 'Toplam getiri (bileşik).'],
     ['CAGR', Fp(m.cagr), cls(m.cagr), 'Yıllık bileşik getiri — çok yıllı kıyasın doğru ölçüsü.'],
-    [benchLabel+' CAGR', Fp(m.bench_cagr), cls(m.bench_cagr), 'Aynı dönemde TQQQ al-tut yıllık bileşik getirisi.'],
+    [benchLabel+' CAGR', Fp(m.bench_cagr), cls(m.bench_cagr), 'Aynı dönemde QQQ (piyasa) al-tut yıllık bileşik getirisi — kıyas.'],
     ['Max DD', Fp(m.max_dd), 'neg', 'En büyük tepe→dip düşüş. TQQQ 3× kaldıraçlıdır.'],
     ['CAGR/DD', F(m.cagr_dd), cls((m.cagr_dd||0)-(m.bench_cagr_dd||0)),
-     'Risk-ayarlı: yıllık getiri ÷ en derin çukur. Kıyas: '+F(m.bench_cagr_dd)+' (TQQQ al-tut).'],
+     'Risk-ayarlı: yıllık getiri ÷ en derin çukur. Kıyas: '+F(m.bench_cagr_dd)+' (QQQ al-tut).'],
     ['Sharpe', F(m.sharpe), cls((m.sharpe||0)-(m.bench_sharpe||0)),
-     'Kıyas: '+F(m.bench_sharpe)+' (TQQQ al-tut).'],
+     'Kıyas: '+F(m.bench_sharpe)+' (QQQ al-tut).'],
     ['İşlem', m.trades, '', 'Toplam işlem (açık pozisyon dahil).'],
     ['Piyasada', (m.exposure==null?'—':m.exposure+'%'), '', 'Sermayenin piyasada olduğu gün oranı; kalanı nakit.'],
     ['İsabet', (m.win_rate==null?'—':m.win_rate+'%'), '', 'Kazanan işlem oranı.'],
@@ -658,14 +658,13 @@ function renderSarkac(d){
    +`<span class="pill g" title="En iyi tek işlem">en iyi: ${Fp(m.best)}</span> `
    +`<span class="pill r" title="En kötü tek işlem — stop olmadığı için kuyruk buradadır">en kötü: ${Fp(m.worst)}</span> `
    +`<span class="pill ${better?'g':'r'}" title="Risk-ayarlı karşılaştırma">`
-   +`CAGR/DD ${F(m.cagr_dd)} vs ${benchLabel} ${F(m.bench_cagr_dd)}</span>`
-   +` · <span class="muted">QQQ al-tut: ${Fp(m.qqq_cagr)} CAGR · ${Fp(m.qqq_dd)} DD · CAGR/DD ${F(m.qqq_cagr_dd)}</span>`;
+   +`CAGR/DD ${F(m.cagr_dd)} vs ${benchLabel} ${F(m.bench_cagr_dd)}</span>`;
 
   $('bt-grid-wrap').style.display='none';
 
   const mn=d.monthly||[]; const MO=['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
   $('bt-monthly').innerHTML = '<thead><tr><th>Yıl</th>'+MO.map(x=>`<th>${x}</th>`).join('')
-    +`<th>Yıl%</th><th title="${benchLabel} aynı yıl">${c.trade_sym}%</th><th>Fark</th></tr></thead><tbody>`+
+    +`<th>Yıl%</th><th title="${benchLabel} aynı yıl">${c.signal_sym}%</th><th>Fark</th></tr></thead><tbody>`+
     mn.map(r=>'<tr><td>'+r.year+'</td>'+r.months.map(v=>`<td class="${v>=0?'pos':'neg'}">${v==null?'':F(v,1)}</td>`).join('')
       +`<td class="${r.year_pct>=0?'pos':'neg'}"><b>${Fp(r.year_pct)}</b></td>`
       +`<td class="${r.spy_pct>=0?'pos':'neg'} muted">${r.spy_pct==null?'—':Fp(r.spy_pct)}</td>`
